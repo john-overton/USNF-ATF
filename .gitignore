@@ -1,1 +1,26 @@
+# Retail media and anything derived from it. Never committed. See Docs/build-plan.md section 1.
 /gameassets
+/extracted
+
+# Final products
+/build
+
+# Dependencies and tool caches
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Vite / TypeScript output
+dist/
+dist-electron/
+*.tsbuildinfo
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
