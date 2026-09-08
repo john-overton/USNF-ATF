@@ -6,7 +6,7 @@ Recorded per build plan section 1 ("baselines are recorded, not remembered").
 
 - Date: 2026-09-08
 - Machine: Apple M3, macOS 26.6.2 (build 25G83)
-- Commit: see `git log` for the phase 1 scaffold commit
+- Historical scaffold commit: `3be679f` (the original measurements below were recorded with that scaffold).
 
 ### Tool versions
 
@@ -85,3 +85,30 @@ Notes:
 ## Linux GPU box
 
 _Not yet recorded. Fill in: date, CPU/GPU, distro and kernel, driver version, tool versions, the `bun run probe` JSON from the AppImage (renderer must be hardware, exit 0), `bun run check` result, build wall time, AppImage and deb sizes._
+
+## 2026-09-08 source review rerun (macOS)
+
+Source commit: `31f733e2e73bae522b550a562e54573ec7805b79`; Apple M3,
+arm64, macOS 26.6.2 (25G83), Bun 1.4.2, Node v22.14.0.
+
+- `bun run check`: exit 0; typecheck, lint and formatting clean; 12 tests pass,
+  41 expectations. Tests cover clock logic and renderer-name heuristics.
+- Rebuilt current unpackaged source explicitly:
+
+```sh
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun run probe --unpackaged
+```
+
+Both exited 0. Vite build: 168 ms; JS 714.03 kB (191.78 kB gzip).
+Probe JSON matched the earlier macOS report above: Apple M3 through ANGLE
+Metal, `unmaskedInfo: true`, `softwareRenderer: false`, Electron 44.2.0.
+
+This rerun did not rebuild DMG/ZIP installers, test a DMG install, run x64,
+or verify Linux/Windows. Existing packaged results above are historical.
+`bun run probe` prefers an existing packaged app; `--unpackaged` also reuses
+existing bundles unless missing. Rebuilding explicitly avoids testing stale
+output. On Linux the probe script selects the unpacked binary; the AppImage
+acceptance check must also launch the AppImage itself with `--probe`.
+
+Phase 1 remains open pending Linux build, hardware launch, and checks.

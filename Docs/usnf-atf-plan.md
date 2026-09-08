@@ -2,7 +2,7 @@
 
 Working title: TBD. Non-commercial fan project in the spirit of Jane's US Navy Fighters '97, ATF, and Fighters Anthology.
 
-Status: pre-code. This document is the starting brief for the repo and for Claude Code sessions. Sequencing, exit criteria, and findings from the retail media are in `build-plan.md`, which supersedes section 8 below.
+Historical design brief, written before implementation. Current status and review findings are in [progress.md](progress.md). This document describes the intended product, not the current feature set. Sequencing, exit criteria, and findings from the retail media are in `build-plan.md`, which supersedes section 8 below.
 
 ---
 
@@ -170,11 +170,11 @@ Each phase ends with something you can run.
 - AI liveness probe: a headless mission where bots must move, engage, and fire. Fails the build if any bot goes inert.
 - Terrain probe: load every chunk in a manifest, assert dimensions, elevation ranges, and water body consistency.
 - And the non-tool habit from the RA2 port: fly it. Screenshot it. Judge it as a player. Counters miss what eyes catch.
-- Engineering log in `/docs` for every failure mode, root cause, and fix.
+- Engineering log in `Docs/progress.md` for every failure mode, root cause, and fix.
 
 ## 10. Open questions
 
-- Which theater first? Candidates from the original: Vietnam, Kuril Islands, Ukraine, Persian Gulf. Pick the one with the most interesting terrain to prove the pipeline. Kurils or Vietnam.
+- First theater: Ukraine, decided 2026-09-08; Kurils second. See the build plan for the census and rationale.
 - Land cover in v1 or not?
 - Model format research outcome (see 6.2). This is the gate on phase 4.
 - Chunk compression format after the first real size measurement.

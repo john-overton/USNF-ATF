@@ -1,7 +1,8 @@
 # PT: plane type
 
-Status: **decoded** (layout complete, every field named; units confirmed for
-the flight-model fields that matter). Reader: `tools/retail/retail/pt.py`,
+Status: **decoded field layout, partial semantics**. Many field names are
+recovered; unnamed fields and uncertain units remain. Mass/thrust evidence is
+recorded below; aerodynamic behaviour still needs the phase 4 harness. Reader: `tools/retail/retail/pt.py`,
 tokenizer shared with JT/OT/NT in `retail/brf.py`.
 
     PYTHONPATH=tools/retail python3 -m retail.pt extracted/usnf97/USNF_2.LIB/F14.PT
@@ -143,8 +144,10 @@ Values are the game's own; the published figures are public data.
   magnitude are right across all 48 aircraft.
 - `aftThrust` 41800 = 2 x 20,900 lbf, the TF30-P-414A afterburning rating.
   A-10 `thrust` 18130 = 2 x 9,065 lbf (TF34-GE-100), F-15 `aftThrust` 47860 =
-  2 x 23,930 lbf (F100-PW-220), Su-27 59510 = 2 x 27,557 lbf (AL-31F), F-22
-  70000 = 2 x 35,000. Aircraft without afterburner have `aftThrust` 0.
+  2 x 23,930 lbf (F100-PW-220), F-22 70000 = 2 x 35,000.
+  Correction from the 2026-09-08 review: the previously stated Su-27 match was
+  arithmetically wrong (59,510 is not 2 × 27,557 = 55,114); that physical
+  cross-check remains unresolved. Aircraft without afterburner have `aftThrust` 0.
 - Speeds are ft/s and altitudes ft: the F-14's 1 G envelope tops out at
   2270 ft/s (Mach 2.34, the book figure) at 34,000 ft, 1350 ft/s at sea level
   (800 kt), stall about 230 ft/s (136 kt), ceiling 56,000 ft, which is also

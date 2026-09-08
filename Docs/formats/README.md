@@ -5,6 +5,8 @@ and ATF Gold CDs. Structure only; no retail bytes are reproduced here.
 Tooling lives in `tools/retail/` (run `PYTHONPATH=tools/retail python3 -m
 retail stats gameassets/usnf97` to regenerate the counts).
 
+Coverage and reproducible review measurements: [phase 0 baseline](../baselines/phase-0.md). Decoded layouts do not imply complete semantic understanding or in-app support.
+
 Counts are logical files, uncompressed bytes, from `python -m retail stats`
 over the whole disc (ESA-embedded LIBs, root LIBs, and loose ESA files).
 
@@ -12,11 +14,11 @@ over the whole disc (ESA-embedded LIBs, root LIBs, and loose ESA files).
 |---|---|---|---|---|
 | EALIB (`*.LIB`) | decoded | [ealib.md](ealib.md) | 6 archives | 6 archives |
 | ESA (`SETUP.ESA`) | decoded | [esa.md](esa.md) | 16 entries | 18 entries |
-| DCL (PKWare implode) | decoded | [dcl.md](dcl.md) | 3,271 LIB streams + 13 ESA | 5,142 LIB streams + 14 ESA |
+| DCL (PKWare implode) | decoded | [dcl.md](dcl.md) | 3,965 LIB streams + 13 ESA | 6,070 LIB streams + 14 ESA |
 | PAL | decoded | [pal.md](pal.md) | 1 / 768 | 1 / 768 |
 | PIC | decoded | [pic.md](pic.md) raw rows or span sprites, optional embedded palette | 1,665 / 159,387,489 | 2,518 / 242,688,377 |
 | FNT | decoded | [fnt.md](fnt.md) PE with one x86 routine per glyph | 12 / 151,552 | 12 / 161,792 |
-| SH | partial, in progress | 3D shapes; PE with a drawing-program CODE section; notes not yet written, see `Docs/progress.md` | 353 / 2,691,072 | 1,043 / 11,892,224 |
+| SH | partial, in progress | [sh.md](sh.md) drawing program; vertex indexing/export unresolved | 353 / 2,691,072 | 1,043 / 11,892,224 |
 | PT | decoded | [pt.md](pt.md) text data language, C field names from ATF comments | 48 / 573,085 | 105 / 2,136,446 |
 | OT | decoded | [object-types.md](object-types.md) | 110 / 136,820 | 130 / 249,396 |
 | JT | decoded | [jt.md](jt.md) weapons | 90 / 244,428 | 120 / 551,214 |
@@ -43,4 +45,4 @@ Totals: USNF'97 4,921 files, 777.5 MB; ATF Gold 6,252 files, 843.9 MB.
 byte is in 0..63, so it is a classic 256-entry VGA DAC palette (6 bits per
 channel; scale by 4 or `v * 255 // 63` for 8-bit). Entry 0 is black and
 entries 1..15 are all (63, 0, 63), the usual magenta placeholder for the
-reserved low slots. PIC decoding is a separate task.
+reserved low slots. PIC decoding is implemented; runtime palette gaps remain (see [pic.md](pic.md) and [pal.md](pal.md)).

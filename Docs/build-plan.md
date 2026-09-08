@@ -2,7 +2,7 @@
 
 Companion to `usnf-atf-plan.md` (the brief). The brief says what and why. This document says in what order, what "done" means for each phase, and which decisions are already made. When the two disagree, this one wins for sequencing.
 
-Status: pre-code. Written 2026-09-08 after inventorying the retail media in `/gameassets`.
+Status reviewed 2026-09-08: phase 0 toolkit implemented in part; SH export and deliverable integration remain open. Phase 1 scaffold verified on macOS, Linux exit gate pending. Phases 2–10 are planned. See [progress.md](progress.md) for current evidence and the engineering log. Written 2026-09-08 after inventorying the retail media in `/gameassets`.
 
 ---
 
@@ -17,7 +17,7 @@ Both `gameassets/usnf97` and `gameassets/atf-gold` are CD images (installer medi
 - 5-byte magic `EALIB`, uint16 entry count minus one.
 - Per entry, 18 bytes: 13-byte NUL-padded name, 1 flag byte, uint32 offset.
 - File length is the gap to the next entry's offset.
-- Flag 0: stored. Flag 4: compressed. Compressed entries begin with a uint32 uncompressed size. The codec still has to be identified and implemented (it is the same one the Fighters Anthology modding tools handle, so it is a known quantity, not research).
+- Flag 0: stored. Flag 4: compressed. Compressed entries begin with a uint32 uncompressed size. The codec is PKWare DCL implode, implemented in `tools/retail/retail/dcl.py`; see [formats/dcl.md](formats/dcl.md).
 
 **ESA** (`SETUP.ESA`), the installer payload. Magic string `ELECTRONIC_ARTS_ARCHIVE_FILE`, then a table of (filename, install-label, attributes, uncompressed size, timestamp, codec tag, compressed size, offset). Codec tag `PKWA` is PKWare DCL implode; `NULL` is stored. The two data LIBs we care about are stored, so they can be sliced out by size with no decompression at all. The install script `SETUP.SSF` is plain text and documents the intended layout.
 
@@ -34,7 +34,7 @@ Both `gameassets/usnf97` and `gameassets/atf-gold` are CD images (installer medi
 
 ATF Gold has the same layout with more of everything (1,043 shapes, 105 plane types, 247 missions). A third ATF data LIB, `ATF_4B.LIB`, is PKWare-compressed inside its ESA and needs the DCL decoder.
 
-The important consequence: the whole game minus video is under 20 MB per title, in two archives, in a format we can already list. The 3D models exist as `.SH` and the flight model parameters exist as `.PT`. Neither format is decoded yet; that is the phase 0 job.
+The main embedded archives contain core aircraft data and art, but disc-root archives also contain non-video assets. Import coverage must include both locations; the earlier “whole game minus video” size claim was too broad. The 3D models exist as `.SH` and the flight model parameters exist as `.PT`. PT field decoding is implemented; SH parsing and OBJ export remain partial. Phase 0 research findings and confidence are recorded in [formats/README.md](formats/README.md).
 
 ### 0.3 Design decisions this forces
 
@@ -158,7 +158,7 @@ Goal: know exactly what we can import before writing engine code that depends on
 
 | Question | Answered in |
 |---|---|
-| Flag-4 LIB codec identity | Phase 0, first task |
+| Flag-4 LIB codec identity | Resolved in phase 0: PKWare DCL implode |
 | `.SH` model layout | Phase 0 |
 | `.PT` field meanings | Phase 0, cross-checked against phase 4 harness |
 | Land cover in v1 | Phase 2, after the flat-tint version is seen |

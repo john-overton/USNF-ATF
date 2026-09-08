@@ -1,8 +1,138 @@
 # Progress
 
-Running status of the build against `build-plan.md`. Updated 2026-09-08.
-Newest entry first. Each entry says what is done, what is verified, and
-exactly where any in-progress work stopped so it can be picked up cold.
+Current status and append-only engineering log against [build-plan.md](build-plan.md).
+Newest entry first. Update the snapshot and add an entry for meaningful port work;
+keep commands, evidence, uncertainty, and a concrete next step. Baselines live in
+[baselines/](baselines/). The design brief describes the intended product.
+
+## Current snapshot — reviewed 2026-09-08
+
+Reviewed source: `31f733e2e73bae522b550a562e54573ec7805b79` (clean tree at start).
+This review changes documentation only; the defects below remain open.
+
+| Area | Implemented | Acceptance / remaining work |
+|---|---|---|
+| Phase 0 containers | ESA, EALIB, DCL; disc/install listing and extraction | Both local discs pass length checks; independent slice comparison skipped |
+| Phase 0 images and fonts | PAL/PIC/PNG and FNT tools | 4,183 PICs decode in broader census; runtime palette gaps remain; font tests pass |
+| Phase 0 data | PT/JT/OT/NT field readers; partial T2 and M/MT | Field naming is ahead of verified runtime semantics |
+| Phase 0 SH | Committed partial walker and OBJ writer | F-14 emits 8 of 105 parsed polygons; viewer gate unmet |
+| Phase 0 overall | Substantial toolkit and format research | **Open:** valid/recognizable F-14, SH tests, integrated disc-to-PNG/OBJ command |
+| Phase 1 scaffold | Workspaces, shell, platform boundary, probe, packaging config | **macOS verified; Linux pending.** Dev-loop defects below remain open |
+| Phase 2 terrain pipeline | Manifest types and addressing constants only | Not started; Ukraine first, Kurils second |
+| Phases 3–4 rendering and flight | Spinning cube and standalone tested 120 Hz clock | Terrain rendering, integrated sim loop, flight model and harness not implemented |
+| Phase 5 importer | Source types; `detectSource()` returns undefined | No detection, decoders, folder picker, conversion or first-run import |
+| Phases 6–10 | Plans only | Weapons, AI, missions/campaign gameplay, release work and later targets not started |
+
+## 2026-09-08: repository review and logging baseline
+
+### Verified in this review
+
+- `bun run check`: exit 0, 12 tests pass (41 expectations); typecheck, lint,
+  formatting pass. Scope is clock and renderer-name heuristic tests, not gameplay.
+- `python3 -m unittest discover -s tools/retail/tests`: exit 0, 52 tests run in
+  63.067 s, 51 pass and one skips for missing `USNF_SCRATCHPAD` independent slice.
+  Both retail discs are available; archive-handle ResourceWarnings remain.
+- Rebuilt current unpackaged renderer/main/preload, then ran
+  `bun run probe --unpackaged`: exit 0, Apple M3 via ANGLE Metal,
+  `unmaskedInfo: true`, `softwareRenderer: false`. Installer packaging was not
+  rerun. Exact commands and machine details: [phase 1 baseline](baselines/phase-1.md).
+- Read-only SH and PIC censuses used local extracted media; exported OBJ strings
+  were inspected in memory. No viewer acceptance was claimed. Counts, timings,
+  scope and reproduction commands: [phase 0 baseline](baselines/phase-0.md).
+- No tracked files under `gameassets/`, `extracted/`, or `build/` at review start.
+  This is a tracked-path check, not the planned retail-signature release scan.
+
+### Corrections to the previous entry
+
+1. SH was committed in `8af84a5`; it is not untracked. There is no pending
+   superseded x86 decoder removal identified in the current file. Treat old
+   session intentions as historical until checked against source.
+2. Phase 1 is not fully complete under the build plan: Linux checks, build,
+   hardware launch and baseline are still outstanding. macOS progress continues.
+3. The 8,413 compressed LIB entries counted the two main embedded LIBs per title.
+   All-disc coverage is 10,035 compressed LIB entries plus 27 PKWA ESA entries.
+4. The earlier 4,140 PIC count matches the integration test's archive list. It
+   excludes 21 USNF_8 and 22 ATF_4C images. A broader census now decodes all 4,183
+   without exceptions; this does not validate every image visually or fix palettes.
+5. SH batch conversion returns 1 for the reported zero-polygon/stopped shapes;
+   the earlier exit-0 claim is inconsistent with committed code. A single-file
+   exit 0 also does not guarantee usable geometry.
+6. F-14's dropped faces are not explained by a writer that handles only one
+   table. It offsets every table. Observed causes: 96 polygon references exceed
+   their assigned table's size; one has no assigned table. Shared vertex-buffer
+   addressing is the next hypothesis to test, detailed in [SH notes](formats/sh.md).
+7. PT field layout and mass/thrust evidence are useful, but coefficient meaning
+   and runtime flight behaviour are not fully proven. Corrected an erroneous
+   Su-27 arithmetic comparison and the “every field named” claim in [PT notes](formats/pt.md).
+
+### Open code review findings
+
+These are follow-up work, not fixes delivered by this documentation review.
+
+| Priority / finding | Evidence and impact | Next verification |
+|---|---|---|
+| High: SH vertex addressing | `tools/retail/retail/sh.py`, `_Walker.step`, `to_obj`: ignores the `0x82` header word at +4; F-14 drops 97 polygons. Values such as 1512 = 189×8 suggest destination slots. | Synthetic buffer-update tests; record dropped primitives; view F-14 from multiple angles; repeat both-title census. |
+| High: Electron shell restart can shut down dev session | `shell/scripts/dev.ts:46` attaches shutdown to every child exit; watcher intentionally kills that child at :69. A killed Bun child returns numeric 143, satisfying shutdown's condition. | Distinguish deliberate restart from user exit; make two shell edits and verify Vite stays alive and Electron relaunches. Full UI restart test still needed. |
+| Medium: Electron dev asset reads can be missing/stale | `shell/src/main.ts:36` resolves assets in copied production output; `shell/scripts/dev.ts:33` bundles shell without refreshing renderer assets. | Read `hello.txt` through platform FS from a clean dev checkout and after changing the source asset. |
+| Medium: browser accepts writes to read-only assets | `engine/src/platform/browser.ts:67` accepts `assets` writes, contrary to `Platform.ts:10` and Electron rejection. Agent reproduction wrote and read back an overridden asset. | Shared contract checks: asset writes reject, appData/cache writes round-trip. |
+| Medium: retail coverage and resource cleanup | `test_pic.py` omits two archives; ESA/EALIB retain open handles and tests emit ResourceWarnings. No SH tests. | Expand media coverage, retain absent-media skips, and add explicit archive lifetimes plus focused malformed-input tests. |
+
+Other SH limitations: state-insensitive visitation, x86 table reset, incomplete
+bounds validation, unresolved axes/scale and no texture export. Zero-polygon
+shapes remain unclassified. T2 elevation/tile semantics, runtime palette slots,
+JT timers and PT damage semantics remain open. The phase 5 retail scan is absent.
+
+### Lessons learned
+
+- Track four milestones separately: record decoded, export structurally valid,
+  asset visually recognizable, behaviour matches retail. Eight valid OBJ faces
+  from 105 parsed polygons show why “no exception” is too weak an exit gate.
+- Count the actual input set. Embedded archives, all disc archives, extracted
+  files, and hand-selected test lists have different totals; record which one
+  a measurement covers and whether the files were regenerated.
+- ATF's surviving field comments help recover USNF schemas; names transfer more
+  confidently than units or runtime semantics. Keep unknowns explicit.
+- Archive boundaries matter: EALIB sentinel entries, duplicate names, and the
+  ESA codec tag's trailing NUL were useful earlier findings. Keep those lessons
+  with format notes and synthetic regression fixtures when changing parsers.
+- A green unit suite does not exercise shell restarts, IPC or packaging. Test
+  those flows directly when they change; preserve provenance for GPU probes.
+- Probe scripts reuse outputs. Rebuild before claiming current-source evidence,
+  and distinguish an unpackaged launch from an installer installation.
+- Commit research checkpoints with limitations. A durable checkpoint is useful;
+  describing it as complete hides the next task. Historical logs need corrections
+  when later measurements change the explanation.
+
+### Next work, in order
+
+1. Resolve and test SH vertex-buffer indexing; inspect an F-14 preview stored in
+   `extracted/`. Keep the phase 0 two-week time box (through 2026-09-22); phase 5
+   can use a placeholder if SH remains unresolved.
+2. Fix the dev restart and asset-root/contract issues before relying on the
+   shell for frequent terrain iteration. Use the verification steps above.
+3. Integrate the phase 0 commands into the disc-to-listing/PNG/OBJ deliverable,
+   expand regression coverage, and refresh the baseline after implementation.
+4. Record Linux evidence when the GPU box is available; phase 1 stays open.
+   The phase 2 entry gate only requires the scaffold, so Linux pending does not
+   prevent beginning the Ukraine terrain pipeline.
+5. Begin phase 2: define theater projection/bounds and manifest contract, build
+   the offline terrain pipeline, run the chunk probe and measure size before
+   choosing compression. No new theater or compression decision made here.
+
+### Documentation delivered
+
+Added root `AGENTS.md` for this macOS checkout; updated the existing `README.md`
+with runnable capabilities and commands; aligned plan status; added phase 0
+baseline and provisional SH notes; refreshed format counts and phase 1 evidence.
+No runtime or decoder code changed. Final validation: Markdown relative links,
+`bun run format:check`, and `git diff --check` pass; the embedded baseline
+census snippets rerun successfully with matching counts. Local commit is
+authorized; no push requested.
+
+## Earlier log (historical)
+
+The entry below is preserved as originally recorded. Its completion, repository
+state, scope, and root-cause claims are superseded by the review above.
 
 ---
 
