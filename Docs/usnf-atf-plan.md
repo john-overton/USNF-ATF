@@ -2,7 +2,7 @@
 
 Working title: TBD. Non-commercial fan project in the spirit of Jane's US Navy Fighters '97, ATF, and Fighters Anthology.
 
-Status: pre-code. This document is the starting brief for the repo and for Claude Code sessions.
+Status: pre-code. This document is the starting brief for the repo and for Claude Code sessions. Sequencing, exit criteria, and findings from the retail media are in `build-plan.md`, which supersedes section 8 below.
 
 ---
 
@@ -133,7 +133,7 @@ Import from a user's USNF'97 install: aircraft models, ground and naval models, 
 
 ### 6.2 Unknowns (resolve first)
 
-- File formats for models, textures, and audio are proprietary Jane's/Origin formats. Some are documented by the modding community, some are not. **Spike: one evening of research into what's already cracked.** If the model format is documented, the importer is a weekend. If not, it's a real reverse engineering project and the plan changes.
+- File formats for models, textures, and audio are proprietary Jane's/Origin formats. **Resolved 2026-09-08:** the containers (EALIB and the ESA installer payload) are parsed and inventoried; see `build-plan.md` section 0. Models are `.SH`, flight parameters are `.PT`, terrain is `.T2`, missions are `.M`. Decoding those is phase 0 of the build plan.
 - Where USNF'97 can be legally purchased today. "Bring your own copy" is friendlier when the copy is a cheap digital download rather than an eBay CD.
 
 ### 6.3 Rules
