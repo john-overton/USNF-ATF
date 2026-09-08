@@ -1,0 +1,38 @@
+{
+  "name": "usnf-atf",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fan remake of Jane's USNF'97: TypeScript engine, Three.js renderer, Electron shell.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "engine",
+    "shell",
+    "importer"
+  ],
+  "scripts": {
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun test",
+    "typecheck": "tsc -p engine/tsconfig.json && tsc -p shell/tsconfig.json && tsc -p importer/tsconfig.json",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "dev": "bun run --cwd engine dev",
+    "dev:electron": "bun run --cwd shell dev",
+    "build": "bun run --cwd shell build",
+    "probe": "bun run --cwd shell probe"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/bun": "1.4.2",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.12.0",
+    "prettier": "3.9.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0"
+  },
+  "trustedDependencies": [
+    "electron"
+  ]
+}

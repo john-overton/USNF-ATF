@@ -1,0 +1,28 @@
+{
+  "name": "@usnf/engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "USNF-ATF engine: sim, renderer, terrain, data schemas, UI, platform interface.",
+  "exports": {
+    "./platform/*": "./src/platform/*.ts",
+    "./render/*": "./src/render/*.ts"
+  },
+  "scripts": {
+    "dev": "vite --strictPort --port 5173",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@types/three": "0.185.4",
+    "@vitejs/plugin-react": "6.1.1",
+    "vite": "8.2.2"
+  }
+}

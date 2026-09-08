@@ -1,0 +1,1 @@
+Hello from the dev root. The browser platform reads this via fetch.

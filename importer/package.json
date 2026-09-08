@@ -1,0 +1,10 @@
+{
+  "name": "@usnf/importer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Retail asset importer: reads a user's USNF'97 / ATF Gold disc or install folder and converts to engine formats.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

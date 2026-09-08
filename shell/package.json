@@ -1,0 +1,21 @@
+{
+  "name": "usnf-atf",
+  "productName": "USNF-ATF",
+  "version": "0.1.0",
+  "private": true,
+  "description": "USNF-ATF desktop shell (Electron).",
+  "author": "USNF-ATF contributors",
+  "license": "MIT",
+  "main": "dist/main/main.cjs",
+  "scripts": {
+    "bundle": "bun run scripts/bundle.ts",
+    "dev": "bun run scripts/dev.ts",
+    "build": "bun run scripts/build.ts",
+    "probe": "bun run scripts/probe.ts"
+  },
+  "devDependencies": {
+    "@usnf/engine": "workspace:*",
+    "electron": "44.2.0",
+    "electron-builder": "26.15.3"
+  }
+}

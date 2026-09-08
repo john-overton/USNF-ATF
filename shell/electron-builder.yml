@@ -1,0 +1,40 @@
+# electron-builder configuration. `directories.output` is overridden per platform by
+# scripts/build.ts so every product lands under the repo-root build/<platform>/ folder.
+appId: org.usnfatf.app
+productName: USNF-ATF
+copyright: Non-commercial fan project. EA has not endorsed and does not support this product.
+directories:
+  output: ../build/current
+  buildResources: resources
+files:
+  - dist/**/*
+  - package.json
+asar: true
+npmRebuild: false
+electronLanguages:
+  - en
+mac:
+  category: public.app-category.games
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+dmg:
+  sign: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  category: Game
+  maintainer: USNF-ATF contributors
+  target:
+    - AppImage
+    - deb
