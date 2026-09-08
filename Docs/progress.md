@@ -89,8 +89,8 @@ North Vietnam 36 in USNF'97; Vladivostok 58, Egypt 51, Baltics 50, France
 25 in ATF Gold. T2 grids are 25x25 to 32x32 tiles of 8x8 cells, 8,192
 world units (ft) per cell, so a theater is roughly 500 to 640 km on a side.
 
-**Phase 2 recommendation, not yet decided:** start with Ukraine (most
-missions, 77% land) rather than the plan's Kuril default (95% sea).
+**Decided 2026-09-08:** Ukraine is the first theater (most missions, 77%
+land); Kurils second. Recorded in `build-plan.md` phase 2 and section 3.
 
 Open: T2 elevation byte units and tile table, Baltic sea encoding, JT
 timer units, PT `structure` and `systemDamage` semantics.
@@ -150,8 +150,6 @@ phase 5 uses a placeholder model.
   module, `python3 -m retail.pic ...`).
 - `Docs/baselines/phase-0.md`: decode counts and timings above, recorded
   with machine and commit.
-- Decide the first theater (Ukraine recommended) and record it in
-  `build-plan.md` section 4.
 - Phase 1 exit on the Linux GPU box.
 
 ### Repo state

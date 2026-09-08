@@ -83,7 +83,7 @@ Goal: know exactly what we can import before writing engine code that depends on
 ### Phase 2: Terrain pipeline (Python, offline)
 
 - Entry: phase 1 scaffold exists so the manifest schema has a home in `engine/src/data`.
-- Work: exactly the brief section 5.3, for one theater. Theater choice: decide in phase 0 from the `.T2` terrain files and `.M` mission files, because the theater with the richest retail missions is worth more than the prettiest terrain. Default if undecided: Kuril Islands.
+- Work: exactly the brief section 5.3, for one theater. Theater: **Ukraine**, decided 2026-09-08 from the phase 0 census (103 retail missions, 77% land, 26x25 tile grid, roughly 520x500 km). Kuril Islands (41 missions, 95% sea) is the planned second theater in phase 10.
 - Deliverable: chunk folder and manifest for one theater on local disk.
 - Exit criteria: terrain probe from the brief section 9 passes on every chunk, run locally. Size measured and recorded in the baseline against the budget in the brief section 5.4. Compression format decided from the measurement.
 
@@ -150,6 +150,7 @@ Goal: know exactly what we can import before writing engine code that depends on
 | Dev and test platforms | Mac and Linux GPU box, by hand, every phase | Real hardware beats a runner; Linux is where WebGL2 surprises live |
 | CI | Phase 9 only, release tags only | Baselines and tests are local first; CI is a release gate, not a dev loop |
 | Notarization | Last item of phase 9 | Costs money and time; adds nothing until strangers install it |
+| First theater | Ukraine | Most retail missions (103) and mostly land; Kurils second |
 
 ---
 
@@ -160,7 +161,6 @@ Goal: know exactly what we can import before writing engine code that depends on
 | Flag-4 LIB codec identity | Phase 0, first task |
 | `.SH` model layout | Phase 0 |
 | `.PT` field meanings | Phase 0, cross-checked against phase 4 harness |
-| First theater | Phase 0, from retail mission density; default Kurils |
 | Land cover in v1 | Phase 2, after the flat-tint version is seen |
 | Chunk compression | Phase 2, after the first size measurement |
 | macOS signing identity | End of phase 9 |
