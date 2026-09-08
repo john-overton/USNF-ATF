@@ -13,25 +13,25 @@ over the whole disc (ESA-embedded LIBs, root LIBs, and loose ESA files).
 | EALIB (`*.LIB`) | decoded | [ealib.md](ealib.md) | 6 archives | 6 archives |
 | ESA (`SETUP.ESA`) | decoded | [esa.md](esa.md) | 16 entries | 18 entries |
 | DCL (PKWare implode) | decoded | [dcl.md](dcl.md) | 3,271 LIB streams + 13 ESA | 5,142 LIB streams + 14 ESA |
-| PAL | unknown (768 bytes; 256 × RGB, 6-bit values 0..63) | | 1 / 768 | 1 / 768 |
-| PIC | unknown | | 1,665 / 159,387,489 | 2,518 / 242,688,377 |
-| FNT | unknown | | 12 / 151,552 | 12 / 161,792 |
-| SH | unknown | 3D shapes | 353 / 2,691,072 | 1,043 / 11,892,224 |
-| PT | unknown | plane types | 48 / 573,085 | 105 / 2,136,446 |
-| OT | unknown | object types | 110 / 136,820 | 130 / 249,396 |
-| JT | unknown | | 90 / 244,428 | 120 / 551,214 |
-| NT | unknown | | 64 / 116,558 | 66 / 180,024 |
-| M | unknown | missions | 209 / 5,001,327 | 247 / 7,546,660 |
-| MT | unknown | mission text | 178 / 282,619 | 172 / 229,947 |
-| T2 | unknown | terrain | 11 / 1,463,944 | 4 / 580,526 |
-| HUD | unknown | | 16 / 65,536 | 37 / 170,496 |
+| PAL | decoded | [pal.md](pal.md) | 1 / 768 | 1 / 768 |
+| PIC | decoded | [pic.md](pic.md) raw rows or span sprites, optional embedded palette | 1,665 / 159,387,489 | 2,518 / 242,688,377 |
+| FNT | decoded | [fnt.md](fnt.md) PE with one x86 routine per glyph | 12 / 151,552 | 12 / 161,792 |
+| SH | partial, in progress | 3D shapes; PE with a drawing-program CODE section; notes not yet written, see `Docs/progress.md` | 353 / 2,691,072 | 1,043 / 11,892,224 |
+| PT | decoded | [pt.md](pt.md) text data language, C field names from ATF comments | 48 / 573,085 | 105 / 2,136,446 |
+| OT | decoded | [object-types.md](object-types.md) | 110 / 136,820 | 130 / 249,396 |
+| JT | decoded | [jt.md](jt.md) weapons | 90 / 244,428 | 120 / 551,214 |
+| NT | decoded | [object-types.md](object-types.md) | 64 / 116,558 | 66 / 180,024 |
+| M | partial | [mission.md](mission.md) plain text | 209 / 5,001,327 | 247 / 7,546,660 |
+| MT | decoded | [mission.md](mission.md) plain text | 178 / 282,619 | 172 / 229,947 |
+| T2 | partial | [t2.md](t2.md) header and cell grid; elevation units open | 11 / 1,463,944 | 4 / 580,526 |
+| HUD | identified | Win32 PE plug-in, not decoded ([object-types.md](object-types.md)) | 16 / 65,536 | 37 / 170,496 |
 | MNU / LAY / DLG | unknown | UI | 10+8+76 / 511,000 | 12+20+88 / 856,064 |
 | 5K / 8K / 11K | unknown | audio | 594+1+213 / 60,682,679 | 781+1+255 / 83,581,983 |
 | XMI | unknown | music (XMIDI) | 104 / 495,528 | 102 / 534,492 |
 | SEQ | unknown | | 104 / 10,347 | 32 / 6,434 |
 | VDO / FBC / CB8 | unknown | video | 355+355+23 / 542,432,692 | 0+0+35 / 486,496,234 |
 
-Other extensions seen, all unknown: `MM`, `PTS`, `MC`, `AI`, `BI`, `MUS`,
+Other extensions seen, all unknown: `MM`, `PTS` (PE plug-in, not plane data), `MC`, `AI`, `BI`, `MUS`,
 `SEE`, `CAM`, `HGR`, `ECM`, `BIN`, `GAS`, `INF` (encyclopedia text), `SMS`,
 plus the Windows `EXE`/`DLL`/`TXT`/`URL` loose files in the ESA.
 
