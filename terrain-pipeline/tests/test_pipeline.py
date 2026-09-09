@@ -9,7 +9,7 @@ import unittest
 
 import numpy as np
 import rasterio
-from rasterio.transform import from_origin
+from rasterio.transform import from_origin, Affine
 
 from pipeline.core import SyntheticSource, RasterSource, build, encode, probe, dump
 
@@ -97,10 +97,47 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
             root=Path(tmp);build(self.config,root,RingSource())
             manifest=json.loads((root/'manifest.json').read_text())
-            self.assertGreater(len(manifest['waterBodies']),2)
-            for body in manifest['waterBodies']:
-                xs,zs=zip(*body['polygon'])
-                self.assertFalse(min(xs)<5000<max(xs) and min(zs)<5000<max(zs))
+            self.assertEqual(len(manifest['waterBodies']),1)
+            body=manifest['waterBodies'][0]
+            self.assertEqual(len(body['holes']),1)
+            xs,zs=zip(*body['holes'][0])
+            self.assertTrue(min(xs)<5000<max(xs) and min(zs)<5000<max(zs))
+
+    def test_adjacent_gradient_rasters_share_chunk_border(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source=RasterSource.__new__(RasterSource)
+            source.origin=(0,0);source.extents=(18000,12000);source.crs='EPSG:32636'
+            source.datasets={'dem':[],'water':[]}
+            try:
+                for tile in range(2):
+                    x=(np.arange(300)+0.5)*30+tile*9000
+                    z=12000-(np.arange(400)+0.5)*30
+                    heights=(100+x[None,:]/100+z[:,None]/200).astype('float32')
+                    path=Path(tmp)/f'{tile}.tif'
+                    with rasterio.open(path,'w',driver='GTiff',width=300,height=400,count=1,
+                                       dtype='float32',crs=source.crs,transform=Affine(30,0,tile*9000,0,-30,12000)) as dst:
+                        dst.write(heights,1)
+                    source.datasets['dem'].append(rasterio.open(path))
+                west=source.sample(np.arange(256)*30,np.arange(256)*30+1000)
+                east=source.sample(np.arange(256)*30+7650,np.arange(256)*30+1000)
+                np.testing.assert_allclose(west[:,-1],east[:,0],atol=1e-4)
+                # Both source files contribute to the east chunk; no seam cliff at their boundary.
+                self.assertLess(float(np.max(np.abs(np.diff(east,axis=1)))),0.6)
+                self.assertGreater(float(east[100,-1]-east[100,0]),70)
+            finally:source.close()
+
+    def test_local_copernicus_partition_independent_border(self):
+        root=Path('extracted/terrain-source/ukraine')
+        if not (root/'sources.json').exists():
+            self.skipTest('local Copernicus source tiles unavailable')
+        config=json.loads(Path('theaters/ukraine.json').read_text())
+        source=RasterSource(root,config)
+        try:
+            xs=np.arange(256)*30+60*7650
+            south=source.sample(xs,np.arange(256)*30+5*7650)
+            north=source.sample(xs,np.arange(256)*30+6*7650)
+            np.testing.assert_array_equal(south[-1,:],north[0,:])
+        finally:source.close()
 
     def test_real_raster_warp_void_and_valid_zero_land(self):
         with tempfile.TemporaryDirectory() as tmp:

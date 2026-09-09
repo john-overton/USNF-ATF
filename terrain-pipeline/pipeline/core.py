@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 import sys
+import time
 import urllib.request
 
 import numpy as np
@@ -59,10 +60,9 @@ def fetch(config, output):
                     # Ukraine has public coverage; other theaters must review restricted tiles.
                     if config['id'] != 'ukraine':
                         raise ValueError(f'Unlisted tile {stem}: establish ocean versus restricted coverage')
-                    if not target.exists():
-                        with rasterio.open(target,'w',driver='GTiff',width=2,height=2,count=1,
-                                           dtype='float32',crs='EPSG:4326',transform=from_bounds(lon,lat,lon+1,lat+1,2,2)) as dst:
-                            dst.write(np.full((2,2),0 if kind=='dem' else 1,dtype='float32'),1)
+                    with rasterio.open(target,'w',driver='GTiff',width=2,height=2,count=1,
+                                       dtype='float32',crs='EPSG:4326',transform=from_bounds(lon-1/7200,lat+1/7200,lon+1-1/7200,lat+1+1/7200,2,2)) as dst:
+                        dst.write(np.full((2,2),0 if kind=='dem' else 1,dtype='float32'),1)
                     records.append({'kind':kind,'url':tile_list_url,'path':target.name,
                                     'oceanTileAbsentFromPublishedList':True,
                                     'sha256':hashlib.sha256(target.read_bytes()).hexdigest()})
@@ -126,14 +126,16 @@ class RasterSource:
                 continue
             reproject(rasterio.band(src,1), dest, src_transform=src.transform,src_crs=src.crs,
                       src_nodata=src.nodata,dst_transform=transform,dst_crs=self.crs,dst_nodata=np.nan,
-                      init_dest_nodata=False,resampling=Resampling.nearest if kind=='water' else Resampling.bilinear)
+                      init_dest_nodata=False,XSCALE=1.0,YSCALE=1.0,resampling=Resampling.nearest if kind=='water' else Resampling.bilinear)
         result = map_coordinates(dest,[(zs[:,None]-zs[0])/spacing+np.zeros((len(zs),len(xs))),
                                       (xs[None,:]-xs[0])/spacing+np.zeros((len(zs),len(xs)))],order=0 if kind=='water' else 1,mode='nearest')
         if kind == 'dem' and np.isnan(result).any():
             water = self.sample(xs,zs,'water')
             result[np.isnan(result) & (water==1)] = 0
         if not np.isfinite(result).all():
-            raise ValueError(f'uncovered/void {kind} pixels near local {xs[0]}, {zs[0]}')
+            bad=np.argwhere(~np.isfinite(result))
+            iz,ix=bad[0]
+            raise ValueError(f'{len(bad)} uncovered/void {kind} pixels; first local {xs[ix]}, {zs[iz]}')
         return result
 
     def close(self):
@@ -170,13 +172,19 @@ def encode(values):
 
 def build(config, output, source):
     output.mkdir(parents=True, exist_ok=True)
+    started=time.monotonic()
+    def progress(message):
+        print(f'[{time.monotonic()-started:.1f}s] {message}',flush=True)
     width,height = source.extents
+    progress(f'sampling 100m base over {width/1000:.1f} x {height/1000:.1f} km')
     base_x = np.arange(math.ceil(width/100)+1)*100
     base_z = np.arange(math.ceil(height/100)+1)*100
     base = source.sample(base_x,base_z)
+    progress('sampling water mask')
     water_classes = source.sample(base_x,base_z,'water')
+    progress('extracting water components')
     mask = water_classes>0
-    # Vectorize scanline runs: rectangles preserve islands/holes without a polygon-hole extension.
+    # Preserve exterior and interior rings, retaining dry islands.
     water_bodies = []
     from scipy.ndimage import label, find_objects
     labels = np.zeros(mask.shape,dtype='int32')
@@ -194,27 +202,23 @@ def build(config, output, source):
         elevation = 0 if np.any(water_classes[region][body]==1) else float(np.median(base[region][body]))
         x0,z0=region[1].start*100,region[0].start*100
         for geometry,_ in shapes(body.astype('uint8'),mask=body,transform=Affine(100,0,x0,0,100,z0)):
-            # Complex polygons with holes are represented as row rectangles to preserve dry islands.
-            rings=geometry['coordinates']
-            if len(rings)==1:
-                polys=[rings[0]]
-            else:
-                polys=[]
-                for row in np.flatnonzero(body.any(axis=1)):
-                    indices=np.flatnonzero(body[row]); splits=np.split(indices,np.flatnonzero(np.diff(indices)>1)+1)
-                    for run in splits:
-                        polys.append([(x0+int(run[0])*100,z0+int(row)*100),(x0+(int(run[-1])+1)*100,z0+int(row)*100),(x0+(int(run[-1])+1)*100,z0+(int(row)+1)*100),(x0+int(run[0])*100,z0+(int(row)+1)*100)])
-            for polygon in polys:
-                polygon=[[min(width,max(0,float(x)-50)),min(height,max(0,float(z)-50))] for x,z in polygon]
-                water_bodies.append({'id':f'water-{ident}-{len(water_bodies)}','elevation':elevation,'polygon':polygon})
+            rings=[[[min(width,max(0,float(x)-50)),min(height,max(0,float(z)-50))]
+                    for x,z in ring] for ring in geometry['coordinates']]
+            body_record={'id':f'water-{ident}-{len(water_bodies)}','elevation':elevation,'polygon':rings[0]}
+            if len(rings)>1:
+                body_record['holes']=rings[1:]
+            water_bodies.append(body_record)
+    progress(f'extracted {len(water_bodies)} water polygons, largest {max((len(w["polygon"]) for w in water_bodies),default=0)} vertices')
     manifest = dict(schemaVersion=1,id=config['id'],name=config['name'],
                     projection=dict(crs=source.crs,originX=source.origin[0],originY=source.origin[1]),
                     extents=dict(width=width,height=height),lods=[],attribution=ATTRIBUTION if isinstance(source,RasterSource) else ['Original synthetic test fixture'],
                     source='Copernicus GLO-30 2021 DEM and WBM' if isinstance(source,RasterSource) else 'synthetic analytic hills and water; not real Ukraine terrain',
                     chunks=[],waterBodies=water_bodies)
     # Detail decisions are standard deviation of 30m samples over each 100m base tile.
+    progress('measuring 30m detail roughness')
     detail_regions=set()
     for y in range(math.ceil(height/25500)):
+        progress(f'roughness row {y+1}/{math.ceil(height/25500)}')
         for x in range(math.ceil(width/25500)):
             values=source.sample(np.arange(851)*30+x*25500,np.arange(851)*30+y*25500)
             if float(np.std(values))>=config.get('roughnessThreshold',80):
@@ -223,6 +227,7 @@ def build(config, output, source):
         filtered_base = uniform_filter(base,size=round(spacing/100),mode="nearest") if lod>1 else base
         span=255*spacing
         for y in range(math.ceil(height/span)):
+            progress(f'LOD {lod} row {y+1}/{math.ceil(height/span)}')
             for x in range(math.ceil(width/span)):
                 if lod==0:
                     covered={(a,b) for a in range(int(x*span//25500),int(((x+1)*span-1)//25500)+1)
@@ -245,7 +250,10 @@ def build(config, output, source):
             manifest['lods'].append(lod)
         print(f'built LOD {lod}: {sum(c["lod"]==lod for c in manifest["chunks"])} chunks',flush=True)
     dump(output/'manifest.json',manifest)
-    dump(output/'build-info.json',{'config':config,'roughnessDetailRegions':len(detail_regions),
+    import subprocess
+    revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+    dirty=bool(subprocess.check_output(['git','status','--porcelain','--','terrain-pipeline'],text=True).strip())
+    dump(output/'build-info.json',{'producerCommit':revision,'producerDirty':dirty,'elapsedSeconds':time.monotonic()-started,'config':config,'roughnessDetailRegions':len(detail_regions),
                                  'waterGridMeters':100,'compression':'gzip level9 mtime0 uint16LE',
                                  'sourceManifest':str(source.root/'sources.json') if isinstance(source,RasterSource) else None})
     return probe(output/'manifest.json')
@@ -302,11 +310,18 @@ def probe(path):
                 if error>(c['scale']+meta['scale'])/2+1e-4:
                     raise ValueError(f'chunk seam exceeds quantization tolerance: {c["path"]}')
                 max_seam=max(max_seam,error)
+    if len(manifest['waterBodies'])>50000:
+        raise ValueError('water body count exceeds runtime limit')
+    total_points=0
     for body in manifest['waterBodies']:
-        if not math.isfinite(body['elevation']) or len(body['polygon'])<3 or not np.isfinite(body['polygon']).all():
+        rings=[body['polygon']]+body.get('holes',[])
+        if not math.isfinite(body['elevation']) or any(len(ring)<3 or not np.isfinite(ring).all() for ring in rings):
             raise ValueError('invalid flat water polygon')
-        if any(not (0<=x<=width and 0<=z<=height) for x,z in body['polygon']):
+        if any(not (0<=x<=width and 0<=z<=height) for ring in rings for x,z in ring):
             raise ValueError('water polygon outside theater')
+        points=sum(map(len,rings));total_points+=points
+        if points>100000 or total_points>500000:
+            raise ValueError('water vertices exceed runtime limit')
     report={'chunks':len(cache),'compressedBytes':compressed,'rawBytes':len(cache)*SIZE*SIZE*2,
             'compressionRatio':compressed/(len(cache)*SIZE*SIZE*2),'maxSeamErrorMeters':max_seam,
             'waterBodies':len(manifest['waterBodies']),'source':manifest['source']}

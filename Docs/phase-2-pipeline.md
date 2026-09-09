@@ -123,3 +123,32 @@ Gzip remains the v1 contract for built-in browser decoding and checksum support;
 changing transport requires a coordinated schema/decoder change. Record the
 real-theater comparison before deciding whether that simplicity is worth its
 measured size overhead.
+
+## Real-data corrections (2026-09-08)
+
+The first full build exposed two bugs synthetic hills could not reveal:
+
+1. An absent ocean tile initially used whole-degree bounds, but the public COG
+   pixel footprint is shifted west/north by half an arc-second. This left narrow
+   water-mask gaps. The fetcher now synthesizes absent ocean tiles with the same
+   shifted footprint; arbitrary source voids still fail. Existing tiny ocean
+   cache files are regenerated on fetch, with new hashes.
+2. Separate GDAL bilinear warps estimated slightly different resampling scales
+   for neighbouring requests, causing an 8.49 mm raw shared-edge difference at
+   Ukraine LOD0 tiles (60,5)/(60,6). Fixed `XSCALE=YSCALE=1` makes the source
+   interpolation kernel independent of request extent. Coarse downsampling
+   remains the explicit box filter on the base grid. A local Copernicus
+   regression asserts exact raw shared-edge equality; it skips without inputs.
+
+The first real mask produced 80,660 scanline rectangles, exceeding the runtime
+limit. This invalidated the initial v1 rectangle strategy described above.
+The coordinated contract now permits `waterBodies[].holes`: polygonization
+preserves interior rings directly. Probe validation includes holes and matches
+runtime limits (50,000 bodies, 100,000 points per body, 500,000 total points).
+Original rings contain 33,731 real components, so the original 10,000-body cap
+was also too small; increasing it preserves small water bodies without dropping
+source geometry. Renderer spatial batching bounds active GPU work.
+A synthetic ring test verifies the island remains a hole. Builds now print
+elapsed progress for base, mask, polygonization, roughness, and chunk rows.
+`build-info.json` records producer commit, whether pipeline source was dirty,
+and elapsed generation time; a dirty build must not be attributed solely to HEAD.
