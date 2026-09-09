@@ -45,6 +45,10 @@ export function useNavigationMap(
   return loaded.key === key ? loaded : { status: 'loading' };
 }
 
+function UnusedMfdButton({ label }: { label: string }) {
+  return <button type="button" className="mfd-button mfd-unused" aria-label={label} disabled />;
+}
+
 export function TerrainMap({
   map,
   aircraft,
@@ -101,7 +105,25 @@ export function TerrainMap({
       );
   }, [data]);
   const point = data ? worldToMap(data, aircraft.x, aircraft.z) : undefined;
-  const northViewport = data ? navigationViewport(data, aircraft, zoom) : undefined;
+  const baseViewport = data ? navigationViewport(data, aircraft, zoom) : undefined;
+  // A square display spans equal world distances on both axes, including when
+  // the source theater is rectangular. Uncovered space retains the hatch.
+  const squareHeight =
+    data && baseViewport
+      ? (baseViewport.width * (data.extents.width / data.width)) /
+        (data.extents.height / data.height)
+      : 0;
+  const northViewport =
+    data && baseViewport && point
+      ? {
+          ...baseViewport,
+          height: squareHeight,
+          y:
+            squareHeight <= data.height
+              ? Math.max(0, Math.min(data.height - squareHeight, point.y - squareHeight / 2))
+              : (data.height - squareHeight) / 2,
+        }
+      : undefined;
   // Ownship stays centered when rotating near theater edges. The full raster
   // supplies covered corners; the hatch marks actual space outside the theater.
   const viewport =
@@ -123,20 +145,49 @@ export function TerrainMap({
       data-map-rotation={rotation}
     >
       <div className="mfd-top-buttons">
-        {(['north-up', 'heading-up'] as const).map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            className="mfd-button"
-            aria-label={mode === 'north-up' ? 'North-up map' : 'Heading-up map'}
-            aria-pressed={orientation === mode}
-            onClick={() => {
-              setOrientation(mode);
-              onFlightFocus?.();
-            }}
-          />
+        {(['north-up', null, null, null, 'heading-up'] as const).map((mode, index) =>
+          mode ? (
+            <button
+              key={mode}
+              type="button"
+              className="mfd-button"
+              aria-label={mode === 'north-up' ? 'North-up map' : 'Heading-up map'}
+              aria-pressed={orientation === mode}
+              onClick={() => {
+                setOrientation(mode);
+                onFlightFocus?.();
+              }}
+            />
+          ) : (
+            <UnusedMfdButton key={index} label={`Unused top MFD button ${index + 1}`} />
+          ),
+        )}
+      </div>
+      <div className="mfd-side-buttons mfd-left-buttons" aria-label="Waypoint teleport">
+        {Array.from({ length: 5 }, (_, index) => {
+          const waypoint = onTeleport ? data?.waypoints[index - 1] : undefined;
+          return waypoint ? (
+            <button
+              key={index}
+              type="button"
+              className="mfd-button"
+              data-teleport-id={waypoint.id}
+              disabled={teleporting !== null}
+              aria-label={`Teleport to ${waypoint.id} ${waypoint.name}`}
+              onClick={() => void teleport(waypoint)}
+            />
+          ) : (
+            <UnusedMfdButton key={index} label={`Unused left MFD button ${index + 1}`} />
+          );
+        })}
+      </div>
+      <div className="mfd-side-buttons mfd-right-buttons">
+        {Array.from({ length: 5 }, (_, index) => (
+          <UnusedMfdButton key={index} label={`Unused right MFD button ${index + 1}`} />
         ))}
       </div>
+      <div className="mfd-dial mfd-left-dial" aria-hidden="true" />
+      <div className="mfd-dial mfd-right-dial" aria-hidden="true" />
       <div className="mfd-screen">
         <div className="terrain-map-title">
           <span className={orientation === 'north-up' ? 'mfd-active' : ''}>N-UP</span>
@@ -148,17 +199,14 @@ export function TerrainMap({
         {data && point && viewport && (
           <>
             <div className="terrain-map-stage">
-              <div
-                className="terrain-map-image"
-                style={{ aspectRatio: `${data.width} / ${data.height}` }}
-              >
+              <div className="terrain-map-image">
                 <div className="terrain-map-rotor" style={{ transform: `rotate(${rotation}deg)` }}>
                   <canvas
                     style={{
                       width: `${zoom * 100}%`,
-                      height: `${zoom * 100}%`,
+                      height: `${(data.height / viewport.height) * 100}%`,
                       left: `${(-viewport.x / data.width) * zoom * 100}%`,
-                      top: `${(-viewport.y / data.height) * zoom * 100}%`,
+                      top: `${(-viewport.y / viewport.height) * 100}%`,
                     }}
                     ref={canvas}
                     width={data.width}
@@ -167,6 +215,7 @@ export function TerrainMap({
                   />
                   <svg
                     viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`}
+                    preserveAspectRatio="none"
                     data-map-zoom={zoom}
                     data-viewport-x={viewport.x}
                     data-viewport-y={viewport.y}
@@ -255,21 +304,13 @@ export function TerrainMap({
                 </span>
               </div>
               {onTeleport && data && (
-                <div className="mfd-waypoint-buttons" aria-label="Waypoint teleport">
+                <div className="mfd-waypoint-buttons">
                   {data.waypoints.map((waypoint, index) => (
                     <div
                       className="mfd-waypoint-control"
                       key={waypoint.id}
-                      style={{ top: `${20 + index * 30}%` }}
+                      style={{ top: `${30 + index * 20}%` }}
                     >
-                      <button
-                        type="button"
-                        className="mfd-button"
-                        data-teleport-id={waypoint.id}
-                        disabled={teleporting !== null}
-                        aria-label={`Teleport to ${waypoint.id} ${waypoint.name}`}
-                        onClick={() => void teleport(waypoint)}
-                      />
                       <span className={waypoint.id === selectedWaypointId ? 'mfd-active' : ''}>
                         {teleporting === waypoint.id ? 'LOAD…' : `GO ${waypoint.id}`}
                         <small>{waypoint.name}</small>
@@ -279,13 +320,26 @@ export function TerrainMap({
                 </div>
               )}
             </div>
-            <div className="terrain-map-distance">
+            <div
+              className="terrain-map-distance"
+              aria-label={`Map distance scale: ${viewport.scaleNm} nautical miles`}
+            >
+              <div
+                className="terrain-map-scale-labels"
+                style={{ width: `${viewport.scalePercent}%` }}
+              >
+                <span>0</span>
+                <span>{viewport.scaleNm} NM</span>
+              </div>
               <div
                 style={{ width: `${viewport.scalePercent}%` }}
                 data-map-scale-nm={viewport.scaleNm}
                 className="terrain-map-scale"
-              />
-              <span>{viewport.scaleNm} NM</span>
+              >
+                {Array.from({ length: 4 }, (_, index) => (
+                  <span key={index} />
+                ))}
+              </div>
             </div>
             <div
               className="terrain-map-elevation"
@@ -316,10 +370,6 @@ export function TerrainMap({
                 <span>ELEV m MSL</span>
               </div>
             </div>
-            <div className="terrain-map-caption">
-              <span>{Math.round(data.extents.width / zoom / 1000)} km across</span>
-              <span>{markerLabel === 'Aircraft' ? '[ ] WAYPOINT' : 'CAMERA'}</span>
-            </div>
             {teleportError && (
               <p className="terrain-map-error" role="alert">
                 {teleportError}
@@ -345,6 +395,9 @@ export function TerrainMap({
             onFlightFocus?.();
           }}
         />
+        {Array.from({ length: 3 }, (_, index) => (
+          <UnusedMfdButton key={index} label={`Unused bottom MFD button ${index + 2}`} />
+        ))}
         <button
           type="button"
           className="mfd-button"
