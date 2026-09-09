@@ -15,6 +15,7 @@ export function TerrainViewer() {
   const [panelMinimized, setPanelMinimized] = useState(false);
   const [rootPath, setRootPath] = useState('');
   const canvas = useRef<HTMLCanvasElement>(null);
+  const viewerRef = useRef<ReturnType<typeof startTerrainViewer> | null>(null);
   useEffect(() => {
     let active = true;
     void getPlatform()
@@ -38,6 +39,7 @@ export function TerrainViewer() {
         request.path,
         setStats,
       );
+      viewerRef.current = viewer;
     } catch (err) {
       queueMicrotask(() => {
         if (active) setError(err instanceof Error ? err.message : String(err));
@@ -47,6 +49,7 @@ export function TerrainViewer() {
     return () => {
       active = false;
       viewer?.dispose();
+      if (viewerRef.current === viewer) viewerRef.current = null;
     };
   }, [request]);
   return (
@@ -216,6 +219,7 @@ export function TerrainViewer() {
                   onChange={(event) => {
                     const url = new URL(window.location.href);
                     url.searchParams.set('flightModel', event.target.value);
+                    url.searchParams.set('flightFuel', String(stats.flight!.fuelFraction));
                     window.location.assign(url.href);
                   }}
                 >
@@ -240,31 +244,39 @@ export function TerrainViewer() {
                 {(stats.flight.militaryThrustN / 1000).toFixed(1)}/
                 {(stats.flight.afterburnerThrustN / 1000).toFixed(1)} kN
               </p>
+              <label htmlFor="flight-fuel">
+                Fuel {(stats.flight.fuelFraction * 100).toFixed(1)}% ·{' '}
+                {(stats.flight.fuelMassKg / 1000).toFixed(2)} t
+              </label>
+              <input
+                id="flight-fuel"
+                type="range"
+                min="0"
+                max="100"
+                step="0.1"
+                value={stats.flight.fuelFraction * 100}
+                onChange={(event) =>
+                  viewerRef.current?.setFuelFraction(Number(event.target.value) / 100)
+                }
+                onPointerUp={() => canvas.current?.focus()}
+              />
+              <p>
+                Burn {(stats.flight.fuelBurnKgS * 60).toFixed(1)} kg/min
+                {stats.flight.flightModelId === 'assisted'
+                  ? ' · assisted handling mass held constant'
+                  : ''}
+              </p>
               {stats.flight.flightProfileSha256 && (
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
                     const values = new FormData(event.currentTarget);
                     const url = new URL(window.location.href);
-                    url.searchParams.set('flightFuel', String(Number(values.get('fuel')) / 100));
+                    url.searchParams.set('flightFuel', String(stats.flight!.fuelFraction));
                     url.searchParams.set('flightPayload', String(Number(values.get('payload'))));
                     window.location.assign(url.href);
                   }}
                 >
-                  <label>
-                    Fuel load % (fixed){' '}
-                    <input
-                      name="fuel"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="5"
-                      defaultValue={
-                        Number(new URLSearchParams(window.location.search).get('flightFuel') ?? 1) *
-                        100
-                      }
-                    />
-                  </label>
                   <label>
                     Payload kg{' '}
                     <input
@@ -278,7 +290,7 @@ export function TerrainViewer() {
                   </label>
                   <button type="submit">Restart with load</button>
                   <p>
-                    Fixed practice fuel {(stats.flight.fuelMassKg / 1000).toFixed(2)} t · payload{' '}
+                    Fuel {(stats.flight.fuelMassKg / 1000).toFixed(2)} t · payload{' '}
                     {(stats.flight.payloadMassKg / 1000).toFixed(2)} t
                   </p>
                 </form>

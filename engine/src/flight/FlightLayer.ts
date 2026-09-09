@@ -33,6 +33,7 @@ import { FlightInput, type PilotControls } from './FlightInput';
 import { flightCamera } from './FlightCamera';
 import { createAircraftSystems, stepAircraftSystems } from './AircraftSystems';
 import { FlightAudio } from './FlightAudio';
+import { createFuelState, setFuelFraction, stepFuel, type FuelState } from './FuelSystem';
 import { RetailAircraft } from './RetailAircraft';
 import { surfaceAngle } from './ControlSurfaces';
 
@@ -69,6 +70,9 @@ export interface FlightDiagnostics {
   retailProfileAvailable: boolean;
   massKg: number;
   fuelMassKg: number;
+  fuelCapacityKg: number;
+  fuelFraction: number;
+  fuelBurnKgS: number;
   payloadMassKg: number;
   militaryThrustN: number;
   afterburnerThrustN: number;
@@ -146,7 +150,8 @@ export class FlightLayer {
   private readonly useRetail: boolean;
   private readonly useNativeEnvelope: boolean;
   private readonly definition: AircraftDefinition;
-  private readonly fuelMassKg: number;
+  private fuel: FuelState;
+  private resetFuelFraction: number;
   private readonly payloadMassKg: number;
   private constructor(
     private scene: Scene,
@@ -164,16 +169,14 @@ export class FlightLayer {
       const value = Number(query.get(key) ?? fallback);
       return Number.isFinite(value) ? value : fallback;
     };
-    this.fuelMassKg =
-      this.useRetail && profile
-        ? profile.fuelCapacityKg * Math.max(0, Math.min(1, finite('flightFuel', 1)))
-        : 0;
+    this.resetFuelFraction = Math.max(0, Math.min(1, finite('flightFuel', 1)));
+    this.fuel = createFuelState(profile?.fuelCapacityKg ?? 1500, this.resetFuelFraction);
     this.payloadMassKg =
       this.useRetail && profile
         ? Math.max(
             0,
             Math.min(
-              profile.maxTakeoffMassKg - profile.emptyMassKg - this.fuelMassKg,
+              profile.maxTakeoffMassKg - profile.emptyMassKg - this.fuel.fuelKg,
               finite('flightPayload', 0),
             ),
           )
@@ -184,7 +187,7 @@ export class FlightLayer {
             ...PLACEHOLDER_AIRCRAFT,
             id: 'f14-retail-envelope',
             name: profile.name,
-            massKg: profile.emptyMassKg + this.fuelMassKg + this.payloadMassKg,
+            massKg: profile.emptyMassKg + this.fuel.fuelKg + this.payloadMassKg,
             // Reference area only: the envelope fit normalizes lift/drag to PT forces.
             wingAreaM2: 52.5,
             retail: profile,
@@ -298,8 +301,25 @@ export class FlightLayer {
       yawRad: 0,
     });
   }
+  setFuelFraction(fraction: number): void {
+    this.fuel = setFuelFraction(this.fuel, fraction);
+    this.resetFuelFraction = this.fuel.fuelKg / this.fuel.capacityKg;
+    this.updateFuelMass();
+  }
+  private updateFuelMass(): void {
+    if (this.useRetail && this.profile) {
+      // Fuel refilling respects maximum takeoff weight with the selected payload.
+      this.fuel.fuelKg = Math.min(
+        this.fuel.fuelKg,
+        this.profile.maxTakeoffMassKg - this.profile.emptyMassKg - this.payloadMassKg,
+      );
+      this.definition.massKg = this.profile.emptyMassKg + this.fuel.fuelKg + this.payloadMassKg;
+    }
+  }
   advance(seconds: number): void {
     if (this.input.resetRequested) {
+      this.fuel = createFuelState(this.fuel.capacityKg, this.resetFuelFraction);
+      this.updateFuelMass();
       this.state = this.initialState();
       this.previous = this.state;
       this.clock.reset();
@@ -327,7 +347,7 @@ export class FlightLayer {
     if (this.waiting || this.ground.error) return;
     const result = this.clock.advance(seconds, (dt) => {
       this.previous = this.state;
-      if (this.useRetail && this.fuelMassKg === 0) this.input.engineRunning = false;
+      if (this.fuel.fuelKg === 0) this.input.engineRunning = false;
       this.controls = this.input.sample(dt);
       this.systems = stepAircraftSystems(this.systems, this.input, dt);
       if (this.useRetail && this.profile)
@@ -335,6 +355,41 @@ export class FlightLayer {
           1 +
           ((this.systems.thrustMultiplier - 1) / 0.5) *
             (this.profile.afterburnerThrustN / this.profile.militaryThrustN - 1);
+      const rawRate = (name: string, fallback: number) => {
+        const raw = this.profile?.rawFields[name] as { value?: unknown } | undefined;
+        return typeof raw?.value === 'number' &&
+          Number.isInteger(raw.value) &&
+          raw.value >= 0 &&
+          raw.value <= 32767
+          ? raw.value
+          : fallback;
+      };
+      this.fuel = stepFuel(
+        this.fuel,
+        {
+          engineRunning: this.input.engineRunning,
+          throttle: this.systems.effectiveThrottle,
+          afterburner: this.input.afterburner,
+          militaryRateKgS: 0.90718474,
+          afterburnerRateKgS: 4.5359237,
+          ...(this.profile
+            ? {
+                nativeConsumption: {
+                  military: rawRate('fuelConsumption', 2),
+                  afterburner: rawRate('aftFuelConsumption', 10),
+                  kilogramsPerUnitSecond: 0.45359237,
+                },
+              }
+            : {}),
+        },
+        dt,
+      );
+      this.updateFuelMass();
+      if (this.fuel.fuelKg === 0) {
+        this.input.engineRunning = false;
+        this.systems.effectiveThrottle = 0;
+        this.systems.thrustMultiplier = 1;
+      }
       const next = (this.useRetail ? stepFlight : stepAssistedFlight)(
         this.state,
         {
@@ -491,7 +546,10 @@ export class FlightLayer {
           ? 'USNF ’97 PT envelope fit'
           : 'Preserved assisted model',
       massKg: this.definition.massKg,
-      fuelMassKg: this.fuelMassKg,
+      fuelMassKg: this.fuel.fuelKg,
+      fuelCapacityKg: this.fuel.capacityKg,
+      fuelFraction: this.fuel.fuelKg / this.fuel.capacityKg,
+      fuelBurnKgS: this.fuel.burnRateKgS,
       payloadMassKg: this.payloadMassKg,
       militaryThrustN: this.useRetail ? this.profile!.militaryThrustN : 70000,
       afterburnerThrustN: this.useRetail ? this.profile!.afterburnerThrustN : 105000,

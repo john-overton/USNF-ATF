@@ -94,7 +94,7 @@ export function startTerrainViewer(
   root: FsRoot,
   manifestPath: string,
   update: (d: TerrainDiagnostics) => void,
-): { dispose(): void } {
+): { dispose(): void; setFuelFraction(fraction: number): void } {
   const flightMode = new URLSearchParams(window.location.search).get('mode') === 'flight';
   let flight: FlightLayer | undefined;
   const renderer = new WebGLRenderer({
@@ -534,6 +534,9 @@ export function startTerrainViewer(
   }
   raf = requestAnimationFrame(frame);
   return {
+    setFuelFraction(fraction: number) {
+      flight?.setFuelFraction(fraction);
+    },
     dispose() {
       disposed = true;
       cancelAnimationFrame(raf);
