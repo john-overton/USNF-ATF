@@ -28,6 +28,8 @@ export interface FlightControls {
   /** Original systems adapter; omitted preserves the baseline aircraft. */
   thrustMultiplier?: number;
   gearDown?: boolean;
+  /** Physical extension for drag; gearDown remains the safe-contact latch. */
+  gearFraction?: number;
   flaps?: number;
   airbrake?: number;
 }
@@ -175,6 +177,11 @@ function aerodynamics(state: FlightState, env: FlightEnvironment, def: AircraftD
     liftDirection = unit(add(up, scale(direction, -dot(up, direction))));
   return { speed, alpha, beta, mach, qArea, cl, cd, forward, up, right, direction, liftDirection };
 }
+/** Original camber approximation: flaps still increase lift at the clean stall
+ * angle, then lose effectiveness in separated flow. Native force law unported. */
+function flapLiftCoefficient(alpha: number, flap: number, stallAlpha: number): number {
+  return flap * 0.2 * clamp((0.6 - Math.abs(alpha)) / (0.6 - stallAlpha), 0, 1);
+}
 export function sampleTelemetry(
   state: FlightState,
   env: FlightEnvironment,
@@ -190,9 +197,7 @@ export function sampleTelemetry(
     loadFactor:
       (a.qArea *
         (a.cl +
-          clamp(controls.flaps ?? 0, 0, 1) *
-            0.2 *
-            Math.max(0, 1 - Math.abs(a.alpha) / def.stallAlphaRad))) /
+          flapLiftCoefficient(a.alpha, clamp(controls.flaps ?? 0, 0, 1), def.stallAlphaRad))) /
       (def.massKg * G),
     specificEnergy: 0.5 * dot(state.velocity, state.velocity) + G * state.position.y,
     stalled: a.speed > 5 && Math.abs(a.alpha) > def.stallAlphaRad,
@@ -228,6 +233,11 @@ export function stepFlight(
     pitch = clamp(controls.pitch, -1, 1),
     roll = clamp(controls.roll, -1, 1),
     yaw = clamp(controls.yaw, -1, 1);
+  const flap = clamp(controls.flaps ?? 0, 0, 1);
+  const airbrake = clamp(controls.airbrake ?? 0, 0, 1);
+  const gear = clamp(controls.gearFraction ?? (controls.gearDown === true ? 1 : 0), 0, 1);
+  if (![flap, airbrake, gear].every(Number.isFinite))
+    throw new Error('Invalid aerodynamic device controls');
   const onGround =
     state.position.y <= ground.height + def.gearHeightM + 0.02 && state.velocity.y <= 0.1;
   // Solve the unstalled positive lift branch for a neutral augmented 1g target.
@@ -238,8 +248,14 @@ export function stepFlight(
   );
   let trimAlpha = 0;
   for (let i = 0; i <= 80; i++) {
-    trimAlpha = (def.stallAlphaRad * i) / 80;
-    if (lookupTable(def.aero.alphaRad, def.aero.mach, def.aero.lift, trimAlpha, a.mach) >= wantedCL)
+    // Cambered flaps can produce the target lift at lower (even negative) alpha.
+    const minimumAlpha = -0.08 * flap;
+    trimAlpha = minimumAlpha + ((def.stallAlphaRad - minimumAlpha) * i) / 80;
+    if (
+      lookupTable(def.aero.alphaRad, def.aero.mach, def.aero.lift, trimAlpha, a.mach) +
+        flapLiftCoefficient(trimAlpha, flap, def.stallAlphaRad) >=
+      wantedCL
+    )
       break;
   }
   // Preserve the existing high-speed rate limits, but remove invented control
@@ -327,13 +343,12 @@ export function stepFlight(
       state.position.y,
       a.mach,
     );
-  const flap = clamp(controls.flaps ?? 0, 0, 1);
-  const airbrake = clamp(controls.airbrake ?? 0, 0, 1);
-  if (!Number.isFinite(flap) || !Number.isFinite(airbrake))
-    throw new Error('Invalid aerodynamic device controls');
-  // Original assisted-device coefficients; retail force law/scaling remains unported.
-  const deviceDrag = flap * 0.035 + airbrake * 0.12;
-  const flapLift = flap * 0.2 * Math.max(0, 1 - Math.abs(a.alpha) / def.stallAlphaRad);
+  const flapLift = flapLiftCoefficient(a.alpha, flap, def.stallAlphaRad);
+  // Original increments, not direct conversions of the native PT drag fields.
+  // The clean drag table already includes induced drag. Add only the extra
+  // lift-squared contribution from flap camber, never a negative drag credit.
+  const extraInducedDrag = 0.06 * Math.max(0, (a.cl + flapLift) ** 2 - a.cl ** 2);
+  const deviceDrag = flap * 0.035 + extraInducedDrag + airbrake * 0.12 + gear * 0.02;
   // Sideforce is damping perpendicular to airflow, so it cannot manufacture energy.
   const side = unit(add(a.right, scale(a.direction, -dot(a.right, a.direction))));
   const force = add(

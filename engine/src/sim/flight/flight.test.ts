@@ -7,6 +7,7 @@ import {
   attitudeFromEuler,
   flightEuler,
   stepFlight,
+  sampleTelemetry,
   lookupTable,
   type FlightEnvironment,
 } from './index';
@@ -224,4 +225,69 @@ test('safe touchdown settles to the terrain plane as the aircraft stops', () => 
   expect(euler.rollRad).toBeCloseTo(-Math.atan(sx / Math.hypot(1, sz)), 5);
   expect(state.angularVelocity.x).toBe(0);
   expect(state.angularVelocity.z).toBe(0);
+});
+
+test('flaps increase maximum lift instead of disappearing at the clean stall angle', () => {
+  const state = createFlightState({
+    position: { x: 0, y: 1000, z: 0 },
+    airspeed: 100,
+    pitchRad: PLACEHOLDER_AIRCRAFT.stallAlphaRad,
+  });
+  state.velocity = { x: 0, y: 0, z: -100 };
+  const clean = sampleTelemetry(state, flat);
+  const flapped = sampleTelemetry(state, flat, PLACEHOLDER_AIRCRAFT, { flaps: 1 });
+  const cleanLevelStallSpeed = 100 / Math.sqrt(clean.loadFactor);
+  const flappedLevelStallSpeed = 100 / Math.sqrt(flapped.loadFactor);
+  expect(flapped.loadFactor).toBeGreaterThan(clean.loadFactor * 1.1);
+  expect(flappedLevelStallSpeed).toBeLessThan(cleanLevelStallSpeed * 0.96);
+  const cleanStep = stepFlight(state, NEUTRAL_CONTROLS, flat);
+  const flapStep = stepFlight(state, { ...NEUTRAL_CONTROLS, flaps: 1 }, flat);
+  expect(flapStep.state.velocity.y).toBeGreaterThan(cleanStep.state.velocity.y);
+  expect(flapStep.state.velocity.z).toBeGreaterThan(cleanStep.state.velocity.z);
+});
+
+test('device drag uses airflow squared and continuous gear extension without changing contact latch', () => {
+  const deceleration = (speed: number, gearFraction: number) => {
+    const state = createFlightState({ position: { x: 0, y: 1000, z: 0 }, airspeed: speed });
+    const clean = stepFlight(state, NEUTRAL_CONTROLS, flat);
+    const gear = stepFlight(state, { ...NEUTRAL_CONTROLS, gearFraction }, flat);
+    return (gear.state.velocity.z - clean.state.velocity.z) * 120;
+  };
+  expect(deceleration(0, 1)).toBe(0);
+  expect(deceleration(100, 1)).toBeGreaterThan(0.3);
+  expect(deceleration(100, 0.5) / deceleration(100, 1)).toBeCloseTo(0.5, 10);
+  expect(deceleration(100, 1) / deceleration(50, 1)).toBeCloseTo(4, 10);
+  const contact = createFlightState({ position: { x: 0, y: 2.2, z: 0 } });
+  expect(
+    stepFlight(contact, { ...NEUTRAL_CONTROLS, gearDown: false, gearFraction: 1 }, flat).state
+      .status,
+  ).toBe('crashed');
+  expect(() => stepFlight(contact, { ...NEUTRAL_CONTROLS, gearFraction: NaN }, flat)).toThrow();
+});
+
+test('deployed devices produce sustained speed and energy differences at fixed throttle', () => {
+  const run = (devices: { flaps?: number; airbrake?: number; gearFraction?: number }) => {
+    let state = createFlightState({
+      position: { x: 0, y: 1000, z: 0 },
+      airspeed: 100,
+      pitchRad: 0.15,
+    });
+    state.velocity = { x: 0, y: 0, z: -100 };
+    const controls = { ...NEUTRAL_CONTROLS, throttle: 0.2, ...devices };
+    for (let i = 0; i < 1200; i++) state = stepFlight(state, controls, flat).state;
+    expect(state.status).toBe('airborne');
+    return sampleTelemetry(state, flat, PLACEHOLDER_AIRCRAFT, controls);
+  };
+  const clean = run({}),
+    flapped = run({ flaps: 1 }),
+    brakes = run({ airbrake: 1 }),
+    gear = run({ gearFraction: 1 });
+  expect(flapped.airspeed).toBeLessThan(clean.airspeed - 5);
+  expect(flapped.specificEnergy).toBeLessThan(clean.specificEnergy - 400);
+  // The augmented trim must account for the extra camber lift, lowering alpha.
+  expect(flapped.alphaRad).toBeLessThan(clean.alphaRad - 0.01);
+  expect(brakes.airspeed).toBeLessThan(flapped.airspeed - 5);
+  expect(brakes.specificEnergy).toBeLessThan(flapped.specificEnergy - 500);
+  expect(gear.airspeed).toBeLessThan(clean.airspeed - 2);
+  expect(gear.specificEnergy).toBeLessThan(clean.specificEnergy);
 });
