@@ -67,3 +67,10 @@ static geometry, not imported flight dynamics or recovered gear/hook animation.
 See [SH notes](../../Docs/formats/sh.md) for the shared-buffer fix, structured
 scope interpretation, JSON contract and remaining limits. The older OBJ/census
 walker is still partial; use the static JSON route for this flight-test model.
+
+## F-14 engine audio
+
+`PYTHONPATH=tools/retail python3 -m retail.audio --pt extracted/usnf97/USNF_2.LIB/F14.PT --out extracted/flight/audio/f14.json`
+exports the aircraft's four named sound references to a bounded local PCM manifest.
+See [audio findings](../../Docs/formats/audio.md) and [installation](../../Docs/phase-4-f14.md).
+No recorded bytes are committed or bundled.

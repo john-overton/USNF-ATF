@@ -2,8 +2,10 @@
 
 The flight test loads the locally supplied USNF '97 F-14 exterior, including
 textures and separate wings. It uses the existing original assisted flight model.
-Cockpit instruments, authentic F-14 performance, weapons, carrier arresting cables
-and the original executable animation program are not implemented.
+A new vector HUD provides flight instruments; authentic F-14 performance, weapons,
+carrier arresting cables and the original executable animation program remain
+unimplemented. Engine loops and engine start/stop use actual PT-selected retail
+recordings when the audio import is installed.
 
 ## Convert and install
 
@@ -11,7 +13,8 @@ With your locally extracted retail files and generated Ukraine terrain present:
 
 ```sh
 PYTHONPATH=tools/retail python3 -m retail.sh_static extracted/usnf97/USNF_2.LIB/F14.SH --pal extracted/usnf97/USNF_2.LIB/PALETTE.PAL --out extracted/flight/f14.json
-bun tools/flight/install-aircraft.ts extracted/flight/f14.json "$HOME/Library/Application Support/USNF-ATF/data"
+PYTHONPATH=tools/retail python3 -m retail.audio --pt extracted/usnf97/USNF_2.LIB/F14.PT --out extracted/flight/audio/f14.json
+bun tools/flight/install-aircraft.ts extracted/flight/f14.json "$HOME/Library/Application Support/USNF-ATF/data" extracted/flight/audio/f14.json
 bun run dev:electron
 ```
 
@@ -40,7 +43,9 @@ for what the bounded static projection does and does not establish.
 | F2 | Chase camera fixed relative to aircraft attitude |
 | F3 | Existing chase view with world-up camera |
 | Arrows / Q,E | Pitch and bank / rudder |
-| B / M / R | Wheel brakes / sound mute / reset selected start |
+| F | Toggle flaps |
+| B | Toggle speed brakes; also applies wheel braking when grounded |
+| M / R | Sound mute / reset selected start |
 
 The helper displays throttle percentage and AFT selection separately, engine/spool,
 gear/hook command and extension percentage, camera mode and sound state. The
@@ -54,9 +59,27 @@ original approximations. Hook movement does not provide arresting force. Safe
 terrain contact requires fully extended gear. Physical controllers continue to
 use the existing standard-gamepad layout; new system toggles are keyboard commands.
 
-Flight sounds are original Web Audio synthesis: jet spool, wind, burner, moving
-gear/hook and touchdown. Press a flight key or click to unlock sound, then M to
-mute/unmute. Automated context/level checks do not replace human listening.
+The imported `F14.PT` explicitly selects `JET1N.11K`, `JET1A.11K`,
+`POWERUP.5K` and `POWERDN.5K`. The remake now plays these local recordings,
+including distinct engine start/stop events. The old sine oscillator is removed;
+loop crossfades and DC removal reduce discontinuities. Sample rates, mixing and
+the secondary-loop assignment to afterburner remain approximations. Wind and
+actuator/contact sounds remain synthesized. M mutes all sounds. See
+[audio findings](formats/audio.md) for provenance and verification limits.
+
+The retail exterior is partitioned into moving tailerons (pitch/roll), rudders,
+flaps and upper/lower airbrakes. Geometry and interpolated textures come from the
+retail model; hinge boundaries, axes and mixing remain authored. Flaps follow
+wing sweep and hold the wings extended while deployed. The assisted physics adds
+flap lift/drag and airbrake drag; those coefficients are not imported flight laws.
+
+The [HUD](formats/hud.md) shows heading, pitch/bank, flight-path marker, TAS knots,
+MSL/AGL feet, vertical speed, load, throttle and device status. It updates at30Hz.
+Its symbols are original SVG informed by the manual and local HUD references;
+`F14.HUD` is an executable drawing module, and its native routines are not run.
+The four device labels sit at upper right and disappear when retracted, as the
+[downloaded manual](reference/JANES_US_NAVY_FIGHTERS_djvu.txt) describes. In chase
+views the HUD is an aircraft-relative instrument, not a camera-conformal overlay.
 
 ## Reproduce packaged checks
 
@@ -78,3 +101,15 @@ up vectors and audio context/mute. It captures screenshots for visual inspection
 As with earlier desktop tests, focus and background throttling are controlled;
 system smoke allows trusted input so Web Audio can unlock. Avoid interacting with
 that test window while it runs. Linux remains deferred.
+
+The additional `retail-smoke.ts` test loads both model and audio imports, drives
+flaps/brakes/pitch/roll/rudder and engine transitions through ordinary keys,
+checks actual mesh transforms, inspects HUD presence, and captures the real
+mixed Web Audio graph to ignored `engine-cycle.webm`. Example:
+
+```sh
+bun tools/flight/retail-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --out extracted/f14-retail-acceptance
+```
+
+To include sounds in other desktop tools, pass
+`--audio extracted/flight/audio/f14.json` alongside `--aircraft`.

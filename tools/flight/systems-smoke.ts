@@ -15,6 +15,7 @@ const session = await openDesktop({
   ...(args.includes('--app') ? { app: option('--app') } : {}),
   aircraft: option('--aircraft', 'extracted/flight/f14.json'),
   terrain: option('--terrain', 'extracted/terrain/ukraine'),
+  ...(args.includes('--audio') ? { audio: option('--audio') } : {}),
   out: option('--out', 'extracted/flight-systems-smoke'),
   query: { mode: 'flight', flightStart: 'airborne' },
   interactiveTest: true,

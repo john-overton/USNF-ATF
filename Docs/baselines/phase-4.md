@@ -1,5 +1,82 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: retail audio, movable surfaces and HUD
+
+Accepted runtime source **`089614f`** on Apple M3/macOS arm64, Electron44.2.0,
+Bun1.4.2 and the real Ukraine theater at2560×1440. Mac arm64/x64 DMG/ZIP packaging
+passed in **24.4s**; only arm64 launched. Source `2d662c4` supplied the first
+packaged evidence; `6bfe9b8` and `089614f` corrected HUD overlap/annunciation and
+aligned device labels with the manual before the final rerun. Subsequent
+helper-tool/docs commits are not retrospectively part of the measured binary.
+
+The installed model now has **364 triangles / 18 material groups**. Its186 source
+faces are partitioned into206 faces; tailerons, rudders, flaps and upper/lower
+speedbrakes reuse those faces and UVs with authored hinges/mixing. No new opaque
+surface is simply layered over its old static counterpart. The importer retains
+source hashes and a limitation statement in the local data.
+
+- Model:11471313 bytes, SHA-256
+  `b6dbd672e412b9af0ba6da22562c5b46523b591614db2929c561f614241097ea`.
+- Audio:397237 bytes, SHA-256
+  `9fd9b3f87c6b8c59a01be0ba4fac3ee9849d274fa2f31742c6cfd6758dc5a678`.
+- Both imports were installed into this Mac's app data, never bundled.
+
+### Automated and packaged checks
+
+`bun run check`: **75 tests / 4818 expectations**, types/lint/format pass.
+`bun run harness --output extracted/flight-harness/f14-retail-accepted.json`:
+**11 maneuvers pass**, source089614f. New device-force tests verify speedbrake
+energy loss and flap lift/drag; load telemetry includes the flap contribution.
+Targeted Python suites: **13 SH tests** (12 synthetic plus one available-media
+area-conservation check) and **3 audio tests** (including available F14.PT sample
+mapping), all pass with no skips. The full retail/container suite was not rerun
+for this isolated decoder/audio change; its prior baseline remains historical.
+
+`retail-smoke.ts` passes **9 packaged checkpoints** at source089614f, with real
+keyboard events, actual rendered surface transforms, neutral restoration and a
+visible HUD. Retail sound loading is required. Exactly one recorded shutdown and
+one startup are observed; no repeated events occur during later surface tests.
+The actual audio graph is tapped through a parallel MediaStream destination and
+recorded to `extracted/f14-retail-accepted/engine-cycle.webm` (plus decoded WAV).
+Final decoded15.06s mono48kHz signal: **RMS0.047196, peak0.279449, zero clipped
+16-bit samples**. No console/renderer/audio errors are recorded. This proves
+non-silent, non-clipped graph output, not speaker quality or subjective freedom
+from buzz. The inferred playback rates and authentic low-rate PCM texture remain
+part of the uncertainty; the prior synthesized sine has been removed.
+
+Independent earlier review of source2d662c4's15.48s capture also measured distinct
+shutdown/start envelopes and no clipping. Its artifact is
+`extracted/f14-retail-acceptance/audio-independent-review.json`; it is separate
+from the final recording above.
+
+| Final packaged maneuver | Duration | Mean FPS | p95 frame ms | Result |
+|---|---:|---:|---:|---|
+| F-14 + HUD takeoff | 40s | 60.021 | 17.500 | One takeoff;149.02m/s,228.04m AGL |
+| F-14 + HUD approach | 60s | 60.010 | 17.700 | One landing;stopped at x289000/z391213.966 |
+
+Both runs record **one clamped frame** and no renderer errors. Landing final
+speed is approximately zero, y113.2, inside the practice runway. The recordings
+are `extracted/f14-hud-takeoff` and `extracted/f14-hud-approach`. Those two
+maneuvers use virtual gamepad inputs; retail smoke separately unlocks and tests
+real audio with trusted keys. Short cadence samples do not establish thermal or
+physical-gamepad acceptance.
+
+### Visual review and limits
+
+Screenshots show coherent flap, upper/lower brake, pitch/roll tailplane and rudder
+movement. Neutral poses restore continuous silhouettes; small hinge seams remain
+below reliable chase-scale inspection. Final HUD screenshot inspection confirms
+no airborne wheel-brake label, no ladder/readout overlap and upper-right device
+annunciators. It displays TAS (not unimplemented IAS), feet MSL/AGL and aircraft-
+relative attitude/path in chase view. It is original SVG, not executed F14.HUD.
+
+The [reference manual](../reference/README.md) is retained in Docs per the user's
+request, with exact download/hash metadata. Asset provenance and remaining
+original flight/mixer/hinge logic are tabulated in [progress](../progress.md).
+Linux remains deferred. Original physics parity, native SH/HUD execution, carrier
+arresting and human sound/handling acceptance remain open.
+
+
 ## 2026-09-09: local retail F-14 and aircraft systems
 
 Runtime flight measurements below use **`fe83ce8`**, built in **23.4 s**, with

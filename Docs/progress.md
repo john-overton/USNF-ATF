@@ -13,8 +13,69 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, diagnostics | Packaged coast/detail ~60 fps at 1440p; 0↔1 and 1↔2 fades plus 24km fast lateral flights pass. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Original 120 Hz assisted dynamics; local retail F-14 exterior; throttle/engine/gear/hook, sound, F2/F3 chase, practice starts and 11-case harness | Packaged flight and systems/animation checks on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Original 120 Hz assisted dynamics; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, F2/F3 chase, practice starts and 11-case harness | Packaged flight and systems/animation checks on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: retail engine recordings, movable surfaces and flight HUD
+
+The user's buzzing report exposed a gap between the exterior port and the rest
+of the flight test. The former sound was entirely synthesized; the old65–220Hz
+sine oscillator was a plausible buzz source. It is removed. `F14.PT` explicitly
+names `JET1N.11K`, `JET1A.11K`, `POWERUP.5K` and `POWERDN.5K`; those local samples
+now drive the engine loop, secondary layer and distinct start/stop events.
+DC removal, loop crossfades and transition fades avoid abrupt signal boundaries.
+The secondary-layer assignment to afterburner, low-rate PCM interpretation and
+mix remain documented approximations. See [audio findings](formats/audio.md).
+
+Current provenance is explicit:
+
+| Feature | Retail contribution | Remaining original implementation |
+|---|---|---|
+| F-14 exterior | SH geometry and PIC/palette textures | Bounded static projection; no native renderer execution |
+| Moving surfaces | Original faces partitioned with UV interpolation | Authored hinges/mixing for tailerons, rudders, flaps, upper/lower airbrakes |
+| Engine sound | Four recordings named by F14.PT, including on/off | Inferred sample rates, looping, mixing and secondary-loop role |
+| Other sound | None yet | Wind, gear/hook/contact and missing-import fallback |
+| Flight model | PT fields/envelopes decoded for research | Forces, assisted controls, flap/airbrake coefficients remain original |
+| HUD | Executable string references and manual behavior | Original SVG instruments; native F14.HUD routines not executed |
+
+B now toggles speed brakes, with wheel braking when grounded; F toggles flaps,
+matching the reference manual. Gamepad B retains direct wheel braking. Flaps add
+assisted lift/drag, speed brakes add drag, and HUD load reflects flap lift. Surface
+partitions conserve each original face's oriented area and remove the old static
+faces rather than overlaying duplicates. Flaps inherit wing sweep and deployed
+flaps hold wings extended. Gear/hook/arrestor limitations remain unchanged.
+
+The HUD adds heading, attitude/flight-path marker, TAS knots, MSL/AGL feet,
+vertical speed, load, throttle and device indicators, updated at30Hz independently
+of the120Hz simulation. It is an aircraft-relative instrument in chase views,
+not a camera-conformal cockpit display. Downloaded manual text now lives in
+[Docs/reference](reference/README.md), per the user's explicit request.
+
+Validation uses unit/model checks plus real packaged key events and actual mesh
+transforms. The actual mixed Web Audio graph is recorded to ignored WebM for
+signal inspection; this is stronger than merely observing a running AudioContext,
+but it still does not establish speaker quality or human listening acceptance.
+Exact source commits, counts, flight measurements and artifacts are in the
+[phase4 baseline](baselines/phase-4.md). Final source089614f passes **75 tests /
+4818 expectations**, **11 maneuvers**, **9 packaged retail checks**, and takeoff/
+landing at **60.021 / 60.010 FPS**. Final recorded audio has peak0.279449 and
+zero clipped samples. Mac packaging passes in24.4s. All results retain their
+source provenance rather than claiming an untested final docs commit was built.
+
+Lessons: `.HUD` is executable drawing code, not a declarative asset file; do not
+claim importing it just because its strings are readable. Web Audio rejects
+5,512Hz buffers, so low-rate PCM must be explicitly resampled. Match source roles
+before choosing recordings. Keep clip provenance separate from inferred mixer
+behavior. Screenshot review caught a false airborne wheel-brake annunciator and
+pitch-ladder/readout overlap; both were corrected. Device labels now follow the
+manual's upper-right placement and disappear when retracted. Authored surface
+cuts are useful presentation work, not recovered SH animation semantics.
+
+**Next work:** listen to the revised retail mix on the user's output device;
+recover original sound mixer/state semantics and flight-model integration rather
+than claiming behavioral parity. Fine hinge seams, native control-surface state
+branches, physical controller checks and carrier arresting remain open. Linux
+remains deferred. Development commits stay local.
 
 ## 2026-09-09: full text manual retained in Docs
 

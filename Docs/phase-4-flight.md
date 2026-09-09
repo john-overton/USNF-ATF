@@ -71,7 +71,9 @@ still have a small filtering discrepancy; contact never reads geomorphed meshes.
   Safe touchdown requires gear at least 99% down. The hook does not arrest the
   aircraft: carrier decks/cables are not implemented.
 - F2 selects attitude-locked chase; F3 selects world-up chase (the default).
-- B applies wheel brakes. M mutes sounds. R resets the current practice start.
+- F toggles flaps; B toggles speed brakes and also applies wheel braking when
+  grounded. Gamepad B retains the direct wheel-brake action. M mutes sounds.
+  R resets the current practice start.
 - A connected standard-mapping gamepad uses left-stick X for roll and positive
   left-stick Y (pull back) for pitch up. Right-stick X supplies rudder.
 - Right/left triggers (buttons7/6) increase/decrease retained throttle at40%/second.
@@ -142,12 +144,19 @@ uses the recovered wing pivots with an original speed schedule: gear down holds
 wings extended, then 160–340m/s increases sweep through 0–0.7rad. Thrust gets an
 original 1–1.5 afterburner multiplier over 0.4s. These timings and dynamics are
 not recovered F-14 performance data. Wing animations are visual; the baseline
-coefficient tables do not yet change with wing sweep or gear drag.
+coefficient tables do not yet change with wing sweep or gear drag. The newer
+flap and airbrake forces are explicit original additions, not recovered coefficients.
 
-`FlightAudio` synthesizes jet, wind, burner, gear/hook actuation and touchdown
-sounds using Web Audio. A trusted pointer/key gesture unlocks audio; M mutes.
-No recorded or retail sound samples are distributed. Diagnostics include audio
-context/mute/levels, system transition fractions, actual gear/hook/wing transforms,
-burner visibility and camera up vector so acceptance can check rendered motion
-rather than only command toggles. Human listening and physical controller feel
-remain distinct from automated checks.
+`FlightAudio.create(platform)` loads PT-selected engine loop/start/stop recordings
+from appData/audio/f14.json. Without this local import, filtered-noise fallback
+remains available; the previous sine oscillator was removed after the user
+reported buzzing. Wind and actuator/contact noises remain original. A trusted
+pointer/key gesture unlocks audio; M mutes. See [audio evidence](formats/audio.md).
+
+The [HUD](formats/hud.md) reads aircraft instruments at30Hz. The retail HUD is
+an executable module, so this is an original vector implementation informed by
+its references and the manual. Control surfaces reuse partitioned retail geometry
+and textures with authored hinges/mixing. Flaps and airbrakes affect the original
+assisted force model; the native USNF aerodynamic integrator is still unported.
+Exact present-day provenance is tabulated in [F-14 setup](phase-4-f14.md) and the
+current progress entry. Earlier packaged figures retain their original source.

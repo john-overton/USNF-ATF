@@ -7,7 +7,7 @@ import { parseFlightSamples } from '../../engine/src/flight/FlightAudio';
 const [source, dataRoot, audioSource] = process.argv.slice(2);
 if (!source || !dataRoot)
   throw new Error(
-    'Usage: bun tools/flight/install-aircraft.ts extracted/flight/f14.json <app-data-root>',
+    'Usage: bun tools/flight/install-aircraft.ts extracted/flight/f14.json <app-data-root> [extracted/flight/audio/f14.json]',
   );
 const input = Bun.file(source);
 if (input.size > 64 * 1024 * 1024) throw new Error('Aircraft import exceeds 64 MiB');

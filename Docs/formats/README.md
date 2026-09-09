@@ -46,3 +46,5 @@ byte is in 0..63, so it is a classic 256-entry VGA DAC palette (6 bits per
 channel; scale by 4 or `v * 255 // 63` for 8-bit). Entry 0 is black and
 entries 1..15 are all (63, 0, 63), the usual magenta placeholder for the
 reserved low slots. PIC decoding is implemented; runtime palette gaps remain (see [pic.md](pic.md) and [pal.md](pal.md)).
+
+- [Flight audio](audio.md): PT-selected raw PCM, inferred rates and local playback.

@@ -53,3 +53,17 @@ trusted CDP input, needed to unlock Web Audio, and is not a cadence benchmark.
 See [F-14 setup](../../Docs/phase-4-f14.md) for conversion/install/test commands.
 Screenshots supplement numeric assertions; helper text updates asynchronously,
 so camera captures explicitly wait for the selected view label.
+
+## Retail audio, surfaces and HUD
+
+`retail-smoke.ts` runs the actual engine sample graph, records one shutdown/start
+cycle to `engine-cycle.webm`, checks nonzero/nonclipping signal snapshots, tests
+flap/brake/pitch/roll/rudder mesh transformations and neutral restoration, and
+captures the HUD. It loads `extracted/flight/f14.json` and
+`extracted/flight/audio/f14.json` by default. `--aircraft` and `--audio` override
+those paths; ordinary smoke/system tools also accept optional `--audio`.
+
+All recordings remain under ignored `extracted/`. The parallel MediaStream tap
+captures the actual app graph without replacing its playback nodes; it is not
+physical loopback or a subjective sound-quality judgment. The real retail sample
+rates/mixing still have the uncertainty described in [audio notes](../../Docs/formats/audio.md).
