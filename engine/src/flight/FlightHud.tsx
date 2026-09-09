@@ -247,7 +247,7 @@ export function FlightHud({
           {warning}
         </text>
         {(navigation ?? navigationStatus) && (
-          <text data-hud="waypoint" x="380" y="551" textAnchor="middle" fontSize="15">
+          <text data-hud="waypoint" x="380" y="50" textAnchor="middle" fontSize="15">
             {navigation
               ? `WP ${navigation.waypoint.id} ${navigation.waypoint.name.toUpperCase()} · ${navigation.distanceNm.toFixed(1)} NM · ${navigation.arrived ? 'ARRIVED' : `${String(Math.round(navigation.bearingDegrees) % 360).padStart(3, '0')}°`} [ ]`
               : navigationStatus}
