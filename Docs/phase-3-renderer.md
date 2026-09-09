@@ -293,7 +293,8 @@ The smoke harness must capture browser console errors as well as uncaught
 exceptions; draw-call/triangle counters alone do not prove a successful shader.
 Fresh packaged screenshot and timing evidence is required after this correction.
 
-The fresh `3f7a6b2` package subsequently renders land correctly. Independent
+The fresh package at source `12851d8`, including the renderer fix `3f7a6b2`,
+subsequently renders land correctly. Independent
 visual review of `extracted/terrain-transition-captures/` inspected ascent early,
 midfade and settled frames, plus descent midfade, late and settled frames. The
 land remains continuous without broad missing-tile/sky holes in the visible
