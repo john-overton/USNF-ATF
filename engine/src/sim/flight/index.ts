@@ -242,7 +242,10 @@ export function stepFlight(
     if (lookupTable(def.aero.alphaRad, def.aero.mach, def.aero.lift, trimAlpha, a.mach) >= wantedCL)
       break;
   }
-  const authority = clamp(a.speed / 65, 0.08, 1),
+  // Preserve the existing high-speed rate limits, but remove invented control
+  // authority at rest. q uses true air velocity (including wind) and density.
+  const dynamicPressure = a.qArea / def.wingAreaM2;
+  const authority = clamp(dynamicPressure / (0.5 * 1.225 * 65 ** 2), 0, 1),
     bank = -flightEuler(state.attitude).rollRad;
   const desiredRates = {
     x:
@@ -261,9 +264,18 @@ export function stepFlight(
     state.angularVelocity,
     scale(add(desiredRates, scale(state.angularVelocity, -1)), blend),
   );
+  if (onGround) {
+    // Main gear supports roll; rudder/steering cannot spin a parked aircraft.
+    const tangent = add(
+      state.velocity,
+      scale(unit(ground.normal), -dot(state.velocity, unit(ground.normal))),
+    );
+    angularVelocity.z = 0;
+    angularVelocity.y *= clamp(length(tangent) / 20, 0, 1);
+  }
   const rate = length(angularVelocity),
     angle = rate * dt;
-  const attitude =
+  let attitude =
     rate > 1e-10
       ? normalized(
           multiply(state.attitude, {
@@ -272,6 +284,32 @@ export function stepFlight(
           }),
         )
       : { ...state.attitude };
+  // Approximate three-point gear support, not a rigid-body wheel solver. A
+  // pressure-dependent nose-up envelope permits rotation above taxi speed;
+  // it closes as the aircraft slows, settling the nose gear after landing.
+  const supportAttitude = (candidate: Quaternion, normal: Vec3) => {
+    const n = unit(normal);
+    const euler = flightEuler(candidate);
+    const heading = { x: -Math.sin(euler.yawRad), y: 0, z: -Math.cos(euler.yawRad) };
+    const right = { x: Math.cos(euler.yawRad), y: 0, z: -Math.sin(euler.yawRad) };
+    const slopePitch = Math.atan2(-dot(n, heading), n.y);
+    const slopeUp = rotate(attitudeFromEuler(slopePitch, euler.yawRad, 0), { x: 0, y: 1, z: 0 });
+    const slopeRoll = Math.atan2(-dot(n, right), dot(n, slopeUp));
+    const rotationFraction = clamp(
+      (dynamicPressure - 0.5 * 1.225 * 45 ** 2) / (0.5 * 1.225 * (65 ** 2 - 45 ** 2)),
+      0,
+      1,
+    );
+    const supportedPitch = clamp(
+      euler.pitchRad,
+      slopePitch,
+      slopePitch + def.landing.maxPitchRad * 0.8 * rotationFraction,
+    );
+    if (supportedPitch !== euler.pitchRad) angularVelocity.x = 0;
+    angularVelocity.z = 0;
+    return attitudeFromEuler(supportedPitch, euler.yawRad, slopeRoll);
+  };
+  if (onGround && state.status === 'grounded') attitude = supportAttitude(attitude, ground.normal);
   if (
     controls.thrustMultiplier !== undefined &&
     (!Number.isFinite(controls.thrustMultiplier) ||
@@ -349,6 +387,10 @@ export function stepFlight(
             : 'Hard or unsafe terrain impact';
     } else {
       status = 'grounded';
+      // Evaluate impact limits first: support must never turn an unsafe arrival
+      // into a safe landing by flattening its attitude before classification.
+      attitude = supportAttitude(attitude, n);
+      if (length(velocity) < 0.01) angularVelocity.y = 0;
       velocity = add(velocity, scale(n, -Math.min(0, dot(velocity, n))));
     }
     position = { ...position, y: nextGround.height + def.gearHeightM };

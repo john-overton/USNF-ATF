@@ -146,3 +146,82 @@ test('speed brakes dissipate energy and deployed flaps add assisted lift and dra
   expect(flaps.state.velocity.z).toBeGreaterThan(clean.state.velocity.z);
   expect(() => stepFlight(state, { ...NEUTRAL_CONTROLS, airbrake: NaN }, flat)).toThrow();
 });
+
+test('parked gear support rejects held pitch roll and yaw, including residual rotation', () => {
+  for (const sign of [-1, 1]) {
+    let state = createFlightState({ position: { x: 0, y: 2.2, z: 0 }, yawRad: 0.4 });
+    state.status = 'grounded';
+    state.angularVelocity = { x: sign, y: sign, z: sign };
+    const initial = structuredClone(state);
+    for (let i = 0; i < 1200; i++)
+      state = stepFlight(
+        state,
+        { ...NEUTRAL_CONTROLS, pitch: sign, roll: sign, yaw: sign, brake: true },
+        flat,
+      ).state;
+    expect(state.status).toBe('grounded');
+    expect(state.position).toEqual(initial.position);
+    expect(state.velocity).toEqual({ x: 0, y: 0, z: 0 });
+    expect(flightEuler(state.attitude).pitchRad).toBeCloseTo(0, 12);
+    expect(flightEuler(state.attitude).rollRad).toBeCloseTo(0, 12);
+    expect(flightEuler(state.attitude).yawRad).toBeCloseTo(0.4, 12);
+    expect(state.angularVelocity).toEqual({ x: 0, y: 0, z: 0 });
+  }
+});
+
+test('taxi controls keep main and nose gear supported, while speed permits takeoff rotation', () => {
+  let taxi = createFlightState({ position: { x: 0, y: 2.2, z: 0 }, airspeed: 15 });
+  taxi.status = 'grounded';
+  for (let i = 0; i < 240; i++)
+    taxi = stepFlight(taxi, { ...NEUTRAL_CONTROLS, pitch: 1, roll: 1 }, flat).state;
+  expect(taxi.status).toBe('grounded');
+  expect(flightEuler(taxi.attitude).pitchRad).toBeCloseTo(0, 12);
+  expect(flightEuler(taxi.attitude).rollRad).toBeCloseTo(0, 12);
+  let rotation = createFlightState({ position: { x: 0, y: 2.2, z: 0 }, airspeed: 80 });
+  rotation.status = 'grounded';
+  let supportedRoll = 0;
+  for (let i = 0; i < 240; i++) {
+    rotation = stepFlight(rotation, { ...NEUTRAL_CONTROLS, throttle: 1, pitch: 0.2 }, flat).state;
+    if (rotation.status === 'grounded')
+      supportedRoll = Math.max(supportedRoll, Math.abs(flightEuler(rotation.attitude).rollRad));
+  }
+  expect(supportedRoll).toBe(0);
+  expect(rotation.status).toBe('airborne');
+  expect(rotation.position.y).toBeGreaterThan(3);
+});
+
+test('control authority follows true air dynamic pressure, with no zero-airflow floor', () => {
+  const controls = { ...NEUTRAL_CONTROLS, roll: 1 };
+  const at = (altitude: number, speed: number, wind = { x: 0, y: 0, z: 0 }) =>
+    stepFlight(
+      createFlightState({ position: { x: 0, y: altitude, z: 0 }, airspeed: speed }),
+      controls,
+      { ...flat, wind },
+    );
+  expect(at(1000, 0).state.angularVelocity.z).toBe(0);
+  const low = Math.abs(at(1000, 20).state.angularVelocity.z);
+  expect(Math.abs(at(1000, 40).state.angularVelocity.z) / low).toBeCloseTo(4, 12);
+  expect(Math.abs(at(9500, 20).state.angularVelocity.z) / low).toBeCloseTo(Math.exp(-1), 12);
+  expect(at(1000, 20, { x: 0, y: 0, z: -20 }).state.angularVelocity.z).toBe(0);
+  expect(at(1000, 0, { x: 0, y: 0, z: 20 }).state.angularVelocity.z).toBeCloseTo(-low, 12);
+});
+
+test('safe touchdown settles to the terrain plane as the aircraft stops', () => {
+  const sx = 0.03,
+    sz = 0.04;
+  const slope: FlightEnvironment = {
+    sampleGround: (x, z) => ({
+      height: -sx * x - sz * z,
+      normal: { x: sx, y: 1, z: sz },
+      kind: 'land',
+    }),
+  };
+  let state = createFlightState({ position: { x: 0, y: 2.19, z: 0 }, pitchRad: 0.2 });
+  state = stepFlight(state, { ...NEUTRAL_CONTROLS, pitch: 1, roll: 1, brake: true }, slope).state;
+  expect(state.status).toBe('grounded');
+  const euler = flightEuler(state.attitude);
+  expect(euler.pitchRad).toBeCloseTo(Math.atan(sz), 5);
+  expect(euler.rollRad).toBeCloseTo(-Math.atan(sx / Math.hypot(1, sz)), 5);
+  expect(state.angularVelocity.x).toBe(0);
+  expect(state.angularVelocity.z).toBe(0);
+});
