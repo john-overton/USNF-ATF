@@ -168,3 +168,68 @@ with the same native-oracle method, then build a state adapter and compare full
 maneuver traces. A selectable recovered-envelope mode can use these exact
 helpers while retaining shared original forces, but it must not be labeled a
 complete native flight model.
+
+## Follow-up: native time and fuel-rate units recovered
+
+The subsequent fuel work traced the native clock rather than assuming a rate
+from the field names. `_InstallTimerInt` (`0x40e900`) obtains the counter
+frequency through the PE import `QueryPerformanceFrequency` at IAT `0x54e5f0`,
+then captures an initial counter through `QueryPerformanceCounter` at
+`0x54e5f8`. The routine at `0x40e770` updates `_timerTicks` using the signed
+64-bit calculation:
+
+`timerTicks = trunc(((counter - initialCounter) * 256) / counterFrequency)`.
+
+At `0x40e7a6` onward the counter and origin are shifted left eight; the native
+`__alldiv` routine at `0x4aa740` divides their difference by the frequency.
+**There are 256 native timer ticks per second.** `_TIMEUpdate@0`
+(`0x40e620`) accumulates frame ticks, including native pause/time-acceleration
+handling, into `_currentTicks` (`0x4fde38`). At `0x40e74c` it shifts that value
+right eight and stores the low word into `_currentTime` (`0x4fddf0`).
+`_TIMEInit@12` at `0x40e590` initializes the same relationship. `_currentTime`
+therefore counts **simulation seconds**, with a 16-bit representation.
+
+The current object's `_serviceTicks` (`0x521658`) is calculated at `0x434b00`
+as the difference between current ticks and the object's stored last-service
+word, with a minimum of two ticks. The other observed assignment at `0x4243ed`
+copies `_frameTicks`. These are 1/256-second quantities, consistent with
+`_MatchF24` multiplying its rate by service ticks and shifting right eight.
+The scheduler's minimum/clamps should not be silently copied into the remake's
+120 Hz integration; reproducing its full scheduling is separate work.
+
+This resolves the fuel-rate unit left open in the earlier
+[native power investigation](native-power.md):
+
+- `@FMFuelConsumption@4` (`0x430620`) returns a rate in **24.8 pounds/second**
+  for the supported aircraft fuel fields and throttle convention.
+- `_BurnFuel@0` at `0x430721` obtains that rate, multiplies it by five at
+  `0x430726`, and subtracts the result from fixed-point tank quantity. It
+  advances the tank's next deadline by **five seconds** at `0x4307f5`.
+- The conversion to a continuous remake rate is
+  `nativeRate / 256 * 0.45359237` kg/s. The local F-14's native fields 2 and 10
+  therefore correspond to **0.90718474 kg/s at 100% military throttle** and
+  **4.5359237 kg/s in afterburner**. Lesser throttle retains the recovered
+  integer truncation, rather than multiplying a floating-point ideal rate.
+- Native fuel accounting is batched at five-second deadlines and includes
+  external-tank ordering, limited overdue catch-up and an infinite-fuel option.
+  A continuous 120 Hz decrement using the recovered rate is a deliberate
+  presentation/integration adaptation, not exact reproduction of those batches.
+  Engine-off and exhaustion gates must still be honored by the runtime adapter.
+
+A separate clock oracle executed the actual native counter conversion and
+TIMEInit instructions for **18 synthetic cases**: three counter frequencies
+(1 kHz, 10 MHz, 1 GHz) at six durations from zero to 60 seconds. All matched
+256 ticks/second and the integer-second field. This oracle explicitly supplies
+deterministic values at the **QueryPerformanceCounter import**; it does not
+claim to execute a real Windows clock or a complete game frame. Unlike the
+isolated envelope oracle, this test does contain that named OS-input hook.
+
+```sh
+objdump -d --start-address=0x40e590 --stop-address=0x40e7d3 extracted/usnf97/SETUP.ESA/USNF.EXE
+objdump -d --start-address=0x4306ec --stop-address=0x430817 extracted/usnf97/SETUP.ESA/USNF.EXE
+PYTHONPATH=tools/native extracted/native-flight/.venv/bin/python tools/native/clock-oracle.py --exe extracted/usnf97/SETUP.ESA/USNF.EXE --out extracted/native-flight/clock-oracle.json
+```
+
+This is now direct native-code evidence for the time unit. Earlier labels of
+fuel consumption as "probable lb/s" accurately described the earlier research
+state; they are superseded for this specific executable and these fields.
