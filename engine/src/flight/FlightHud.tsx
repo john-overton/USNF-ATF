@@ -210,10 +210,10 @@ export function FlightHud({
           <text
             key={name}
             data-hud={name.toLowerCase()}
-            x={230 + i * 100}
-            y="554"
-            textAnchor="middle"
-            opacity={fraction > 0.01 ? 1 : 0.4}
+            x="650"
+            y={125 + i * 22}
+            textAnchor="end"
+            opacity={fraction > 0.01 ? 1 : 0}
           >
             {name}
             {fraction > 0.01 && fraction < 0.99 ? ' ↕' : ''}
