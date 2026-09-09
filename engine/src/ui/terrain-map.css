@@ -1,0 +1,122 @@
+.terrain-map {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 3;
+  width: clamp(155px, 23vw, 260px);
+  padding: 8px;
+  background: rgb(8 17 18 / 88%);
+  border: 1px solid #76958a;
+  color: #d5dfbd;
+  font:
+    11px 'Courier New',
+    monospace;
+  pointer-events: none;
+}
+.terrain-map-title,
+.terrain-map-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+}
+.terrain-map-title {
+  margin-bottom: 6px;
+}
+.terrain-map-image {
+  position: relative;
+}
+.terrain-map-image canvas,
+.terrain-map-image svg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  inset: 0;
+}
+.terrain-map-image canvas {
+  image-rendering: pixelated;
+}
+.map-waypoint {
+  fill: #152325;
+  stroke: #bdc6b3;
+  stroke-width: 2;
+}
+.map-waypoint.selected {
+  stroke: #f5ec72;
+  stroke-width: 3;
+}
+.map-waypoint text {
+  fill: #fff;
+  stroke: #0c171a;
+  paint-order: stroke;
+  font:
+    24px 'Courier New',
+    monospace;
+}
+.map-aircraft {
+  fill: #fff;
+  stroke: #101819;
+  stroke-width: 3;
+}
+.terrain-map-legend {
+  height: 5px;
+  margin: 7px 0 4px;
+  background: linear-gradient(to right, #2d733d, #cab943, #b9462f, #66452e 94%, #eeeee0 95%);
+}
+.terrain-map-caption {
+  margin-top: 4px;
+  font-size: 10px;
+}
+.terrain-map p {
+  margin: 8px 0 0;
+}
+.terrain-map-error {
+  overflow-wrap: anywhere;
+}
+@media (max-height: 540px) {
+  .terrain-map {
+    width: 155px;
+    top: 8px;
+    right: 8px;
+  }
+}
+.terrain-map {
+  border: 5px ridge #4c5551;
+  border-radius: 7px;
+  box-shadow: 0 2px 8px #0008;
+}
+.terrain-map-image {
+  overflow: hidden;
+  border: 1px solid #172b24;
+}
+.terrain-map-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 7px;
+}
+.terrain-map-controls button {
+  pointer-events: auto;
+  min-width: 34px;
+  min-height: 27px;
+  padding: 1px 8px;
+  background: #28312d;
+  color: #d5dfbd;
+  border: 2px outset #667068;
+  border-radius: 3px;
+  font:
+    18px 'Courier New',
+    monospace;
+}
+.terrain-map-controls button:disabled {
+  opacity: 0.45;
+}
+.terrain-map-distance {
+  margin-top: 7px;
+}
+.terrain-map-scale {
+  height: 5px;
+  border: 1px solid #e8eac9;
+  border-top: 0;
+  margin-bottom: 3px;
+}
