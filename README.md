@@ -2,7 +2,7 @@
 
 A non-commercial fan remake of Jane's US Navy Fighters '97 (and, later, ATF Gold), built with TypeScript, Three.js, React, and Electron. The goal is retail aircraft and missions over real-elevation terrain, using assets imported from your own copy.
 
-**Current status (2026-09-09):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, water, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. An original practice aircraft now takes off, flies and lands over the generated theater. Combat, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
+**Current status (2026-09-09):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, water, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. Practice flight now supports a locally imported F-14 with throttle presets, engine/gear/hook controls, synthesized sound and F2/F3 chase views over the generated theater. Combat, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
 
 Start with [progress and review findings](Docs/progress.md), the [build plan](Docs/build-plan.md) (phase order and exit criteria), and the [design brief](Docs/usnf-atf-plan.md). Contributor and agent instructions are in [AGENTS.md](AGENTS.md).
 
@@ -74,10 +74,14 @@ and limits. Terrain outputs and source rasters remain ignored under `extracted/`
 ## Practice flight
 
 Run `bun run dev:electron`, then choose **Practice runway** or **Final approach**.
-These are original practice starts over the installed Ukraine terrain, with an
-original placeholder aircraft and a fictional runway; no retail import is needed.
+These are practice starts over the installed Ukraine terrain and a fictional runway.
+The locally converted F-14 is used when installed; otherwise the original aircraft
+remains available. [F-14 setup](Docs/phase-4-f14.md) keeps retail assets outside the app bundle.
 
-- Hold **W/S** to increase/decrease throttle; the setting stays when released.
+- **1–5** select **0/25/50/75/100%** throttle; **6** engages afterburner.
+- Hold **W/S** for incremental throttle; the setting stays when released.
+- **T** toggles engine, **G** gear, **H** hook and **M** sound mute.
+- **F2** locks chase view to aircraft attitude; **F3** keeps the camera upright.
 - **ArrowDown** pulls up, **ArrowUp** pushes down; left/right arrows bank.
 - **Q/E** controls rudder, **B** brakes on the ground, **R** resets the practice start.
 - Standard gamepads use the left stick for pitch/roll, right-stick X for rudder,

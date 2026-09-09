@@ -40,7 +40,7 @@ bun run probe --unpackaged
 - `shell/`: Electron main/preload, IPC, native filesystem/window/power access, development and packaging scripts. Preserve context isolation, sandboxing, and disabled renderer Node integration.
 - `importer/`: TypeScript import contracts now; decoder port and first-run workflow in phase 5. Python tools in `tools/retail/` are the research reference.
 - `terrain-pipeline/` owns source fetching/reprojection/chunks. Keep [Docs/terrain-contract.md](Docs/terrain-contract.md) synchronized with Python producers and engine validators. Never infer water from elevation alone; shared-border probes and dry-island tests are acceptance gates.
-- `engine/src/sim/flight/` is pure flight physics; `engine/src/flight/` adapts input, rendering and contact data. Aircraft tables are original placeholder data, not imported retail parameters. Contact sampling must remain independent of visual LOD and must never invent zero ground for missing data.
+- `engine/src/sim/flight/` is pure flight physics; `engine/src/flight/` adapts input, rendering and contact data. Aircraft flight tables are original placeholder data, not imported retail parameters. The optional F-14 static geometry/textures load only from appData/aircraft/f14.json; generated gear/hook/sound and animation timings are original approximations. Contact sampling must remain independent of visual LOD and must never invent zero ground for missing data.
 - Keep the simulation fixed at 120 Hz and independent of React/render timing. Preserve the terrain renderer’s floating origin when adding aircraft rendering.
 - Maintain strict TypeScript and existing conventions. Prefer focused changes; do not add CI before phase 9 or new dependencies without a concrete need.
 

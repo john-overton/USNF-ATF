@@ -1,7 +1,7 @@
 # Phase 4 practice flight
 
-Initial integration, 2026-09-09. This is an original assisted placeholder aircraft,
-not an imported retail aircraft or evidence of USNF handling parity. Linux testing
+Updated 2026-09-09: flight can now render a locally converted retail F-14.
+Dynamics remain the original assisted model, not evidence of USNF handling parity. Linux testing
 remains deferred. Packaged checks and repeatable measurements belong in the phase
 4 baseline; headless maneuver assertions are separate evidence from flying the app.
 
@@ -10,7 +10,7 @@ remains deferred. Packaged checks and repeatable measurements belong in the phas
 The default app remains the terrain explorer. The links **Practice runway** and
 **Final approach** opt into `?mode=flight` or
 `?mode=flight&flightStart=approach`. Both use the installed Ukraine theater.
-Flight mode draws an original procedural aircraft and a fictional practice strip;
+Flight mode draws the installed F-14 (or the original procedural fallback when absent) and a fictional practice strip;
 it preserves the terrain renderer's floating origin and does not ship retail assets.
 
 The fictional deck is centered at projected x289000/z392000, width100m,
@@ -27,15 +27,19 @@ and `preparePractice` passes in24.657ms and loads262144 decoded bytes on this Ma
 Runway start is x289000/z393250/y113.2 at rest, nose toward world−Z. Final approach
 starts x289000/z394800/y240, airspeed100m/s, pitch−0.035rad, throttle20%. These are
 repeatable practice starts, not an autopilot. `R` resets to the selected start.
-No terrain collision or flight state mutation is added to explorer mode.
+**Airborne practice** (`?mode=flight&flightStart=airborne`) starts at 3000m,
+150m/s and 20% throttle over the strip. Its airborne initialization does not count
+as a takeoff. No terrain collision or flight state mutation is added to explorer mode.
 
 `FlightLayer` connects the existing `FixedStepClock` to the pure flight model at
 120Hz. Forces and state evolution remain independent of React and rendering.
 The renderer interpolates the previous/current position and quaternion, then
 rebases aircraft, deck and chase camera against the existing floating origin.
 Frame deltas pass through the clock's backlog limit; clamped frames are counted.
-The chase camera is kept above available ground samples, but is not a full camera
-collision/occlusion solver.
+F3 retains the world-up chase and its ground-height guard. F2 rotates the camera
+position, target and up vector with the interpolated aircraft attitude. It keeps
+a constant relative pose, including inverted flight, and therefore does not apply
+the world-height guard; neither mode is a full camera collision solver.
 
 ## Ground contact and loading
 
@@ -59,7 +63,15 @@ still have a small filtering discrepancy; contact never reads geomorphed meshes.
 
 - ArrowDown pulls nose up; ArrowUp pushes down; left/right arrows bank.
 - Q/E rudder left/right. W/S increases/decreases retained throttle at40%/second.
-- B applies wheel brakes. R resets the current practice start.
+- 1/2/3/4/5 select 0/25/50/75/100% throttle. 6 selects full throttle with afterburner.
+  Selecting 1–5 or reducing incremental throttle clears afterburner.
+- T toggles the engine without changing the selected throttle. Cutoff removes
+  thrust immediately; restart and sound use a two-second spool transition.
+- G toggles gear; H toggles hook. Gear takes three seconds; hook takes 1.5 seconds.
+  Safe touchdown requires gear at least 99% down. The hook does not arrest the
+  aircraft: carrier decks/cables are not implemented.
+- F2 selects attitude-locked chase; F3 selects world-up chase (the default).
+- B applies wheel brakes. M mutes sounds. R resets the current practice start.
 - A connected standard-mapping gamepad uses left-stick X for roll and positive
   left-stick Y (pull back) for pitch up. Right-stick X supplies rudder.
 - Right/left triggers (buttons7/6) increase/decrease retained throttle at40%/second.
@@ -116,3 +128,26 @@ handling parity. The phase 4 baseline owns exact frame times, source provenance,
 input recipe and the approach run's one clamped frame. Camera/renderer and sim
 snapshots update at different cadences; small HUD-versus-report differences are
 expected and not evidence of a second state.
+
+## Local F-14 and moving parts
+
+See [F-14 setup and verification](phase-4-f14.md). The new bounded static SH
+exporter recovers 186 polygons / 326 triangles at nearest detail, with textures
+and separate pivoted wings. It does not execute the retail x86 animation code.
+The older broad SH census/OBJ path remains partial; its historical eight-face
+F-14 result is not the new export path.
+
+Gear, hook and exhaust effects are original supplementary geometry. Wing sweep
+uses the recovered wing pivots with an original speed schedule: gear down holds
+wings extended, then 160–340m/s increases sweep through 0–0.7rad. Thrust gets an
+original 1–1.5 afterburner multiplier over 0.4s. These timings and dynamics are
+not recovered F-14 performance data. Wing animations are visual; the baseline
+coefficient tables do not yet change with wing sweep or gear drag.
+
+`FlightAudio` synthesizes jet, wind, burner, gear/hook actuation and touchdown
+sounds using Web Audio. A trusted pointer/key gesture unlocks audio; M mutes.
+No recorded or retail sound samples are distributed. Diagnostics include audio
+context/mute/levels, system transition fractions, actual gear/hook/wing transforms,
+burner visibility and camera up vector so acceptance can check rendered motion
+rather than only command toggles. Human listening and physical controller feel
+remain distinct from automated checks.

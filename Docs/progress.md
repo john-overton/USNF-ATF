@@ -9,12 +9,59 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 | Phase | Implemented | Acceptance / remaining work |
 |---|---|---|
-| 0: retail toolkit | Containers, images/fonts and data readers; partial SH | F-14 export and integrated deliverable remain open; unchanged this development pass |
+| 0: retail toolkit | Containers, images/fonts and data readers; bounded nearest-detail F-14 static export with textures | F-14 is recognizable in packaged flight. General SH interpreter, native animation semantics and unified deliverable remain open |
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, diagnostics | Packaged coast/detail ~60 fps at 1440p; 0↔1 and 1↔2 fades plus 24km fast lateral flights pass. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Original 120 Hz assisted aircraft, terrain contact, practice runway/approach, HUD, chase camera, keyboard/gamepad adapter and 11-case harness | Packaged ground/takeoff/landing pass at ~60 FPS on Mac. Physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Original 120 Hz assisted dynamics; local retail F-14 exterior; throttle/engine/gear/hook, sound, F2/F3 chase, practice starts and 11-case harness | Packaged flight and systems/animation checks on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: local F-14 exterior, USNF-style controls, sound and camera modes
+
+The user's local F-14 now loads into practice flight from app data. The bounded
+static SH export produces **186 polygons / 326 triangles** with textured body,
+pivoted wings and separate exhaust disks. The earlier eight-face export failure
+is preserved in historical records; this is a new nearest-detail projection,
+not proof that the broad SH interpreter or original animation program is complete.
+See [F-14 setup](phase-4-f14.md), [SH findings](formats/sh.md) and
+[phase 4 baseline](baselines/phase-4.md) for provenance and measured acceptance.
+
+- 1–5 select 0/25/50/75/100%; 6 selects afterburner. T toggles the engine,
+  G gear, H hook. The helper shows throttle %, AFT, spool and transition progress.
+- F2 attaches camera attitude to the aircraft; F3 retains world-up chase. A new
+  airborne practice start helps exercise controls without an initial takeoff.
+- Gear/hook, speed-dependent wing sweep and attached burner effects animate.
+  Safe terrain contact rejects gear-up landings. The hook has no arresting-force
+  implementation. Original assisted aerodynamics remain in use.
+- Web Audio synthesizes jet/wind/burner/actuator/contact sounds; trusted input
+  unlocks the context and M mutes. Human listening is a separate acceptance item.
+- Verification: **64 Bun tests / 4726 expectations**, **11 headless maneuvers**
+  and **18 packaged systems checkpoints** pass. Imported F-14 takeoff/landing
+  achieve **60.021 / 60.009 FPS**, p95 18.6ms, one clamped frame each. Exact
+  source/artifact provenance and export-test scope are in the phase 4 baseline.
+  Final renderer `730fb6b` builds in23.0s and repeats all18 systems checks after
+  the nozzle-anchor refinement; final flame placement was visually inspected.
+- Subagents implemented/reviewed the static decoder, input/systems, sound and
+  packaged acceptance independently. Retail bytes remain ignored and unbundled;
+  the converted model is installed in this Mac's normal app data.
+
+Lessons: parser traversal counts were not exported geometry. Shared destination
+slots, structured SH scopes and transformed wing pivots were required for a
+recognizable exterior. Bounding-box vertical centering put the belly through the
+runway; preserving source vertical zero fixes the presentation. A plausible
+texture flip recommendation made the atlas worse: actual screenshots exposed
+red logo fragments on the nose/tails, so the change was reversed. Special nozzle
+polygons need separate material treatment to avoid permanent burner artwork.
+Palette vertex colors require sRGB-to-linear conversion. Burner geometry must
+scale from its nozzle anchor, not its center. Keep model hashes, packaged source,
+command transitions, actual mesh transforms and screenshot review as distinct
+pieces of evidence. Model recognition does not establish original flight behavior.
+
+**Next work:** authentic F-14 coefficients/control-surface behavior, recovered
+native animation semantics, human sound/handling review and physical controller
+checks remain open. The new local conversion/install route is not the full
+in-app retail importer. Linux remains tabled. Changes are committed locally;
+no new push is implied by this development entry.
 
 ## 2026-09-09: native measurement checkpoint pushed; phase 4 implemented
 

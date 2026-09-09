@@ -42,3 +42,14 @@ page, disables background/occlusion throttling and emulates focus through CDP.
 Normal app launch settings are unchanged. `desktop.ts` owns setup and cleanup;
 its initial integration probe successfully rendered the existing packaged terrain
 at 1440p without errors before the flight scenarios were added.
+
+## F-14 systems and animation checks
+
+Pass `--aircraft extracted/flight/f14.json` to flight smoke to copy the local
+conversion into the isolated profile. Use `systems-smoke.ts` for throttle presets,
+engine start/stop, gear/hook intermediate and endpoint transforms, wing sweep,
+burner visibility, banked F2/F3 views and audio activation/mute. That test permits
+trusted CDP input, needed to unlock Web Audio, and is not a cadence benchmark.
+See [F-14 setup](../../Docs/phase-4-f14.md) for conversion/install/test commands.
+Screenshots supplement numeric assertions; helper text updates asynchronously,
+so camera captures explicitly wait for the selected view label.
