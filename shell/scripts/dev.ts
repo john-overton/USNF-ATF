@@ -7,6 +7,7 @@ import { watch } from 'node:fs';
 import path from 'node:path';
 
 import { bundleShell } from './bundle';
+import { DevChild } from './devChild';
 import { ENGINE_DIR, SHELL_DIR, electronBinary } from './paths';
 
 const DEV_URL = 'http://localhost:5173';
@@ -25,55 +26,64 @@ async function waitForServer(url: string, timeoutMs = 30_000): Promise<void> {
   throw new Error(`Vite dev server did not answer at ${url}`);
 }
 
-const vite = Bun.spawn(['bun', 'run', 'dev'], {
-  cwd: ENGINE_DIR,
-  stdout: 'inherit',
-  stderr: 'inherit',
-});
-await waitForServer(DEV_URL);
-await bundleShell();
-
-let electron: ReturnType<typeof Bun.spawn> | undefined;
 let stopping = false;
+let vite: ReturnType<typeof Bun.spawn> | undefined;
+let watcher: ReturnType<typeof watch> | undefined;
+let restartTimer: ReturnType<typeof setTimeout> | undefined;
+const electron = new DevChild(shutdown);
+let restartQueue = Promise.resolve();
 
 function launchElectron(): void {
-  electron = Bun.spawn([electronBinary(), SHELL_DIR], {
-    cwd: SHELL_DIR,
-    env: { ...process.env, VITE_DEV_SERVER_URL: DEV_URL },
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  void electron.exited.then((code) => {
-    if (!stopping && code !== null) shutdown(code);
-  });
+  electron.launch(() =>
+    Bun.spawn([electronBinary(), SHELL_DIR, ...process.argv.slice(2)], {
+      cwd: SHELL_DIR,
+      env: { ...process.env, VITE_DEV_SERVER_URL: DEV_URL },
+      stdout: 'inherit',
+      stderr: 'inherit',
+    }),
+  );
 }
 
 function shutdown(code = 0): void {
   if (stopping) return;
   stopping = true;
-  electron?.kill();
-  vite.kill();
+  clearTimeout(restartTimer);
+  watcher?.close();
+  electron.stop();
+  vite?.kill();
   process.exit(code);
 }
 
-let restartTimer: ReturnType<typeof setTimeout> | undefined;
-watch(path.join(SHELL_DIR, 'src'), { recursive: true }, () => {
-  clearTimeout(restartTimer);
-  restartTimer = setTimeout(() => {
-    void (async () => {
-      console.log('[dev] shell/src changed; rebundling and restarting Electron');
-      await bundleShell();
-      if (electron) {
-        const old = electron;
-        electron = undefined;
-        old.kill();
-        await old.exited;
-      }
-      launchElectron();
-    })();
-  }, 150);
-});
-
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
-launchElectron();
+
+try {
+  vite = Bun.spawn(['bun', 'run', 'dev', '--strictPort'], {
+    cwd: ENGINE_DIR,
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+  void vite.exited.then((code) => shutdown(code));
+  await waitForServer(DEV_URL);
+  await bundleShell();
+  watcher = watch(path.join(SHELL_DIR, 'src'), { recursive: true }, () => {
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => {
+      restartQueue = restartQueue
+        .then(async () => {
+          if (stopping) return;
+          console.log('[dev] shell/src changed; rebundling and restarting Electron');
+          await bundleShell();
+          await electron.retire();
+          launchElectron();
+        })
+        .catch((error: unknown) => {
+          console.error('[dev] shell rebuild failed:', error);
+        });
+    }, 150);
+  });
+  launchElectron();
+} catch (error) {
+  console.error('[dev] startup failed:', error);
+  shutdown(1);
+}

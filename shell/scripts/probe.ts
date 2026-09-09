@@ -39,7 +39,12 @@ function findPackagedBinary(): string | undefined {
   return candidates[0];
 }
 
-const packaged = process.argv.includes('--unpackaged') ? undefined : findPackagedBinary();
+const fresh = process.argv.includes('--fresh');
+if (fresh) {
+  console.error('[probe] rebuilding current source for a fresh unpackaged probe');
+  await buildUnpackaged();
+}
+const packaged = fresh || process.argv.includes('--unpackaged') ? undefined : findPackagedBinary();
 let cmd: string[];
 if (packaged) {
   console.error(`[probe] using packaged app: ${packaged}`);

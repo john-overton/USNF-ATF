@@ -19,6 +19,7 @@ import {
 import { looksLikeSoftwareRenderer } from '@usnf/engine/render/glProbe';
 
 import { IPC } from './ipc';
+import { assetsDirectory } from './assetRoot';
 
 const PROBE_MODE = process.argv.includes('--probe');
 const PROBE_TIMEOUT_MS = 30_000;
@@ -33,7 +34,7 @@ const DIST_DIR = path.join(app.getAppPath(), 'dist');
 function rootDir(root: FsRoot): string {
   switch (root) {
     case 'assets':
-      return path.join(DIST_DIR, 'renderer', 'dev-root');
+      return assetsDirectory(app.getAppPath(), DEV_SERVER_URL !== undefined);
     case 'appData':
       return path.join(app.getPath('userData'), 'data');
     case 'cache':

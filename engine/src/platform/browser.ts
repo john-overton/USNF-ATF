@@ -54,7 +54,7 @@ export function createBrowserPlatform(baseUrl = '/dev-root/'): Platform {
 
   async function readBytes(root: FsRoot, relPath: string): Promise<Uint8Array> {
     const k = key(root, relPath);
-    const cached = memory.get(k) ?? storageGet(k);
+    const cached = root === 'assets' ? undefined : (memory.get(k) ?? storageGet(k));
     if (cached) return cached;
     if (root !== 'assets') {
       throw new Error(`[platform/browser] no such file: ${k}`);
@@ -65,6 +65,7 @@ export function createBrowserPlatform(baseUrl = '/dev-root/'): Platform {
   }
 
   async function writeBytes(root: FsRoot, relPath: string, data: Uint8Array): Promise<void> {
+    if (root === 'assets') throw new Error('assets root is read-only');
     if (!warnedAboutWrites) {
       warnedAboutWrites = true;
       console.warn(
