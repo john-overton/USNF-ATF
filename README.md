@@ -2,7 +2,7 @@
 
 A non-commercial fan remake of Jane's US Navy Fighters '97 (and, later, ATF Gold), built with TypeScript, Three.js, React, and Electron. The goal is retail aircraft and missions over real-elevation terrain, using assets imported from your own copy.
 
-**Current status (2026-09-08):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, water, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Linux acceptance remains pending. Flight gameplay and the in-app retail importer are not implemented. Python retail research tools remain available; SH model export is partial.
+**Current status (2026-09-08):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, water, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Linux acceptance is deferred for now. Flight gameplay and the in-app retail importer are not implemented. Python retail research tools remain available; SH model export is partial.
 
 Start with [progress and review findings](Docs/progress.md), the [build plan](Docs/build-plan.md) (phase order and exit criteria), and the [design brief](Docs/usnf-atf-plan.md). Contributor and agent instructions are in [AGENTS.md](AGENTS.md).
 
@@ -12,7 +12,7 @@ Start with [progress and review findings](Docs/progress.md), the [build plan](Do
 
 ## macOS development setup
 
-This development box is macOS on Apple Silicon (Apple M3); Linux GPU verification remains pending. Run commands from the repo root.
+This development box is macOS on Apple Silicon (Apple M3); Linux GPU verification is deferred for now. Run commands from the repo root.
 
 - Bun 1.4 or newer (runs scripts, tests, and the workspace install).
 - Node 22 or newer (Vite and electron-builder run on it).

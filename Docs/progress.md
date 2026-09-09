@@ -10,10 +10,18 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | Phase | Implemented | Acceptance / remaining work |
 |---|---|---|
 | 0: retail toolkit | Containers, images/fonts and data readers; partial SH | F-14 export and integrated deliverable remain open; unchanged this development pass |
-| 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks pending |
-| 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline pending |
-| 3: terrain renderer | Streaming, quadtree patches with height morph, floating origin, free camera, water cache/holes, diagnostics | Packaged real coast and 30m mountain-detail runs ~60 fps at 1440p on Mac. Linux, real DRAM counters and transition polish remain open |
+| 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
+| 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
+| 3: terrain renderer | Streaming, quadtree patches with height morph, floating origin, free camera, water cache/holes, diagnostics | Packaged real coast and 30m mountain-detail runs ~60 fps at 1440p on Mac. Real DRAM counters and transition polish active; Linux deferred |
 | 4–10 | Plans and importer contracts only | Flight model, gameplay, in-app retail import and release work not implemented |
+
+## 2026-09-08: Linux testing tabled; Mac terrain follow-up
+
+User decision: defer Linux testing for now and continue GPU DRAM bandwidth
+measurement and terrain transition polish on this Mac. Original cross-platform
+criteria remain documented for later; they no longer block this development
+pass. AGENTS, README and the build plan now reflect this scope. Historical
+entries below retain their original pending-Linux wording.
 
 ## 2026-09-08: real Ukraine installed; packaged terrain verified
 
@@ -224,7 +232,7 @@ state, scope, and root-cause claims are superseded by the review above.
 | Phase | Status | Commit |
 |---|---|---|
 | Repo hygiene | done | `46074cf` |
-| 1. Scaffold, shell, packaging | done on Mac; Linux baseline pending | `3be679f` |
+| 1. Scaffold, shell, packaging | done on Mac; Linux baseline deferred | `3be679f` |
 | 0. Containers (EALIB, ESA, DCL) | done | `c83967a` |
 | 0. PAL, PIC, FNT to PNG | done | `77762b1` |
 | 0. PT, JT, OT, NT, T2, M, MT | done (T2 and M partial) | `3e770d0` |

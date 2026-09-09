@@ -2,7 +2,7 @@
 
 Companion to `usnf-atf-plan.md` (the brief). The brief says what and why. This document says in what order, what "done" means for each phase, and which decisions are already made. When the two disagree, this one wins for sequencing.
 
-Status updated 2026-09-08: phase 0 toolkit remains partial. Phase 1 code fixes and macOS packaging are verified; Linux exit gate is pending. Phase 2 pipeline and phase 3 terrain explorer are implemented, with the real Ukraine dataset and packaged Mac 1440p coast/detail runs verified; Linux, native bandwidth measurement and transition refinement remain open. Phases 4–10 remain planned. See [progress.md](progress.md) and per-phase baselines for measured acceptance. Written 2026-09-08 after inventorying the retail media in `/gameassets`.
+Status updated 2026-09-08: phase 0 toolkit remains partial. Phase 1 code fixes and macOS packaging are verified; Linux testing is deferred by user decision. Phase 2 pipeline and phase 3 terrain explorer are implemented, with the real Ukraine dataset and packaged Mac 1440p coast/detail runs verified; Native bandwidth measurement and transition refinement are active; Linux testing is deferred. Phases 4–10 remain planned. See [progress.md](progress.md) and per-phase baselines for measured acceptance. Written 2026-09-08 after inventorying the retail media in `/gameassets`.
 
 ---
 
@@ -46,10 +46,10 @@ The main embedded archives contain core aircraft data and art, but disc-root arc
 
 ## 1. Development environment
 
-- **Two dev machines, both first-class.** macOS on Apple Silicon (Homebrew at `/opt/homebrew`, Node 22, Bun 1.4, Python 3) and a Linux box with a discrete GPU. Every phase's exit criteria are checked on both, by hand, before the phase is called done. Windows is a packaging target only until phase 9.
+- **Current acceptance platform: macOS.** Use Apple Silicon (Homebrew at `/opt/homebrew`, Node 22, Bun 1.4, Python 3). On 2026-09-08 the user explicitly tabled Linux testing so development can proceed on this Mac. The original Linux GPU exit criteria below are retained as deferred work, not current blockers or claims of verification. Windows is a packaging target only until phase 9.
 - **No emulation needed.** No Wine, DOSBox, or 7-Zip on either machine. Every retail format is handled by our own code.
 - **Python:** the terrain pipeline and the phase 0 format tools use a project virtualenv (`uv` or `python -m venv`). `rasterio` and GDAL come from wheels or the system package manager, decided in phase 2.
-- **Local first, CI last.** All tests, harnesses, and probes are plain scripts runnable from a checkout (`bun test`, `bun run harness`, `python -m pipeline probe`). GitHub Actions is not set up until phase 9, and when it is, it runs only on release tags, never on push. Until then, "green" means green on both dev machines.
+- **Local first, CI last.** All tests, harnesses, and probes are plain scripts runnable from a checkout (`bun test`, `bun run harness`, `python -m pipeline probe`). GitHub Actions is not set up until phase 9, and when it is, it runs only on release tags, never on push. Until then, "green" means the recorded local checks pass; Linux evidence is deferred by the current platform decision.
 - **Baselines are recorded, not remembered.** Each phase writes its measured numbers (frame time, GPU bandwidth, chunk sizes, harness results) to `Docs/baselines/<phase>.md` with the machine, date, and commit. Later phases compare against these.
 - **Retail media** stays in `/gameassets`, which is gitignored. Anything extracted from it goes to the scratchpad or an ignored `/extracted` folder, never into `Docs/` or the repo. Format notes describing structure are original work and are committed.
 
@@ -147,7 +147,7 @@ Goal: know exactly what we can import before writing engine code that depends on
 | Format tools | Python first, TypeScript port later | Faster to reverse-engineer in a notebook than in the app |
 | Phase 0 before shell | Yes, overlapping | The asset gate is cheap to resolve and reshapes phases 4 to 8 |
 | Retail data in repo | Never, enforced by a local scan, later a release gate | Brief section 2 |
-| Dev and test platforms | Mac and Linux GPU box, by hand, every phase | Real hardware beats a runner; Linux is where WebGL2 surprises live |
+| Dev and test platforms | Mac now; Linux GPU testing deferred by user on 2026-09-08 | Continue Mac development; retain Linux criteria for later verification |
 | CI | Phase 9 only, release tags only | Baselines and tests are local first; CI is a release gate, not a dev loop |
 | Notarization | Last item of phase 9 | Costs money and time; adds nothing until strangers install it |
 | First theater | Ukraine | Most retail missions (103) and mostly land; Kurils second |

@@ -31,7 +31,7 @@ bun run probe --unpackaged
 
 - `bun run check` covers TypeScript checks, lint, formatting, and Bun tests. It does **not** run Python tests, launch Electron, or package installers. Prettier excludes `Docs/` and `tools/`; inspect changed Markdown and Python separately.
 - Retail integration tests skip unavailable media. Record skips explicitly; synthetic tests alone do not prove retail compatibility.
-- macOS verification cannot close Linux hardware gates. Record Linux as pending until run on that machine. Windows launch verification is scheduled for phase 9.
+- Linux testing is explicitly deferred by the user as of 2026-09-08. Continue development and Mac acceptance without waiting for Linux; record it as deferred, never as tested. Windows launch verification is scheduled for phase 9.
 
 ## Code boundaries
 
