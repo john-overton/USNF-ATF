@@ -20,8 +20,11 @@ Selection is manual, not automatic sequencing or an autopilot. Reset returns to
 waypoint 1. Key repeat is ignored; typing in a form never changes the waypoint.
 
 The map is available in the terrain explorer and every practice-flight model,
-including with the practice helper minimized. Its bezel has plain buttons with
-adjacent on-screen function labels, a compass, +/− zoom and a nautical-mile scale.
+including with the practice helper minimized. Its square bezel has 20 plain buttons (five per edge), two decorative lower-corner
+rotary dials, and adjacent on-screen function labels. Unassigned buttons and dials
+are cosmetic. The compass and +/− zoom accompany a nautical-mile scale with
+alternating black/transparent outlined segments. The bar uses actual viewport
+width and chooses a readable distance automatically as zoom changes.
 N-UP keeps north at the top. HDG follows the aircraft's heading (the free camera's
 heading in explorer); terrain, waypoints and compass rotate together. Zoom follows
 the current position within the theater. Buttons return focus to movement controls.

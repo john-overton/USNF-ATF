@@ -1,5 +1,39 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: square 20-button MFD and segmented distance bar
+
+Product **ce533a3**, Apple M3/macOS arm64, Bun1.4.2/Electron44.2.0. Mac arm64
+and x64 DMG/ZIP packaging26.1s; only arm64 launched. Full `bun run check` passes:
+123tests,5,189expectations, typecheck/lint/format clean. Linux remains deferred.
+
+```sh
+bun run check
+bun run build
+bun tools/flight/navigation-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit ce533a3 --out extracted/square-mfd-navigation
+bun tools/flight/teleport-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit ce533a3 --out extracted/square-mfd-teleport
+```
+
+Navigation report passes: outer334×334px at1440p, exactly20keys/five per edge,
+2dials, all keys inside bezel. The same geometry checks pass at720p without HUD
+overlap. GO labels stay within the map and above the scale. Bracket selection,
+focus restoration, marker movement and bounded zoom pass. Physical scale widths
+match viewport distances:100/50/20/10/5NM at1/2/4/8/16×. Reviewed720p and zoom16
+screenshots show gray bezel, blank light keys, corner dials and segmented black/
+transparent scale. The static512pixel raster still limits high-zoom map detail.
+
+All-mode teleport report also passes: explorer, assisted, PT-envelope and recovered
+envelope each jump to all3destinations. Orientation/compass, focus and retained
+flight model/fuel/engine/chase settings pass with zero renderer errors. Reviewed
+explorer heading-up coastline screenshot.
+
+Lessons: fit legends as screen overlays to keep the outer instrument square;
+placing GO controls in left slots2/3/4 clears the top header. Compact windows hide
+the elevation legend to preserve space. Scale width must use the map's content
+width, without an extra padded container changing its physical meaning. Square
+viewports use equal world spans in both axes, with hatch beyond source coverage.
+No flight dynamics changed; this is an authored F-16-inspired UI, not recovered
+retail cockpit artwork or avionics logic.
+
 ## 2026-09-09: native ground/gear-pitch hypothesis verified
 
 Research tool29a4765:1,000gear-pitch and21ground-pitch cases match actual local

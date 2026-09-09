@@ -88,6 +88,25 @@ try {
     const d = await session.evaluate('window.__terrainDiagnostics?.()');
     return d?.loadedChunks > 0 && d.pendingChunks === 0 && !d.transitionActive ? true : undefined;
   }, 'terrain settled before visual capture');
+  async function bezelGeometry() {
+    return session.evaluate(`(() => {
+      const map=document.querySelector('[data-terrain-map]');
+      const r=map.getBoundingClientRect();
+      const keys=Array.from(map.querySelectorAll('.mfd-button'),e=>e.getBoundingClientRect());
+      const screen=map.querySelector('.mfd-screen').getBoundingClientRect();
+      return {width:r.width,height:r.height,count:keys.length,dials:map.querySelectorAll('.mfd-dial').length,
+        sides:{top:keys.filter(k=>k.bottom<=screen.top).length,bottom:keys.filter(k=>k.top>=screen.bottom).length,
+          left:keys.filter(k=>k.right<=screen.left).length,right:keys.filter(k=>k.left>=screen.right).length},
+        contained:keys.every(k=>k.left>=r.left&&k.right<=r.right&&k.top>=r.top&&k.bottom<=r.bottom)};
+    })()`);
+  }
+  function checkBezel(b:any) {
+    assert(Math.abs(b.width-b.height)<1,'MFD is not square');
+    assert(b.count===20 && b.dials===2 && Object.values(b.sides).every(n=>n===5),'MFD needs five buttons per edge and two dials');
+    assert(b.contained,'MFD bezel buttons extend outside frame');
+  }
+  evidence.bezel = await bezelGeometry();
+  checkBezel(evidence.bezel);
   await session.capture('navigation-1440p');
   async function zoomSnapshot() {
     return session.evaluate(`(() => {
@@ -132,6 +151,8 @@ try {
     const h=document.querySelector('[data-flight-hud]').getBoundingClientRect();
     return {map:m.toJSON(),hud:h.toJSON(),overlap: m.left < h.right && m.right > h.left && m.top < h.bottom && m.bottom > h.top};
   })()`);
+  evidence.small.bezel = await bezelGeometry();
+  checkBezel(evidence.small.bezel);
   assert(!evidence.small.overlap, 'Map covers essential HUD at 720p');
   assert(!session.errors.length, 'Renderer errors');
 } catch (error) {

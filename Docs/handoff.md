@@ -1,7 +1,7 @@
 # Development handoff — 2026-09-09
 
-Current Mac product package is **50d2ec4**, built27.9s, at
-`build/mac/mac-arm64/USNF-ATF.app`. Later commits add tests/native research/docs,
+Current Mac product package is **ce533a3**, built26.1s, at
+`build/mac/mac-arm64/USNF-ATF.app`. Later commits add acceptance checks/docs,
 not product behavior. Work after the previously pushedac3a142 checkpoint is
 committed locally. Apple M3, Bun1.4.2, Electron44.2.0. Linux testing deferred.
 
@@ -21,6 +21,10 @@ committed locally. Apple M3, Bun1.4.2, Electron44.2.0. Linux testing deferred.
 
 - Shared top-right MFD in explorer and all3flight backends. Plain bezel buttons
   have adjacent screen labels, compass, N-UP/HDG-UP,1×–16×zoom and NM scale.
+  The latest bezel is square, with20blank buttons (five per edge) and2decorative
+  lower-corner dials. Unassigned keys are cosmetic. The NM bar alternates black
+  and transparent outlined segments and auto-scales to viewport width.
+  At compact window heights≤540px the elevation legend hides to preserve spacing.
   Heading-up centers aircraft/camera before rotating terrain/markers together;
   north-up clamps the view. Outside-coverage corners are hatched. Controls restore
   keyboard focus. GO labels sit inside the map image and clear the distance scale.
@@ -81,6 +85,13 @@ native longitudinal-control path or determine real-world Tomcat trim settings.
 See Docs/formats/native-gear-pitch.md for exact formulas, addresses and caveats.
 
 ## Current evidence and reproduction
+
+- Square MFD runtime ce533a3: extracted/square-mfd-navigation/report.json.
+  Fullcheck123tests/5,189expectations; packaged arm64 navigation/zoom checks pass,
+  screenshots reviewed at1440p/720p;20keys/five per edge,2dials, square bounds,
+  legends clear scale and HUD. Scale100/50/20/10/5NM at1/2/4/8/16×.
+  extracted/square-mfd-teleport/report.json also passes all4modes/all3destinations,
+  orientation/focus and retained flight settings; zero renderer errors.
 
 - All-mode teleport/MFD10c318e: extracted/waypoint-teleport-settled/report.json,
   tool9923015. Fuel40%, engineoff, model andF2retained in allflightmodes.
