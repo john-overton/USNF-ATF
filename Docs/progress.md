@@ -16,6 +16,15 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 4: flight model | Original 120 Hz assisted dynamics; local retail F-14 exterior; throttle/engine/gear/hook, sound, F2/F3 chase, practice starts and 11-case harness | Packaged flight and systems/animation checks on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
 
+## 2026-09-09: full text manual retained in Docs
+
+At the user's explicit request, downloaded the complete OCR manual into
+[Docs/reference](reference/README.md). The supplied Internet Archive `/stream/`
+URL returns an HTML reader; the matching `/download/` URL supplies the actual
+197638-byte text. Source URL, checksum and OCR/edition caveats are recorded.
+This requested reference document is not bundled game data. Work on retail audio,
+control surfaces and HUD continues using it alongside local asset/code findings.
+
 ## 2026-09-09: local F-14 exterior, USNF-style controls, sound and camera modes
 
 The user's local F-14 now loads into practice flight from app data. The bounded
