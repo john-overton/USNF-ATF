@@ -109,3 +109,13 @@ must not be used as an untraced performance baseline.
 `--trace-template <name-or-path>` selects an Instruments template when used
 with `--trace-gpu`; the default remains `Metal System Trace`. Counter selection
 must be verified from the exported trace, rather than inferred from its name.
+
+The isolated benchmark also disables Chromium's occluded-window/background-timer
+throttling using `--disable-backgrounding-occluded-windows` and
+`--disable-background-timer-throttling`. This keeps ordinary shared-desktop
+activity from intentionally pausing animation sampling; the report records these
+flags. Normal application launch settings remain unchanged. The flag meanings
+are documented by [Google's chrome-launcher](https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md#task-throttling).
+Browser console errors (including Three.js shader failures) now fail the smoke
+and are preserved in `runtime-errors.json`, even if geometric draw counters look
+healthy.

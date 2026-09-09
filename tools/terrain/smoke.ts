@@ -21,7 +21,12 @@ await mkdir(out, { recursive: true });
 await cp(terrain, path.join(profile, 'data', 'terrains', 'ukraine'), { recursive: true });
 const command = [binary];
 if (args.includes('--app')) command.push(path.resolve(option('--app')));
-command.push(`--user-data-dir=${profile}`, '--remote-debugging-port=0');
+command.push(
+  `--user-data-dir=${profile}`,
+  '--remote-debugging-port=0',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-background-timer-throttling',
+);
 const proc = Bun.spawn(command, { stdout: 'pipe', stderr: 'pipe' });
 const logs: string[] = [];
 async function collect(stream: ReadableStream<Uint8Array>): Promise<void> {
@@ -340,6 +345,10 @@ try {
     binary,
     terrain,
     viewport: [2560, 1440],
+    benchmarkFlags: [
+      '--disable-backgrounding-occluded-windows',
+      '--disable-background-timer-throttling',
+    ],
     sourceCommit: (
       await new Response(Bun.spawn(['git', 'rev-parse', 'HEAD'], { stdout: 'pipe' }).stdout).text()
     ).trim(),
