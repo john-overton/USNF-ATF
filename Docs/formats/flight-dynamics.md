@@ -11,6 +11,42 @@ was 1.5. Importing an exterior and sound samples did **not** import flight dynam
 A roughly 600 kt ceiling in that implementation is therefore not evidence of
 USNF97 behavior. The exact source and package of a measured flight still matter.
 
+## 2026-09-09 correction: flap camber is not the entire maximum-lift increment
+
+Source50d2ec4 changes only the experimental hybrid polar/trim, not the preserved
+assisted model or recovered x86 helpers. The old approximation used the entire
+native flap stall-speed benefit as a constant zero-AoA lift offset. Neutral trim
+then countered that lift with strongly negative AoA: recovered flat-ground
+full-flaps/AB t15s bodypitch−5.26°, flightpath+1.29°, AoA−6.55°.
+
+The revised authored approximation keeps the same maximum lift at positive stall
+alpha (and native1G flapped speed ratio), but separates camber from that maximum:
+PT `flapsLift`51/256 is treated as an absolute zero-alpha CL offset≈0.199, bounded
+by total flap gain. The remaining gain increases along the positive-alpha branch,
+then fades in separated flow. Trim solves that same piecewise polar. This is an
+inference for the browser hybrid, **not** a recovered PT-to-force interpretation
+or Tomcat pitching-moment/trim schedule. Clean forces and imported device drag
+remain unchanged.
+
+Negative pitch or AoA is not independently proof of bad physics. Flaps may create
+a nose-down wing pitching moment, while the whole-aircraft response also depends
+on tail/downwash/trim. See [FAA Use of Flaps](https://www.faasafety.gov/files/gslac/courses/content/35/376/Use%20of%20Flaps.pdf).
+Our current attitude augmentation is a1G-AoA controller, not such a moment model.
+Do not add automatic nose-up rotation merely to make the image look familiar.
+
+`tools/harness/flap-attitude.ts` records full-flaps/AB with neutral pitch/roll/yaw
+in all3backends plus airborne flap deployment. Fixed full-fuel mass, flat110m
+terrain, instantaneous actuator/thrust settings; not packaged fuel/spool behavior.
+Normal pilot rotation is tested separately. Tiny negative AoA at excessive speed
+is allowed. Actual runtime observations and exact source attribution live in the
+[phase4baseline](../baselines/phase-4.md). The local manual's F14training takeoff
+is a catapult launch, not evidence of an automatic runway takeoff trim schedule.
+Native `_FMUpdateGearPitch` and `_groundPitch` were subsequently traced and
+verified in1,021isolated x86 cases: the former produces a display gear-angle offset
+(F14PTvaluezero), the latter terrain slope. They do not establish an automatic
+F14takeoff-trim force. See[native-gear-pitch.md](native-gear-pitch.md); no guessed
+nose-up bias was integrated.
+
 ## Confirmed data and unit assumptions
 
 Names in USNF97 are mapped by the existing parser's strict statement-kind

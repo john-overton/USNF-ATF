@@ -16,6 +16,35 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
 
+## 2026-09-09: fixed elevation colors and flap/neutral-afterburner comparison
+
+Map016e945 replaces regional percentiles with common MSL bands: green0m,
+yellow500m, red1500m, brown2500m, white3500m. The legend labels each fixed stop;
+Ukraine lowlands stay green. Water masks/dry holes are unchanged. These are
+visualization defaults, not a claimed formal aviation-chart standard.
+
+50d2ec4 separates experimental flap maximum lift from zero-AoA camber. The old
+inferred offset converted all native stall-speed improvement into constant lift,
+then trimmed against it with large negative AoA. The new approximation uses
+PT51/256 as modest absolute camber and grows the remaining gain with positive
+AoA. Native1G flapped maximum lift stays intact. This is not a recovered native
+pitching-moment law; negative pitch/AoA alone is not necessarily wrong. The
+preserved assisted physics is unchanged. See[flight-dynamics.md](formats/flight-dynamics.md).
+
+User requested full-flaps/afterburner with no pitch/roll/yaw input in all3models.
+The six-case fixed-mass comparison and three real60second runs now record
+attitude, flight path, AoA and airborne state. Fullcheck123tests/5,189expectations,
+both14-case experimental harnesses and all runtime input/finite-state checks
+pass. Important observation: experimental first-airborne state on the real
+practice strip occurs at its raised-deck end, before lift supports weight;
+that must not be misreported as aerodynamic rotation. Raw outputs and source
+scope are in[baseline](baselines/phase-4.md).
+
+The user's takeoff-trim hypothesis also prompted actual-binary research into
+`FMUpdateGearPitch` and `groundPitch`; findings and isolated native verification
+are kept distinct from the authored hybrid correction. No guessed automatic
+Tomcat nose-up bias is added. Linux remains deferred.
+
 ## 2026-09-09: shared MFD map, orientation modes and all-mode teleport
 
 The terrain explorer now shares the map with all three practice-flight models.

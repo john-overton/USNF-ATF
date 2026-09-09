@@ -1,122 +1,115 @@
 # Development handoff — 2026-09-09
 
-Navigation, shared MFD and all-mode waypoint teleport are implemented locally
-after the pushedac3a142 checkpoint. Latest product source is **12fc0ab**
-(teleport/MFD integration10c318e, then softkey legend placement polish). Mac Apple M3, Bun 1.4.2,
-Electron 44.2.0. Linux testing remains explicitly deferred.
+Current Mac product package is **50d2ec4**, built27.9s, at
+`build/mac/mac-arm64/USNF-ATF.app`. Later commits add tests/native research/docs,
+not product behavior. Work after the previously pushedac3a142 checkpoint is
+committed locally. Apple M3, Bun1.4.2, Electron44.2.0. Linux testing deferred.
 
 ## Preserve these decisions
 
-- Keep the liked assisted flight model as the default. Its physics source is
-  unchanged from the previous checkpoint; handling mass stays 9,000 kg while
-  fuel burns. Exhaustion still cuts engine thrust.
+- Keep the liked assisted model as the default. Its frozen physics remains
+  unchanged; handling mass stays9,000kg while fuel burns. Empty fuel cuts thrust.
 - PT-envelope fit and recovered-native-envelope hybrid remain separate opt-in
-  models, not a full native USNF integrator. Switching restarts the preset and
-  carries fuel. Experimental mass changes with fuel; payload adds mass only.
-- Preserve the smaller thin retro HUD, wider pitch spacing, F2/F3 chase modes,
-  live fuel controls and minimized helper behavior.
-- Retail conversions remain ignored in extracted/ and installed app data, never
-  in bundles. The full manual in Docs/reference is the user-authorized exception.
+  models, not a full native integrator. Switching restarts the preset and carries
+  fuel; experimental mass follows fuel and payload.
+- Preserve smaller retro HUD, wider pitch spacing, F2/F3 cameras, live fuel and
+  minimized helper. Do not disguise a force issue by rotating the exterior model.
+- Retail conversions stay ignored in extracted/ and app data, never bundles.
+  The manual in Docs/reference is the user's explicit exception.
 
-## Current user-reported flight issue under investigation
+## Completed MFD and navigation work
 
-User reports flap/velocity changes and takeoff can lift the aircraft while the
-nose looks down or stays fixed, suggesting an attitude/AoA mismatch. A question
-about the selected flight model is pending. Pure repro confirms strong negative
-AoA/climb in recovered-envelope:15s pitch−5.26°,climb+1.29°,AoA−6.55°. Rendering
-copies simulated quaternion correctly. Experimental flap-maxlift is all being
-used as zero-alpha camber; separate those in the hybrid approximation. Agent
-waypoint_teleport is implementing this correction; preserve assisted unchanged. Preserve the preferred assisted
-baseline while establishing the cause. This is separate from completed MFD work.
+- Shared top-right MFD in explorer and all3flight backends. Plain bezel buttons
+  have adjacent screen labels, compass, N-UP/HDG-UP,1×–16×zoom and NM scale.
+  Heading-up centers aircraft/camera before rotating terrain/markers together;
+  north-up clamps the view. Outside-coverage corners are hatched. Controls restore
+  keyboard focus. GO labels sit inside the map image and clear the distance scale.
+- `[ / ]` manually wrap flight waypoints:1strip,2mountains,3coast. HUD shows
+  bearing, horizontal NM range and steering cue; within100m saysARRIVED. R returns
+  to waypoint1 and the original practice preset/reset fuel. No autopilot.
+- GO buttons teleport in ALLmodes. Destination data must load; camera/aircraft
+  height is≥1000m above the finest containing chunk maximum/raised water. Flight
+  starts level at150–250m/s facing into coverage, retaining fuel, payload, model,
+  engine/system commands and camera mode. State time/interpolation restart.
+  Newer requests/reset/disposal supersede pending work. A prior normal-contact
+  read error remains sticky and requires terrain reload.
+- Latest color request is complete: fixedMSL bands green0m/yellow500m/red1500m/
+  brown2500m/white3500m, interpolated and labeled. This supersedes regionalp95.
+  Same height has same color across theaters. Water remains actual polygons;
+  dry negative terrain stays green. These are authored bands, not formal chart
+  standards. The512pixel overview uses coarsest terrain; zoom does not load finer
+  map data. Non-Ukraine maps omit the fictional Ukraine strip.
+- Current destinations: strip289000/392000m; mountains500483.325/72926.215m;
+  coast275731.777/309799.333m. Mountain verified30m ground1467.421m, coast100m
+  ground2.934m, both dry. Straight routes sampled≤1km have no missing30/100m
+  coverage (384samples382.8km;85samples83.3km). Not a full-route flight claim.
 
-## Latest map-color request in progress
+## Flap/nose-attitude report and correction
 
-User wants fixed common elevation grading because regional percentiles make
-flat Ukraine look mountainous. Agentmfd_bezel is implementing fixed0green,
-500yellow,1500red,2500brown,3500white metres, retaining actual water masks. These
-are authored shared bands, not a claimed industry standard. Root owns docs/tests.
+User observed nearly level no-input takeoff in assisted/PTfit and recovered
+nose-down/vector-up behavior. They explicitly asked for fullflaps+afterburner
+with NO pitch/roll/yaw input, and suggested possible ground/speed-dependent trim.
 
-## Completed navigation/map request
+Pure repro showed the experimental polar used the entire native flap maximum-
+lift increase as zero-AoA camber, then its1G trim controller countered it with
+large negative AoA. Source50d2ec4 separates modest camber (authored interpretation
+of PT51/256) from extra maximum lift, which grows on the positive-alpha branch.
+Native1G flapped maximum lift is preserved. Trim solves that same polar. This is
+an improved authored hybrid approximation, not a recovered pitching-moment law.
+Assisted remains byte-for-byte unchanged. Negative pitch/AoA alone is not wrong;
+flaps can produce nose-down moment, but our generic trim is not a full moment model.
 
-- `[ / ]` wrap through 1 practice strip, 2 mountains, 3 coastline. Repeats and
-  keys entered in forms are ignored. R selects waypoint 1 again.
-- HUD shows selected destination, horizontal NM distance, north-referenced grid
-  bearing and heading-tape diamond/edge steering chevron. Within 100 m it says
-  ARRIVED; no automatic sequencing or autopilot. Text sits above the heading tape
-  so the chase aircraft does not obscure it.
-- Shared top-right MFD in explorer and every flight backend. Plain bezel keys
-  have adjacent screen labels, compass, N-UP/HDG-UP orientation, −/+zoom1×–16×
-  and NM scale. Heading-up centers ownship before rotating terrain and markers;
-  north-up keeps the clamped viewport. Actual outside coverage is hatched.
-- Three GO softkeys teleport to the destinations in all modes. Finite/bounds
-  and actual destination terrain are checked first. Explorer moves its camera;
-  flight starts level at150–250m/s, facing into coverage, at least1000m above
-  the finest containing chunk maximum/raised water. Fuel/payload/model/system
-  commands/chase mode remain; state time/interpolation restart. Unpowered stays
-  unpowered. Newer requests/reload/disposal supersede pending work. R returns
-  to the existing preset and selected reset fuel. Bezel controls restore focus.
-- Softkey labels now align within the map image so GO3 cannot cover the NM scale.
-  Non-Ukraine datasets omit the fictional Ukraine strip.
-- Regional height colors: blue actual polygon water, green → yellow → red →
-  brown land, white at the regional valid-land 95th percentile. Dry holes and
-  below-sea-level dry land remain land. Missing terrain is dark, not zero height.
-- Map is a bounded 512-pixel overview from coarsest installed terrain, generated
-  once per load. Zoom enlarges that overview rather than streaming finer map
-  data. At high zoom offscreen destinations remain available in HUD guidance.
-- Coordinates are derived from installed data. Current mountain destination is
-  east500483.325/north72926.215m, verified against 30m terrain at1467.421m;
-  coast east275731.777/north309799.333m, verified against100m terrain at2.934m.
-  Both are dry. Strip→mountains382.8km and strip→coast83.3km have no missing
-  30/100m source coverage in ≤1km route samples. No entire route flight claimed.
+6-case fixed-mass headless comparison passes;123tests/5,189expectations and both
+14-case experimental suites pass. Three real60second full-flaps/no-stick AB runs
+at50d2ec4 verify all input conditions and finite states, zero renderer errors.
+No samples show pitch<−1° with climbangle>0.2° andAGL>2m. Assisted's existing
+large neutral climb arc remains. Experimental firstairborne occurs at the raised
+strip end with lift<weight—rolling off the deck, NOT aerodynamic rotation.
+Old report field firstLiftoff is explained/corrected to firstAirborne in the tool.
+Final experimental pitch≈−0.23°, climb≈+0.21°, AoA≈−0.44° at255m/s is allowed.
 
-Details and lessons: [phase-4-navigation.md](phase-4-navigation.md),
-[progress.md](progress.md), [baseline](baselines/phase-4.md).
+## Native takeoff-trim investigation completed for this path
 
-## Evidence and reproduction
+Tool29a4765 verifies1,000gear-pitch+21ground-pitch cases against actualUSNFx86;
+only_T_Info terrain provider is a fixture. FMUpdateGearPitch42fd40 fades a gear
+angle over~75–100% of TakeoffSpeed (first1G speed, F14170ft/s). F14gearPitch=0.
+Model/HUD/view consumers add the offset to copied orientation; no elevator force
+is established. groundPitch derives from terrain slope, not a takeoff trim
+schedule. Another display-offset branch requires a PTflag theF14does not have.
+No guessed automatic nose-up bias was integrated. This does not exclude every
+native longitudinal-control path or determine real-world Tomcat trim settings.
+See Docs/formats/native-gear-pitch.md for exact formulas, addresses and caveats.
 
-`bun run check` at10c318e: **120pass / 5,134expectations**, type/lint/format
-pass. Mac arm64+x64 packaging23.7s, onlyarm64launched. All-mode native acceptance
-passes: `extracted/waypoint-teleport-settled/report.json`, product10c318e,
-tool9923015. Explorer plus assisted/PT-fit/recovered modes each teleport to all3
-waypoints and pass compass/orientation/focus checks; engineoff,40%fuel,model and
-F2state remain. No renderer errors. Earlier120test/check and source10c evidence
-remain distinct from the final label-position polish12fc0ab; see baseline for
-its exact build and visual acceptance.12fc0ab fullcheck again120/5,134; Macbuild27.0s;
-`extracted/mfd-final/report.json` passes including label/scale separation at720p.
+## Current evidence and reproduction
+
+- All-mode teleport/MFD10c318e: extracted/waypoint-teleport-settled/report.json,
+  tool9923015. Fuel40%, engineoff, model andF2retained in allflightmodes.
+- Final fixed-color UI50d2ec4: extracted/fixed-elevation-map/report.json;1440p/720p
+  screenshots reviewed, zoom/softkeys/scale/HUD separation pass.
+- Full-flaps no-stick runtime50d2ec4: extracted/flaps-neutral/report.json,
+  tool6d2756f.60wallseconds after fullflaps, includes actualfuel/spool/terrain.
+- Headless: extracted/flight-harness/flap-attitude-corrected.json; samephysics,
+  fixedmass/flatground/instantactuators. Do not relabel it runtime fuel evidence.
+- Native: extracted/native-flight/gear-pitch-oracle.json, tool29a4765.
+- Earlier fuel acceptance8b6a2d4 remains valid historically (bothassisted/recovered
+  burn, cutoff, refill/Trestart); not rerun as a separate fuel suite this pass.
 
 ```sh
-bun tools/flight/teleport-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 12fc0ab --out extracted/waypoint-teleport-current
-bun tools/flight/navigation-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 12fc0ab --out extracted/mfd-final
+bun tools/flight/navigation-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 50d2ec4 --out extracted/fixed-elevation-map
+bun tools/flight/flaps-neutral-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 50d2ec4 --out extracted/flaps-neutral-current
+bun tools/harness/flap-attitude.ts --output extracted/flight-harness/flap-attitude-current.json
+PYTHONPATH=tools/native:tools/retail extracted/native-flight/.venv/bin/python tools/native/gear-pitch-oracle.py --exe extracted/usnf97/SETUP.ESA/USNF.EXE --pt extracted/usnf97/USNF_2.LIB/F14.PT --out extracted/native-flight/gear-pitch-oracle.json
 ```
 
-Earlier completed fuel evidence remains correctly scoped to runtime8b6a2d4 and
-toolac3a142: `extracted/flight-fuel-resume/report.json`. Both assisted and recovered
-modes pass military0.9071847400kg/s, AB4.5359237000kg/s, zero off burn, empty cutoff,
-refill without automatic restart and T restart; experimental mass follows burn,
-assisted stays9,000kg. It was not rerun for this UI-only change. Older native
-oracle evidence is240envelope,3,200power and18clock cases; no native routines were
-changed or re-oracled here. Fixed-reference headless suites at8b6a2d4 each pass14.
-
-## Remaining phase4 work
-
-Navigation request is complete. Human route flight, physical gamepad and USNF
-feel comparison remain open. The broader final recovered-mode aero/approach
-reruns listed in prior handoff were not part of this navigation pass; use the
-actual current build hash if running them, never label the new package8b6a2d4.
-Run GPU acceptance sessions serially; automated windows have orange labels.
-Do not call phase4 fully accepted while these documented human gates remain.
+Run GPU sessions serially. Automated windows have orange labels. Human route
+flight, physical gamepad and USNF feel comparison remain open; phase4 is not
+fully accepted. No Linux or Windows launch claim.
 
 ## Next native development
 
-USNF.SMS supplies3,440symbols. Envelope routines483150/4830b0 are translated;
-native flap low-speed reduction is25% forabs(G)≤1. Clock is256ticks/s; F14fuel is
-2lb/s military and10lb/s AB with fixed-point quantization. Remake integrates
-fuel at120Hz rather than native5second batches.
-
-Only fuel from the recovered power helpers is wired. Resolve `_COBv` adjusted
-forward bound / `_FMUpdatePlaneFields`, native full weight, force/vector/state
-adapters and scheduling/wrap before integrating other power helpers. Oracle-test
-isolated routines against local x86, then trajectories. Keep all native work
-separate from preserved assisted. Fitted high-G drag transitions and original
-atmosphere, alpha response, post-stall and ground support remain fidelity gaps.
-See Docs/formats/native-flight-code.md and native-power.md.
+For actual longitudinal trim/control, trace _FMMove pitch-control before
+_CheckLanding, writers to pitch0x4d5277/pitch-rate0x4d526f, and PTlowAOASpeed/
+lowAOAPitch/gpullAOA consumers. These were identified as next leads, not decoded.
+For engine-force fidelity, resolve _COBv/_FMUpdatePlaneFields adjusted forward
+bound, nativeweight/forcevector/state scheduling. Only recovered fuel is wired
+from power helpers. Keep oracles and new models separate from preserved assisted.

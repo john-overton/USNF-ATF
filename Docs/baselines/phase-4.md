@@ -1,5 +1,80 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: native ground/gear-pitch hypothesis verified
+
+Research tool29a4765:1,000gear-pitch and21ground-pitch cases match actual local
+USNF97x86, executableSHAecd3eb067f624fe48ea6547e8d4b80d1232723a9b7e0113f77d0e94fcb14caf9.
+Only `_T_Info` terrain height/orientation is replaced with an explicit fixture;
+ground predicate, takeoff-speed lookup, angle slew, GetGround and conversion
+execute native instructions. Evidence`extracted/native-flight/gear-pitch-oracle.json`.
+Python compilation/diff checks pass. No product physics changed for this research.
+
+`FMUpdateGearPitch` fades an on-ground gear display offset over approximately
+75–100% of its native takeoff-speed value. F14`gearPitch` is0; nativeTakeoffSpeed
+returns the first1G envelope speed170ft/s. Model/HUD/view code adds the current
+gear angle to copied orientation. `groundPitch` is terrain orientation converted
+for contact/landing. This does not prove a real Tomcat takeoff-trim schedule or
+exclude every native pitch-controller path. No guessed nose-up bias is added.
+Formula, addresses, consumers, limits and reproduction are in
+[native-gear-pitch.md](../formats/native-gear-pitch.md).
+
+## 2026-09-09: fixed map elevation bands and full-flaps neutral-afterburner runs
+
+Runtime**50d2ec4**, Apple M3/macOS arm64, Bun1.4.2/Electron44.2.0. Macarm64/x64
+DMG/ZIP packaging27.9s, onlyarm64launched. Full check123tests/5,189expectations.
+Both14-case fixed-reference experimental suites pass:
+`extracted/flight-harness/flap-camber-{retail,recovered}.json`. Those reports name
+016e945 plus the two then-dirty physics files subsequently committed unchanged
+as50d2ec4; they do not pretend the future commit existed during the run.
+
+**Map:** native `extracted/fixed-elevation-map/report.json` passes at50d2ec4.
+1440p/720p screenshots reviewed: green lowlands, fixed0/500/1500/2500/3500m legend,
+water mask blue, compass/bezel controls, labels above NM scale and no HUD overlap.
+The product includes map016e945; it no longer uses a regional white percentile.
+The earlier shared-map/teleport functional results keep their original sources.
+
+**No-input flight:** `extracted/flaps-neutral/report.json`, product50d2ec4,
+tool6d2756f. ActualF/G systems: fullflaps, geardown, afterburner, neutralpitch/roll/
+yaw, no braking;60wallseconds after fullflaps or firstcrash. Allthree runs finish
+airborne without renderer errors or changed control conditions. Zero recorded
+samples meet the pronounced nose-down-climb flag (pitch<−1°, climbangle>0.2°,
+AGL>2m). These are behavioral observations, not a requirement to self-rotate.
+
+| Mode | First airborne simtime / speed | Body pitch / path / AoA there | Final body pitch / path / AoA |
+|---|---|---|---|
+| Preserved assisted |16.24s /158.06m/s |+0.709° /+0.228° /+0.481° |−9.030° /−9.415° /−0.386° |
+| PT fit |29.02s /171.10m/s |0° /0° /0° |−0.228° /+0.216° /−0.444° |
+| Recovered envelope |29.12s /171.34m/s |+0.003° /−0.038° /+0.040° |−0.236° /+0.208° /−0.444° |
+
+The PT/recovered first-airborne positions arez390599/390590m, at the end of the
+raised practice deck(z390600m). Lift/weight is only0.749/0.797: rolling off that
+edge creates clearance before an aerodynamic takeoff. The original tool field
+`firstLiftoff` must be read as **first airborne state**, not successful rotation;
+the follow-up tool renames it `firstAirborne`. Do not compare that event directly
+to the flat-ground harness. Assisted's existing neutral augmentation produces
+a large climb arc (finalaltitude4771m); its implementation was preserved, not
+claimed to match the native Tomcat. Final PT/recovered altitudes are≈130/129m.
+
+The reusable headless6-case tool `tools/harness/flap-attitude.ts` passes against
+the same physics (report`extracted/flight-harness/flap-attitude-corrected.json`,
+then50d2ec4 plus newuntrackedtool subsequently committedba96273). It applies
+fullflaps/AB instantly at fixedfullfuelmass overflat110mground. Neutral first rise
+>0.1m occurs: assisted15.742s/157.80m/s,+0.616°pitch; PT/recovered37.6s/203.6m/s,
+about−0.011°pitch. At70m/s the focused test requires positive pilot rotation;
+neutral input remains grounded. Airborne flap-deployment samples now settle at
+positivepitch/AoA instead of the former large negativecambertrim. The fixed tests
+exclude runtime spool, actuator transit, fuel depletion and realterrain.
+
+```sh
+bun tools/harness/flap-attitude.ts --output extracted/flight-harness/flap-attitude-current.json
+bun tools/flight/flaps-neutral-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 50d2ec4 --out extracted/flaps-neutral-current
+```
+
+Native flap maximum-lift gain remains; zero-alpha camber/pitch assistance is still
+an authored approximation. Negative pitch alone is not proof of a defect. The
+user's takeoff-trim hypothesis is investigated separately in native-format notes;
+no guessed Tomcat auto-rotation is added. Linux remains deferred.
+
 ## 2026-09-09: shared MFD, orientation and waypoint teleport in all modes
 
 Product source**10c318e**, Mac Apple M3/macOS arm64, Bun1.4.2, Electron44.2.0.

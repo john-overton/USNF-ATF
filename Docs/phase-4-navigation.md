@@ -50,11 +50,14 @@ east-positive X / north-positive Z theater metres as the flight simulation;
 floating-origin offsets do not enter map positioning.
 
 Blue comes from the manifest's water polygons, with dry holes preserved.
-Elevation alone never creates water. Valid land determines the regional color
-scale: green → yellow → red → brown, then white at the 95th percentile. This is
-elevation, not terrain clearance or threat severity. A flat region has no
-artificial white peak band; ties can make the white share exceed five percent.
-Missing elevation coverage is dark and excluded from destinations/statistics.
+Elevation alone never creates water. Color now uses fixed bands shared by all
+theaters: green0m, yellow500m, red1500m, brown2500m, white≥3500m above mean sea
+level, interpolated between stops. The MFD legend shows those heights. These are
+authored visualization defaults, not a formal aviation-chart standard. Identical
+heights now have identical colors across regions, so flat Ukraine stays mostly
+green. This supersedes the earlier regional95th-percentile white threshold.
+Negative dry terrain stays green; missing coverage is dark and excluded from
+destinations/statistics. Colors indicate elevation, not clearance or threat.
 
 The regional map is an overview, not a surveyed landing chart. Zoom enlarges
 that overview; it does not load finer terrain. Tiny waterways or narrow islands

@@ -48,3 +48,5 @@ entries 1..15 are all (63, 0, 63), the usual magenta placeholder for the
 reserved low slots. PIC decoding is implemented; runtime palette gaps remain (see [pic.md](pic.md) and [pal.md](pal.md)).
 
 - [Flight audio](audio.md): PT-selected raw PCM, inferred rates and local playback.
+
+- [Native ground and gear pitch](native-gear-pitch.md): speed-dependent display offset, terrain slope, F-14 zero field and 1,021 isolated x86 checks.

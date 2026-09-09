@@ -40,7 +40,7 @@ for(const mode of ['assisted','retail-envelope','recovered-envelope']) {
       }requestAnimationFrame(frame);
     })`);
     evidence.final=await session.evaluate('window.__flightDiagnostics()');
-    evidence.firstLiftoff=evidence.samples.find((s:any)=>s.agl>0.1&&s.status==='airborne')??null;
+    evidence.firstAirborne=evidence.samples.find((s:any)=>s.agl>0.1&&s.status==='airborne')??null;
     evidence.noseDownClimb=evidence.samples.filter((s:any)=>s.agl>2&&s.gammaDegrees>0.2&&s.pitchDegrees< -1);
     for(const s of evidence.samples) {
       if(s.controls.pitch!==0||s.controls.roll!==0||s.controls.yaw!==0||s.throttle!==1||!s.afterburner||s.flaps!==1)
@@ -53,9 +53,9 @@ for(const mode of ['assisted','retail-envelope','recovered-envelope']) {
   finally {
     results[mode]={evidence,failure,runtimeErrors:session.errors};
     await Bun.write(path.join(out,'report.json'),JSON.stringify({date:new Date().toISOString(),buildSourceCommit:option('--build-commit'),
-      scope:'Observation: full flaps and afterburner, no pitch/roll/yaw; 60 wall seconds or first crash. Liftoff is recorded, not required without pilot rotation.',results},null,2));
+      scope:'Observation: full flaps and afterburner, no pitch/roll/yaw; 60 wall seconds or first crash. First airborne state is recorded, not required without pilot rotation; rolling off the raised practice deck is not aerodynamic liftoff.',results},null,2));
     await session.close();
   }
   if(failure)throw new Error(failure);
-  console.log(JSON.stringify({mode,condition:'verified',finalStatus:results[mode].evidence.final.status,firstLiftoff:results[mode].evidence.firstLiftoff}));
+  console.log(JSON.stringify({mode,condition:'verified',finalStatus:results[mode].evidence.final.status,firstAirborne:results[mode].evidence.firstAirborne}));
 }

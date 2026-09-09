@@ -147,3 +147,18 @@ checks zoom focus, compass and north/heading-up mode switching. Explorer movemen
 must continue after the jump. Mountain/coast screenshots and per-mode diagnostics
 are retained. Teleport supplies a new airborne state; this is not a full route
 flight or a physical gamepad test.
+
+## Full flaps and afterburner with no stick input
+
+```sh
+bun tools/flight/flaps-neutral-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --out extracted/flaps-neutral
+bun tools/harness/flap-attitude.ts --output extracted/flight-harness/flap-attitude.json
+```
+
+The real-window tool runs all three flight backends for60wallseconds (or first
+crash), with full flaps, gear down, AB and no pitch/roll/yaw input. It checks those
+conditions and finite states, recording pitch/path/AoA and first airborne state;
+it does not require an uncommanded rotation. Leaving the raised practice deck
+can create an airborne state before lift supports weight. The pure six-case
+harness adds airborne flap deployment at fixed mass over flat terrain, excluding
+actuator transit, spool and fuel burn. Keep the two scopes distinct.
