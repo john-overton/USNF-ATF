@@ -13,8 +13,101 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, diagnostics | Packaged coast/detail ~60 fps at 1440p; 0↔1 and 1↔2 fades plus 24km fast lateral flights pass. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Original 120 Hz assisted dynamics with pressure-scaled controls and ground support; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, F2/F3 chase, practice starts and 11-case harness | Packaged flight and systems/animation checks on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, F2/F3 chase, practice starts and 11-case harness | Packaged flight and systems/animation checks on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09 checkpoint: commit/push before continuing acceptance
+
+Per the user's request, development stops at this checkpoint. Runtime `8b6a2d4`
+is built for Mac and passes110 tests/5,045 expectations plus both14-scenario
+fixed-reference flight suites. It includes the live fuel slider and recovered
+fuel-rate calculation. The preferred assisted model remains the default with
+its handling mass preserved; experimental models account for burned fuel mass.
+
+The user accidentally closed the automated fuel window before asking to commit,
+push and compact. Its report contains a CDP timeout, so the fuel cutoff/refill
+and experimental mass acceptance remain **incomplete**, not passed. The initial
+assisted slider, military/AB burn and engine-off checks did complete. Follow-up
+test tooling adds unmistakable automated-window labels and immediate disconnect
+errors. See [baseline](baselines/phase-4.md) and [handoff](handoff.md) for exact
+sources, finished checks and the first commands to resume. Linux remains deferred.
+
+## 2026-09-09: preserve existing feel, import PT dynamics, recover native helpers
+
+The user's drag/weight/power reports led to a concrete audit. Mass did participate
+in F/m, trim and load, but the F-14 exterior still used the 9,000 kg trainer's
+70 kN thrust and transonic drag tables. At 3 km and about 583 kt the trainer's
+AB thrust and drag both reached about 77.4 kN; there was no hidden 600 kt clamp.
+Flap lift also faded to zero at the clean stall angle and trim ignored it.
+
+The user then explicitly asked to keep the existing feel. Source `955da68`
+preserves the force/control implementation from `f70e10c` in
+`engine/src/sim/flight/assisted-flight.ts`, byte-identical after its provenance
+comment. It remains the default. The app's selector restarts the same preset
+with one of three separate backends:
+
+| Option | Data / behavior | Fidelity boundary |
+|---|---|---|
+| Preserved assisted | Existing trainer forces and ground support | User's preferred comparison baseline; not Tomcat performance |
+| USNF97 envelope fit | Imported mass, total dry/AB thrust and G polygons; corrected flap/drag behavior | Original force fit and control assistance; explicit full-fuel/AB calibration assumption |
+| Recovered USNF envelope | Translated native integer speed-bound routine and flap rule inside the fitted forces | Verified isolated native helper; full `FMFlight` remains unported |
+
+The attributed local export now contains all fourteen G polygons and exact
+native points/header indices. It installs as `appData/aircraft/f14-flight.json`,
+never in the bundle. The imported F-14B has empty mass 18,190.87 kg plus 7,140.00 kg
+internal fuel, 126.485 kN military thrust and 185.936 kN AB. A live fuel slider and payload settings expose weight effects in the experimental
+modes. Native-rate consumption now reduces their current fuel/mass; the preserved
+assisted model keeps its handling mass fixed. Empty fuel cuts the engine, and
+payload currently adds mass only.
+
+A major reverse-engineering discovery changed the next step: **USNF.SMS supplies
+3,440 symbols**, despite the PE having no COFF debug symbols. The game's BRF
+resolver loads this map and resolves `_PLANEProc` to 0x485780. We translated
+`_EnvelopeSpeedLimits` / `_CheckFlightEnvelope` and tested them against the actual
+local x86 code through an isolated Unicorn oracle. All 240 cases agree. Native
+flaps lower the abs(G)≤1 minimum-speed threshold by one quarter, with native
+integer rounding; structural overspeed thresholds come from PT `structure[0/1]`.
+Separate fuel, slew, thrust-selection and zero-vector scalar-thrust helpers pass
+3,200 native comparisons. Subsequent native clock tracing confirmed 256 ticks/second and fuel rates in
+pounds/second. Fuel consumption is integrated continuously at 120 Hz rather than
+the native five-second batching; other power helpers remain isolated until their
+adjusted forward-speed bound and world-state dependencies are recovered.
+
+Lessons and corrections:
+
+- A model/sound import must not imply a dynamics import; the helper now identifies
+  the active backend, mass and rated thrust explicitly.
+- Preserve a liked implementation before experimenting. Installing a PT profile
+  does not select it, and switching back restores the frozen assisted model.
+- Native symbols can live outside the executable. “No COFF/PDB” did not mean no
+  usable names: inspect runtime-loaded symbol resources.
+- Earlier PT notes mixed ATF device values and a 2G stall vertex into USNF1G
+  claims; corrected figures and confidence are in [dynamics research](formats/flight-dynamics.md).
+- Native oracle comparison caught a wrong initial classification priority. The
+  corrected order is below-stall, structural overspeed, G-envelope overspeed.
+- A fitted polar still has higher-G coefficient transitions at polygon ceilings;
+  steady maximum speed matching does not establish full maneuver parity.
+
+Validation at runtime source `4a76cc5`: 104 tests / 5,005 expectations pass,
+including native integer, profile-validation and backend-integration regressions.
+Both experimental backends pass all fourteen headless performance/device/weight
+scenarios. The Mac package and in-app comparison results are recorded in the
+[current baseline](baselines/phase-4.md). The unchanged assisted source retains
+its earlier takeoff/landing acceptance; the current selector/default is checked
+again in the real packaged app.
+
+The follow-up fuel request adds a live slider, percentage/tonnes/burn readout,
+zero-fuel thrust cutoff and manual T restart after refill. Native clock conversion
+passes 18 original-code oracle cases. The experimental trim follow-up also
+removes an insufficient negative-alpha bound, keeping the preserved model intact.
+Final fuel/trim acceptance and source are in the baseline.
+
+Next native extraction targets: map `_COBv`'s adjusted forward bound and
+`_FMUpdatePlaneFields`, recover native scheduling/wrap and
+weight/state conversion and the complete thrust/world-force path, then compare
+whole trajectories. Do not call the hybrid a full USNF97 flight model. Linux
+remains deferred by the user. See [native flight](formats/native-flight-code.md)
+and [native power](formats/native-power.md) for exact addresses and reproduction.
 
 ## 2026-09-09: stationary support, compact retro HUD and helper minimize
 

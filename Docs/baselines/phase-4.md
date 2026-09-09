@@ -1,5 +1,145 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09 checkpoint: fuel slider and native-rate consumption
+
+Latest packaged runtime **`8b6a2d4`** includes live fuel, mass updates and the
+experimental negative-alpha trim correction `5795e9f`. Fresh Mac arm64/x64
+DMG/ZIP packaging passed in **24.6 s**. `bun run check`: **110 pass / 5,045
+expectations**, TypeScript/lint/format pass. The first UI integration typecheck
+caught an omitted `setFuelFraction` viewer return-type member; it was corrected
+before the accepted check/build.
+
+The native clock oracle adds **18 passing original-code cases**, confirming
+256 ticks/second and fuel rates in pounds/second. Full military / AB F-14 burn
+is **0.90718474 / 4.5359237 kg/s**. Runtime fuel integrates smoothly at 120 Hz
+rather than the native five-second batch. Actual experimental mass decreases;
+preserved assisted handling mass stays 9,000 kg. Empty tanks cut thrust; live
+refill requires a manual T restart. Without an imported PT, fallback capacity
+and rates are explicitly original.
+
+Both fixed-reference-mass headless suites pass all **14 scenarios** at8b6a2d4:
+`extracted/flight-harness/fuel-era-retail.json` and `fuel-era-recovered.json`.
+These calibrate flight forces with a fixed reference load; packaged FuelSystem
+integration is separate. The exact experimental trim now uses the full
+unstalled negative-alpha branch; the preserved assisted source is unchanged.
+
+**Interrupted acceptance, not a pass:** the user accidentally closed the
+packaged fuel-test window, then explicitly requested commit/push/compaction.
+`extracted/flight-fuel-accepted/report.json` records a CDP timeout while querying
+diagnostics. Assisted-mode live 50% slider, military/AB burn windows and engine-
+off zero burn had completed. Empty-tank/refill/restart and the experimental-mode
+fuel/mass run did not complete. The chained final aero and approach tests did
+not start. No fuel end-to-end acceptance is claimed for this checkpoint.
+
+Earlier packaged native takeoff and approach at4a76cc5 both passed: approximately
+60 fps, p95 17.6/17.5 ms, one takeoff / one safe stopped landing respectively.
+Evidence: `extracted/flight-models-native-takeoff` and `flight-models-native-approach`.
+Those precede the trim/fuel changes and must not be relabeled as8b6a2d4 results.
+
+Tool follow-up labels automated windows in their title and with an orange banner;
+CDP disconnects now reject pending operations immediately. Standalone TypeScript
+checking passes; the visual label/disconnect behavior still needs the next live
+run. A native-power source comment was also corrected to reflect fuel wiring;
+neither follow-up changes the packaged product behavior.
+
+Resume commands and current state are in [the handoff](../handoff.md). Linux
+remains deferred. No further tests were started after the user's checkpoint request.
+
+## 2026-09-09: selectable flight models and recovered native routines
+
+Machine: Apple M3/macOS arm64, Electron 44.2.0, Bun 1.4.2; real Ukraine terrain,
+local F-14 exterior/audio/PT data; packaged renderer 2560×1440. Runtime source
+**`4a76cc5`** includes the three-mode selector and native-envelope bridge. Fresh
+Mac arm64/x64 DMG/ZIP packaging completed in **26.0 s**; only arm64 launched.
+A previous two-mode package at `955da68` completed in 24.1 s and supplied the
+first PT device A/B evidence. Documentation edits during measurements are
+recorded in the reports and do not change the named runtime binary.
+
+### Preservation and imported profile
+
+The default assisted backend is the exact `f70e10c` simulation source, apart from
+its provenance comment. Its implementation SHA-256 is
+`d10533425d70602fe4139459d75b51ced4161ea9f5b3a5fe63df98baacbc7cd1`.
+The preserved file uses the existing trainer tables and systems, while PT and
+recovered-envelope work is opt-in. This is an explicit user requirement.
+
+`extracted/flight/f14-flight.json`: **21,483 bytes**, SHA-256
+`60c5d8e4c756962a192e5035f25c3947b6f7515cb3f978804034e40c99028ea6`.
+It supplies fourteen native G polygons, 18,190.8684 kg empty mass, 7,139.9975 kg
+fuel capacity, 126,485.1816 N military thrust and 185,935.6635 N AB thrust. Full
+fuel/no payload is the experimental reference mass of 25,330.8659 kg. Native
+integer points, header indices and structural thresholds are also preserved.
+The installed model/audio hashes remain those in the earlier retail baseline.
+
+### Verification and interpretation
+
+`bun run check` at the three-mode runtime: **104 pass / 5,005 expectations**,
+TypeScript/lint/format pass. Two early checks caught `prefer-const` and a control-
+character regex lint violation; both were fixed before accepted source. The
+first exporter invocation omitted required `--pt`, failed without producing
+output, and was corrected. Targeted PT flight export: **7 synthetic tests pass**;
+local F-14 export/validation/install succeeds. No Linux or x64 launch acceptance.
+
+The native oracle maps the actual local PE sections into Unicorn and supplies
+synthetic game state. Executable SHA-256:
+`ecd3eb067f624fe48ea6547e8d4b80d1232723a9b7e0113f77d0e94fcb14caf9`.
+**240 cases** match both recovered envelope helpers. **3,200 cases** match fuel,
+slew, thrust selection and zero-vector scalar thrust (800 each). The initial
+envelope translation got classification priority wrong; executing the original
+instructions exposed it, and the corrected implementation passes. This verifies
+isolated routines, not a booted game or complete native trajectory. Power
+helpers are not connected to the flight backends yet.
+
+At source4a76cc5 both `tools/harness/retail-flight.ts` modes pass **14 scenarios**,
+with complete source/dirty-tree provenance in:
+
+- `extracted/flight-harness/retail-accepted-final.json`
+- `extracted/flight-harness/recovered-accepted-final.json`
+
+Each level trial runs 600 simulated seconds through normal control inputs at
+120 Hz. No aircraft state is overwritten. Full-fuel clean final speeds in knots
+true airspeed:
+
+| Altitude | PT fit military / AB | Recovered-envelope hybrid military / AB |
+|---|---:|---:|
+| 100 m | 660.12 / 801.85 | 660.47 / 802.23 |
+| 3,000 m | 706.02 / 858.19 | 706.28 / 858.51 |
+| 36,000 ft | 1,093.92 / 1,340.38 | 1,093.48 / 1,339.84 |
+
+These are calibrated remake measurements. Treating the native polygon's upper
+edge as full-fuel, clean AB equilibrium is an explicit fit assumption; these
+numbers are not retail-game flight measurements. The tests also verify mass
+changes acceleration, engine-off devices dissipate extra energy and low-speed
+stalls remain possible. Native helpers preserve original integer rounding and
+flap thresholds, while the surrounding force law remains original.
+
+Packaged `ground-smoke.ts` at4a76cc5 passes: default remains the 9,000 kg assisted
+model; the selector switches to both 25,330.87 kg experimental modes and back.
+Held stationary controls, HUD 570×465px /50px pitch gap, helper collapse/restore,
+canvas focus and continued simulation all pass. Screenshots reviewed. Evidence:
+`extracted/flight-models-ground-final`.
+
+Packaged six-case device/mass A/B at955da68 (`extracted/model-switcher-aero`) and
+recovered-envelope at4a76cc5 (`extracted/flight-models-native-aero`) pass. Ten-second
+specific-energy losses (J/kg) at zero throttle:
+
+| Mode | Clean | Flaps | Airbrake | Gear |
+|---|---:|---:|---:|---:|
+| PT fit | 1,220.11 | 1,660.62 | 2,513.00 | 1,791.39 |
+| Recovered-envelope hybrid | 1,221.83 | 2,256.70 | 2,512.33 | 1,794.02 |
+
+AB gains are 7,975.45 vs10,475.99 J/kg (PT) and7,968.07 vs10,477.68 J/kg
+(recovered) for full vsquarter fuel. Actual key paths, animated deployment,
+profile provenance and exact PT AB/military ratio are checked. The recovered
+flap screenshot exposed excessive ballooning due to a positive-only trim search;
+a subsequent experimental-only correction and its acceptance are recorded below.
+
+Remaining limits: original atmosphere/thrust lapse, alpha response and control
+assistance; higher-G fitted drag transitions at polygon ceilings; nearest-fit
+extrapolation beyond covered altitude; fixed fuel load and payload mass without
+store-specific drag; incomplete native world-state/power integration. The
+preserved default's feel is not overwritten to chase these experiments.
+
 ## 2026-09-09: ground support and compact HUD/helper controls
 
 Accepted runtime source **`f70e10c`**, including physics commit `16e3bd2`, on

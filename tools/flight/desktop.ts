@@ -142,6 +142,11 @@ export async function openDesktop(options: DesktopOptions) {
       );
     }, 'app page');
     socket = new WebSocket(page.webSocketDebuggerUrl);
+    socket.addEventListener('close', () => {
+      for (const request of pending.values())
+        request.reject(new Error('Automated test window disconnected'));
+      pending.clear();
+    });
     socket.addEventListener('message', (event) => {
       const message = JSON.parse(String(event.data));
       if (message.method === 'Runtime.exceptionThrown') errors.push(message.params);
@@ -165,6 +170,13 @@ export async function openDesktop(options: DesktopOptions) {
       source: `
         if (!${Boolean(options.interactiveTest)}) ['pointermove','pointerdown'].forEach(type=>window.addEventListener(type,e=>e.stopImmediatePropagation(),true));
         if (!${Boolean(options.interactiveTest)}) ['keydown','keyup'].forEach(type=>window.addEventListener(type,e=>{if(e.isTrusted){e.preventDefault();e.stopImmediatePropagation();}},true));
+        document.addEventListener('DOMContentLoaded', () => {
+          document.title = ${JSON.stringify('USNF-ATF AUTOMATED TEST — ' + path.basename(out))};
+          const label = document.createElement('div');
+          label.textContent = ${JSON.stringify('AUTOMATED TEST — ' + path.basename(out))};
+          label.style.cssText = 'position:fixed;right:12px;top:12px;z-index:9999;padding:8px 12px;background:#8b2900;color:white;font:700 14px monospace;pointer-events:none';
+          document.body.appendChild(label);
+        });
         ${options.initialization ?? ''}
       `,
     });

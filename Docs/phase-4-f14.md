@@ -131,3 +131,66 @@ squared (including wind), with no minimum authority at zero airflow. Nose-up
 rotation opens progressively between 45 and 65 m/s sea-level equivalent airspeed.
 This is still original assisted physics with approximate gear support, not a
 ported USNF integrator or a per-wheel rigid-body/contact simulation.
+
+## Comparing flight models without replacing the existing feel
+
+The **Flight model** selector restarts the current practice preset. The default
+**Preserved assisted** backend is the exact force/control implementation from
+`f70e10c`, copied into `sim/flight/assisted-flight.ts`; experimental work must not
+silently change it. It retains the trainer mass/thrust and existing device
+behavior. The corrected flap/drag and PT profile work is isolated from that
+comparison baseline.
+
+**USNF ’97 envelope fit (experimental)** uses an optional local PT export:
+
+```sh
+PYTHONPATH=tools/retail python3 -m retail.flight --pt extracted/usnf97/USNF_2.LIB/F14.PT --out extracted/flight/f14-flight.json
+bun tools/flight/install-aircraft.ts extracted/flight/f14.json "$HOME/Library/Application Support/USNF-ATF/data" extracted/flight/audio/f14.json extracted/flight/f14-flight.json
+```
+
+Select the experimental model explicitly; installing the profile does not select
+it. The helper displays its mass and rated military/AB thrust. The fuel slider
+changes fuel live; payload changes restart the flight. Loads
+are bounded by the imported maximum takeoff weight. Burning fuel reduces mass
+in experimental modes. The preserved assisted model keeps its handling mass
+fixed while tracking fuel and cutting thrust at empty. Payload changes mass
+only, with no weapon-specific drag or geometry. URL settings are `flightModel`,
+`flightFuel` (0–1) and `flightPayload` (kg).
+
+The profile imports F-14B identity, mass, total thrust and G polygons from this
+user's USNF97 media. Clean force curves are fitted to the full-fuel afterburning
+envelope reference, an explicit interpretation rather than a recovered runtime
+law. Flap/gear/brake modifiers use retail fields through documented inferred
+scaling. Angular assistance, atmosphere, post-stall behavior and ground support
+remain original. See [flight dynamics research](formats/flight-dynamics.md).
+
+**Recovered USNF envelope (experimental)** is a third, separate option. It runs
+translated native integer envelope limits, including the original flap minimum-
+speed rule, inside the fitted force model. It is a hybrid, not the complete
+`FMFlight` routine. Imported native points/indices/structural limits are validated
+against the SI profile; this option requires the updated export above. Recovered
+fuel consumption is now integrated after establishing native clock
+units; power/slew helpers remain separately tested until their state dependencies
+are established. See [native extraction](formats/native-flight-code.md)
+and [native power](formats/native-power.md). `flightModel=recovered-envelope`
+selects this mode explicitly; switching back to `assisted` restores the preserved
+force/control implementation.
+
+## Live fuel and consumption
+
+Move the helper's **Fuel** slider to add/remove fuel without resetting the
+flight. The helper displays percentage, tonnes and current kg/min burn. The
+selected quantity carries across model switches and becomes the R-reset load.
+
+Native clock tracing established 256 ticks/second and integer `_currentTime`
+seconds. The recovered F-14 consumption calculation gives 0.90718474 kg/s at
+100% military power and 4.5359237 kg/s in afterburner, with native fixed-point
+throttle quantization below 100%. Engine-off burn is zero. This remake integrates
+fuel continuously at 120 Hz; the native caller deducts five-second batches.
+
+An empty tank stops the engine and removes thrust. Refilling does not silently
+restart it: use **T**. In the experimental modes, current empty+fuel+payload mass
+feeds the force solver while its full-fuel calibration reference stays fixed.
+The assisted model's 9,000 kg handling mass stays unchanged, per the user's
+request to preserve the existing feel. With no PT import, the original fallback
+uses a 1,500 kg bookkeeping tank and authored rates; it is not native data.

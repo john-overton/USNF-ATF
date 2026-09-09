@@ -1,6 +1,6 @@
 /** Isolated USNF97 integer routines recovered from the local executable.
- * Native units throughout. No assumption about clock counts per second or SI
- * conversion; these helpers are not wired into either flight backend. */
+ * Native units throughout. FuelSystem adapts the recovered fuel rate to SI;
+ * thrust and slew helpers remain isolated pending full state integration. */
 function int32(value: number): number {
   if (!Number.isInteger(value) || value < -2147483648 || value > 2147483647)
     throw new Error('Native signed 32-bit integer required');

@@ -80,3 +80,42 @@ It measures actual HUD screen dimensions and pitch-rung spacing, verifies no
 blur filter, and collapses/restores the helper while checking canvas focus,
 visible HUD and advancing simulation. It loads local F-14 geometry/audio by
 default. Screenshots and the full report remain in the ignored output directory.
+
+## Experimental PT flight model
+
+`--flight-profile extracted/flight/f14-flight.json` copies the attributed local
+flight profile into an isolated test session. Generic `smoke.ts` additionally
+requires `--flight-model retail-envelope` to select it; the default remains the
+preserved assisted backend. `ground-smoke.ts` loads the profile but starts with
+the default, then exercises the real model selector both ways and verifies the
+backend mass/source changes. Its default profile path is the one above.
+
+```sh
+bun tools/flight/aero-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --out extracted/model-switcher-aero
+```
+
+The six isolated real-key cases compare clean, flap, brake and gear idle-energy
+loss, then full-fuel versus quarter-fuel afterburner acceleration. Each starts
+from the same airborne preset and measures ten simulated seconds after gear-up
+settles. Assertions verify the actual imported backend, deployed fractions,
+energy direction, added device drag, mass effect and exact PT AB/military ratio.
+This is control-path acceptance, not a maximum-speed benchmark. Long level-flight
+performance checks live in `tools/harness/retail-flight.ts`.
+
+Pass `--flight-model recovered-envelope` to `aero-smoke.ts` or `smoke.ts` for the
+third backend. Ground acceptance now switches through all three modes and back
+to the preserved default. The headless retail runner accepts
+`--model recovered-envelope`; its performance targets are still the imported
+polygons, not measurements from a complete original-game flight.
+
+## Fuel slider and consumption
+
+```sh
+bun tools/flight/fuel-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --out extracted/flight-fuel
+```
+
+Both preserved assisted and recovered-envelope modes exercise the actual React
+range input, military/AB consumption windows, engine-off zero burn, empty-tank
+cutoff, live refill and manual restart. It verifies experimental mass loss equals
+burned fuel while assisted handling mass stays 9,000 kg. The tool never directly
+writes flight state. Screenshots and exact packaged-source evidence stay ignored.

@@ -3,7 +3,7 @@
 2026-09-09, macOS Apple M3/arm64, Bun1.4.2, Unicorn2.1.4. This is a
 bounded implementation of arithmetic recovered from the locally supplied
 USNF97 executable, independently compared with execution of its x86 routines.
-The helpers in `engine/src/sim/flight/native-power.ts` remain isolated from
+At initial extraction, the helpers in `engine/src/sim/flight/native-power.ts` were isolated from
 both the preserved assisted model and the experimental flight backend.
 
 The executable is `extracted/usnf97/SETUP.ESA/USNF.EXE`, SHA256
@@ -117,3 +117,13 @@ claiming another edition has equivalent code.
   as a world-space force in SI units.
 - These isolated comparisons establish arithmetic agreement, not a complete
   native flight tick, game launch, aircraft handling parity or audio parity.
+
+## Follow-up: clock resolved and fuel integrated
+
+Later on 2026-09-09, [native clock tracing](native-flight-code.md#follow-up-native-time-and-fuel-rate-units-recovered)
+established 256 ticks/second and integer-second `_currentTime`. The rate output
+is therefore fixed-point lb/s, not an unresolved per-tick quantity. `FuelSystem`
+now calls the recovered fuel calculation and converts with 0.45359237 kg/lb.
+The runtime integrates continuously at 120 Hz, deliberately adapting the native
+five-second deduction schedule. Thrust selection/scalar and slew helpers remain
+isolated; their existence does not mean the complete native power path is active.
