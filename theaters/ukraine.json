@@ -1,0 +1,7 @@
+{
+  "id": "ukraine",
+  "name": "Ukraine development theater",
+  "bbox": [28, 44, 35, 49],
+  "roughnessThreshold": 80,
+  "sourcePaddingDegrees": 0.5
+}
