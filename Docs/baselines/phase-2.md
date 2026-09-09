@@ -1,5 +1,34 @@
 # Phase 2 baseline: real Ukraine terrain
 
+## 2026-09-09: reusable appearance weights and seasonal maps
+
+The `color-maps` producer now writes four 1024² RGBA seasonal maps, a reusable
+four-channel uint8 appearance-weight archive, editable hex palettes and provenance.
+The generated Ukraine trial is installed. All 30 Python tests and the full
+832-chunk/palette probe pass. Exact source identity, hashes, commands, review
+corrections and desktop evidence are in the [phase 3 baseline](phase-3.md).
+These are artistic appearance weights; physical terrain/water remain unchanged.
+
+## 2026-09-09: optional coastal texture repair
+
+Added and installed the offline `paint-coasts` pass after the direct Sentinel bake.
+Source identity, full commands, pixel counts, accepted atlas hash, tests/probe and
+visual limitations are recorded in the [phase 3 coastal padding baseline](phase-3.md).
+All 26 Python tests and the 832-chunk probe pass. Heights and water polygons are
+unchanged; the pass synthesizes only bounded coastal underlay colors.
+
+## 2026-09-09: direct Sentinel-2 imagery pipeline
+
+See [phase3 direct Sentinel bake](phase-3.md#2026-09-09-installed-direct-sentinel-2-bake)
+for exact source snapshot, commands, provenance and quality limits. Native10m RGB
+COGs /20m SCL are mosaicked into6142×6144 projected paint (~91.39m/pixel), with
+native-mask aggregation, temporal-agreement fallback and bounded residual color
+interpolation. All832 DEM chunks and water polygons remain unchanged. Real probe
+and verified app-data installation pass. Downloaded/cached imagery remains ignored.
+Machine: Mac M3/Python3.14.6; Linux deferred. This supersedes the earlier EOX source
+for the installed theater, without changing old datasets' licenses.
+
+
 ## 2026-09-09: real four-times-pixel atlas installed
 
 Source **9658fd8**. See [phase 3 installed imagery](phase-3.md#2026-09-09-installed-higher-detail-imagery)

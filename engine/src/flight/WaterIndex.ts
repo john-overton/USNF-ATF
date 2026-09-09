@@ -45,6 +45,17 @@ export class WaterRingIndex {
   candidateCount(z: number): number {
     return (this.bands[this.band(z)]?.length ?? 0) + this.longEdges.length;
   }
+  crossings(z: number): number[] {
+    if (z < this.minZ || z > this.maxZ) return [];
+    const xs: number[] = [];
+    for (const edges of [this.bands[this.band(z)]!, this.longEdges])
+      for (const i of edges) {
+        const [xi, zi] = this.ring[i]!,
+          [xj, zj] = this.ring[(i + this.ring.length - 1) % this.ring.length]!;
+        if (zi > z !== zj > z) xs.push(((xj - xi) * (z - zi)) / (zj - zi) + xi);
+      }
+    return xs.sort((a, b) => a - b);
+  }
   contains(x: number, z: number): boolean {
     if (x < this.minX || x > this.maxX || z < this.minZ || z > this.maxZ) return false;
     let inside = false;

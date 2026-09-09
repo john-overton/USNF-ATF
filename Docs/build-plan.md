@@ -150,6 +150,7 @@ Goal: know exactly what we can import before writing engine code that depends on
 | Dev and test platforms | Mac now; Linux GPU testing deferred by user on 2026-09-08 | Continue Mac development; retain Linux criteria for later verification |
 | CI | Phase 9 only, release tags only | Baselines and tests are local first; CI is a release gate, not a dev loop |
 | Notarization | Last item of phase 9 | Costs money and time; adds nothing until strangers install it |
+| Terrain appearance | Selectable satellite imagery or compact seasonal color maps; classified shoreline ribbons with original material swatches | Keep color resolution independent of terrain LOD and allow direct palette authoring; see [terrain colors](terrain-colors.md) |
 | First theater | Ukraine | Most retail missions (103) and mostly land; Kurils second |
 
 ---

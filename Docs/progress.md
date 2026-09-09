@@ -11,10 +11,154 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 |---|---|---|
 | 0: retail toolkit | Containers, images/fonts and data readers; bounded nearest-detail F-14 static export with textures | F-14 is recognizable in packaged flight. General SH interpreter, native animation semantics and unified deliverable remain open |
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
-| 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing and optional RGB atlas | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
-| 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite paint, FXAA, worker water triangulation and diagnostics | Polished packaged coast/detail ~60 fps at 1440p; current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
+| 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
+| 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics | Polished packaged coast/detail ~60 fps at 1440p; current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
 | 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness, indexed exact water queries | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: classified shoreline ribbons and bank faces
+
+Added offline beach/rock/cliff/marsh/unknown appearance hints from inland RGB and
+300 m relief, editable ring overrides, variable nominal widths and continuous
+coast-distance coordinates. The authoring layer follows existing sea polygons and
+dry holes; width checks prevent folded narrow islands and enclosed water. Unsafe
+complex junctions collapse locally. Runtime ribbons clip to actual terrain
+triangles and follow their morph/seam heights, with shared tile UVs and source
+fades. Original prebaked material swatches remain independent of seasonal palettes.
+
+Close-up acceptance exposed coarse ground occluding sea before its vector shore.
+Conservative local sea masks now remove only wholly wet terrain fragments near
+ribbon patches. Boundary supercovers preserve even sub-texel islands; textured bank
+faces seal elevated cuts down to sea level. This is visual geometry, not measured
+cliff profiles or a change to height files, water bodies or flight contact.
+
+Independent review found and verified corrections for narrow-island folds,
+contained water, reversed atlas rows, repeated over-budget construction, dry-island
+mask loss and duplicate bank faces on grid edges. Serialized geometry also retains
+full coordinate precision after audits caught sub-millimeter rounding crossings.
+Checks pass 142 Bun and 35 pipeline tests; exact current-source packaged evidence,
+transient performance, dataset identity and commands are in the phase 3 baseline.
+Linux remains deferred and x64 packaging is not an x64 launch test.
+
+The [shoreline workflow](terrain-colors.md) documents confidence, original texture
+generation, overrides, budgets and remaining limitations. Next reproducible step:
+restart the updated Mac app, inspect the coastline with Summer/Winter ground colors,
+and tune whole-ring material/width overrides in the generated source dataset.
+
+## 2026-09-09: water-depth correction and seasonal color-map trial
+
+Reproduced the user's high-altitude water stripes. Sampled CPU water triangles
+cover the points at +0.2 m while morphed terrain is near +0.001 m; one water
+triangle is approximately 253 km long and only 124 m on its short edge. Small
+log-depth biases and reciprocal-W reconstruction did not clear the GPU artifact.
+Water now reconstructs logarithmic depth analytically from the pixel ray and the
+horizontal water plane, with a small four-step depth bias. The high-altitude
+comparison clears the repeated stripes while retaining the dry spit/island.
+Water geometry, terrain elevation and contact remain unchanged.
+
+Added `color-maps`: a reusable four-channel appearance-weight map, editable hex
+palettes and 1024² RGBA bakes for summer/spring/autumn/winter. RGB-derived classes
+are artistic approximations, not verified land cover. Palette-only rebakes need
+no source satellite pixels. The Ground colors selector swaps one atlas at a time;
+new datasets default to summer and retain satellite imagery for comparison.
+Installed the verified `ukraine-palettes` dataset into local app data.
+
+Packaged 1440p six-mode comparison settles at 59.985–60.014 fps. CPU/GPU cache
+estimate falls from 410.84 MiB with satellite imagery to 84.28 MiB with a palette,
+and returns to the same value after switching back. Shader/flight/probe/check
+commands, source identity and observed corrections are in the phase 3 baseline.
+The [shoreline ribbon design](terrain-colors.md) records the proposed next layer:
+continuous coast-following material bands, shared tile joins, type confidence and
+editable width. Rock/beach/cliff classification and ribbon meshes are not built.
+Next reproducible step: restart the app, compare Ground colors at the coastline
+waypoint, and edit/rebake the separate palette JSON to tune the artistic colors.
+
+## 2026-09-09: coastal texture color repair
+
+Added `paint-coasts` after the imagery bake. It reflects nearby interior land
+colors into a bounded coastal strip, with nearest-interior fallback and a
+100 m landward feather after a 200 m repair band. Up to 3 km of underwater
+texture padding covers ground exposed at coarse source LOD. This uses existing
+water polygons, not RGB thresholds or elevation-derived water classification.
+Connected-land checks prevent borrowing mainland colors for islands; islands
+without a 300 m interior remain untouched. Texture size, height chunks, water
+polygons, flight contact and runtime code are unchanged.
+
+Installed `extracted/terrain/ukraine-sentinel-coast` into local app data after the
+full probe. The mainland dark fringe is visibly removed in the inspected overview
+and detail views. Initial nearest-only padding stretched field colors into stripes;
+reflection reduces that artifact. Small-island fringes and geometric coastline
+steps remain. Independent review caught stale `coastPaint` provenance after a fresh
+imagery bake; the producer now clears it and a regression test covers this.
+
+Verification: 26 Python tests pass, no skips; all 832 chunks pass probe, maximum
+shared-edge error 0.02106996 m. Packaged Mac 1440p overview/detail average
+60.14 / 60.06 fps, no runtime errors or omitted water. Full evidence, commands,
+source snapshot and limits: [phase 3 baseline](baselines/phase-3.md).
+Next reproducible step: reload local terrain and inspect the coastline waypoint;
+use the preserved original Sentinel dataset to rebake different padding distances.
+
+## 2026-09-09: direct Sentinel-2 mosaic and offline bake
+
+User redirected the proposed Blue Marble change to direct Copernicus Sentinel-2
+imagery. Blue Marble was downloaded/baked only into an isolated ignored copy;
+it was never installed. Added a direct L2A RGB/cloud-mask workflow using public
+Earth Search COGs, summer 2024 low-cloud scene selection, multi-date gap filling,
+reprojection and local RGBA bake at the existing 6144-axis target. RGB sources are
+10 m; runtime texture pixels remain ~91 m. Elevation is still GLO-30 DEM, not S2.
+No network access is added to gameplay. Persistent mask gaps have a distinct-date color-agreement fallback; residual color
+interpolation is capped to 0.5% of land / six output pixels and recorded separately.
+Larger uncovered areas fail; only manifest-classified water can receive flat water fill.
+
+Copernicus credit is retained in root ATTRIBUTIONS.md and About / Data credits.
+New optional `attributionDisplay` defaults to `overlay` for existing datasets;
+direct S2 declares `credits`, omitting the permanent line. EOX sources remain an
+explicit `--provider eox` option with their own terms and visible credit.
+The6142×6144 direct atlas (85.06MB compressed) is now installed; all832 height
+chunks and water polygons are unchanged. Bake provenance records301,478 temporal
+fallback pixels and56,165 bounded interpolated land-color pixels. Current source
+scope, actual bake, installation and packaged checks are recorded
+in the phase 2/3 baselines. Final checks pass135 Bun /20 Python tests; packaged
+waypoint flight averages59.77–60.14 fps at1440p, with no runtime errors or omitted
+water. Source/retail pixels stay outside Git and app bundles.
+
+
+## 2026-09-09: attribution document and quieter credits UI
+
+Added root `ATTRIBUTIONS.md` with imagery/data sources, modification notes and
+license links, linked from README. Repeated full dataset notices in the helper
+panel now live in a closed Data credits disclosure; the persistent imagery line
+contains source attribution only, without the long license text. The complete
+license stays in the manifest/diagnostics and disclosure. EOX's published guidance
+requires a visible imagery credit, so the requested source-only move is only
+partially applied: that required credit remains visible. Source guidance checked:
+https://cloudless.eox.at/documentation/license/ and
+https://creativecommons.org/licenses/by-nc-sa/4.0/ .
+
+Installed terrain is `~/Library/Application Support/usnf-atf/data/terrains/ukraine`
+(~160 MiB on disk). Generated copy: `extracted/terrain/ukraine-4x`; imagery source
+cache: `extracted/terrain-source/imagery`. No dataset files or attribution metadata
+were removed. Verification/source scope is recorded in the phase 3 baseline.
+
+
+## 2026-09-09: doubled view range and narrower fog
+
+Terrain/water selection now uses altitude ×16, clamped to 24–300 km (previously
+×8, 12–150 km). At the user's follow-up request, the fog fade band is halved:
+82.5% of the range to 100%, instead of 65% to 100%. Far clipping continues to
+follow the horizon at 120%. Correction to the earlier conversational description:
+80–180 km fog values are startup defaults only; active fog was already dynamic.
+The narrower band keeps full visibility farther out rather than shortening range.
+
+The 25-chunk/source-LOD budget remains; wider range can select coarser sources.
+The first 300 km check failed the zero-omitted-water acceptance gate at the old
+128-batch cap (443 omitted). The water working-set caps are now 1024 batches /
+32 MiB, retaining four outstanding worker jobs. A central 300 km selection now
+fits all 571 nearby batches, with no omissions.
+Final high-altitude packaged acceptance passes at 60.18 fps with all 571 batches
+and zero omissions/runtime errors; 135 tests pass. Source scope and exact packaged
+measurements are in the phase 3 baseline.
+
 
 ## 2026-09-09: actual 4× imagery and terrain handoff
 

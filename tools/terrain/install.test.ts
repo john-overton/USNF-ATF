@@ -138,3 +138,20 @@ test('imagery installs with validation and corrupt replacement preserves the old
     expect(await readFile(path.join(target, 'paint.gz'))).toEqual(Buffer.from(bytes));
   });
 });
+
+test('shoreline transport is installed and corrupt replacement preserves the installed data', async () => {
+  await fixture(async (source, data) => {
+    const manifestPath = path.join(source, 'manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    const raw = new TextEncoder().encode(JSON.stringify({ version: 1, kinds: ['unknown', 'beach', 'rock', 'cliff', 'marsh'], rings: [] }));
+    const bytes = Bun.gzipSync(raw);
+    manifest.shorelines = { path: 'shore.gz', byteLength: bytes.length, decodedBytes: raw.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+    await writeFile(path.join(source, 'shore.gz'), bytes);
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    const target = await installTerrain(source, data);
+    expect(await readFile(path.join(target, 'shore.gz'))).toEqual(Buffer.from(bytes));
+    await writeFile(path.join(source, 'shore.gz'), 'corrupt');
+    await expect(installTerrain(source, data, true)).rejects.toThrow();
+    expect(await readFile(path.join(target, 'shore.gz'))).toEqual(Buffer.from(bytes));
+  });
+});

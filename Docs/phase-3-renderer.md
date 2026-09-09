@@ -120,7 +120,7 @@ measuring a long transit first. Invalid/nonfinite values show an explicit error.
 Water geometry is now created lazily by visible horizon, rather than allocating
 all theater polygons on manifest load. Spatial batches combine up to 64 nearby
 bodies per draw, normally <=1 MiB estimated geometry per batch (a single large
-body can exceed that). Selection has a 16 MiB water-buffer budget and 128-batch
+body can exceed that). Selection now has a 32 MiB water-buffer budget and 1024-batch
 draw cap. Four missing batches are triangulated per selection tick; departed
 coverage is disposed. Cache and geometry-upload estimates include water. The
 panel and automation report omitted batches explicitly rather than silently
@@ -150,7 +150,8 @@ preserving original exterior/interior rings; the rectangle decomposition had
 produced approximately 80660 separate polygons. The largest measured exterior
 has 16695 points. Raise the runtime body-count guard from 10000 to 50000 to
 accommodate this measured dataset. The 100000-point per-body and 500000-point
-total bounds and 16 MiB/128-batch GPU working-set budgets remain unchanged.
+total bounds remain unchanged. The later doubled-range update expands the GPU
+working-set budget to 32 MiB/1024 batches.
 This is a measured input allowance, not permission to eagerly instantiate one
 mesh per source component. A regression accepts 10001 small bodies and rejects
 50001 bodies and 600000 total vertices. The earlier 10000-body limit above is
@@ -320,3 +321,11 @@ the optional georeferenced atlas, pipeline coast changes, shared boundary graph,
 ownership easing, FXAA and expanded upload/cache estimate scope. Source fades
 remain screen-door fades, not geometric resampling. Measured source and packaged
 acceptance remain in the [phase 3 baseline](baselines/phase-3.md).
+
+
+The optional shoreline layer clips classified, textured ribbons to displayed
+terrain triangles, follows their morph/seam heights, and adds visual bank faces.
+Conservative local sea masks prevent coarse ground overlap while preserving dry
+boundaries and holes. This layer uses the floating origin and source fade masks;
+flight-contact data is unchanged. See [terrain colors](terrain-colors.md) and the
+latest [baseline](baselines/phase-3.md) for budgets, tested scope and remaining limits.

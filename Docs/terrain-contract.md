@@ -19,6 +19,8 @@ Manifest JSON schemaVersion 1:
 - chunks: array of {lod, x, y, path, originX, originZ, spacing, size, offset, scale,
   minElevation, maxElevation, byteLength, sha256}
 - imagery?: {path, width, height, byteLength, sha256, attribution, license}
+- colorMaps?: partial object keyed by summer/spring/autumn/winter, each using the imagery record including attributionDisplay; all paths are distinct from chunks, manifest and other images
+- coastPaint?: producer-only texture repair provenance (method, metre distances, input atlas hash, changed/skipped pixel counts; runtime ignores this metadata)
 - coastSmoothing?: producer provenance (method, passes, cut distances; runtime ignores this metadata)
 - waterBodies: array of {id, elevation, polygon: array of [x,z] pairs,
   holes?: array of interior rings (each an array of [x,z] pairs)}
@@ -65,3 +67,40 @@ rings, clipped theater edges and repeated point-touch junctions are fixed. A
 each cut is also limited to one quarter of its adjacent edge. Existing runtime
 body/point budgets remain enforced. This is mask-derived visualization polish,
 not a claim of newly surveyed shoreline accuracy.
+
+
+Imagery may declare `attributionDisplay: "overlay" | "credits"`. Omission defaults
+to `overlay` for existing datasets. `credits` retains full source/license notices
+in About / Data credits and the manifest while omitting the permanent imagery line.
+The producer chooses this according to source terms; it is not a runtime license
+waiver. Direct Sentinel composites use `credits`; EOX datasets keep `overlay`.
+
+Seasonal color maps use the same RGBA transport, projection, checksums and credit
+validation as imagery. The producer defaults to 1024-axis maps (cap 2048); runtime
+uses the existing 6144 image limit. Only the selected image is loaded. Authoring
+weights/palettes/provenance are offline files, not renderer inputs. Missing or
+corrupt declared palette files fail installer validation. See [color maps](terrain-colors.md).
+
+
+## Optional shoreline ribbons (v1)
+
+`shorelines` is an optional object with `path`, compressed `byteLength`,
+`decodedBytes`, and lowercase `sha256`. The safe relative path must not conflict
+with chunks, imagery, palettes or the manifest. Compressed bytes are capped at
+32 MiB and inflated JSON at 64 MiB. Installer and renderer validate transport;
+the Python probe also checks the shoreline document. Legacy manifests omit it.
+
+The JSON has `version: 1`, `kinds: ["unknown","beach","rock","cliff","marsh"]`,
+and `rings: [{id, points}]`. IDs are unique; at most 50,000 rings and 300,000 total
+points are accepted. Each point is `[x,z,inlandX,inlandZ,distanceMeters,kind,confidence]`.
+Coordinates are finite, within theater extents, and cross-sections at most 200 m.
+Distance starts at zero, is nondecreasing and at most 100,000,000 m; kind is an
+integer 0–4 and confidence is 0–1. Rings have at least four points and close with
+the same coordinates/class/confidence and a final cumulative distance. Generated
+coast coordinates retain source precision. The shorelines contain appearance data,
+not physical elevation or a replacement water classification.
+
+Authoring provenance and overrides stay in the generated source dataset. Only the
+referenced gzip runtime document is installed. See [terrain colors](terrain-colors.md)
+for width rules, confidence, original material swatches, visual bank faces and
+conservative local coverage masks.

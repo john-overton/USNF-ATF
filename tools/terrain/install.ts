@@ -4,6 +4,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { decodeChunk, decodeTerrainBytes } from '../../engine/src/terrain/chunk';
+import { parseShorelines } from '../../engine/src/terrain/shoreline-data';
 import { parseManifest } from '../../engine/src/terrain/manifest';
 
 async function exists(target: string): Promise<boolean> {
@@ -37,10 +38,17 @@ export async function installTerrain(
       throw new Error('Chunk path conflicts with manifest');
     await decodeChunk(await sourceBytes(chunk.path), chunk);
   }
-  if (manifest.imagery) {
-    const image = manifest.imagery;
+  for (const image of [...(manifest.imagery ? [manifest.imagery] : []), ...Object.values(manifest.colorMaps ?? {})]) {
     await decodeTerrainBytes(await sourceBytes(image.path), image, image.width * image.height * 4);
   }
+  async function shorelineBytes(): Promise<Buffer> {
+    const meta = manifest.shorelines!;
+    const bytes = await sourceBytes(meta.path);
+    const raw = await decodeTerrainBytes(bytes, meta, meta.decodedBytes);
+    parseShorelines(new TextDecoder().decode(raw), manifest.extents);
+    return bytes;
+  }
+  if (manifest.shorelines) await shorelineBytes();
   // All source content passes the same transport checks used by the renderer before destination changes.
   const parent = path.resolve(dataRoot, 'terrains');
   await mkdir(parent, { recursive: true });
@@ -69,10 +77,16 @@ export async function installTerrain(
       await mkdir(path.dirname(destination), { recursive: true });
       await writeFile(destination, bytes);
     }
-    if (manifest.imagery) {
-      const image = manifest.imagery, bytes = await sourceBytes(image.path);
+    for (const image of [...(manifest.imagery ? [manifest.imagery] : []), ...Object.values(manifest.colorMaps ?? {})]) {
+      const bytes = await sourceBytes(image.path);
       await decodeTerrainBytes(bytes, image, image.width * image.height * 4);
       const destination = path.join(staging, image.path);
+      await mkdir(path.dirname(destination), { recursive: true });
+      await writeFile(destination, bytes);
+    }
+    if (manifest.shorelines) {
+      const bytes = await shorelineBytes();
+      const destination = path.join(staging, manifest.shorelines.path);
       await mkdir(path.dirname(destination), { recursive: true });
       await writeFile(destination, bytes);
     }

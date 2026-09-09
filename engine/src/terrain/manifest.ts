@@ -147,9 +147,8 @@ export function parseManifest(text: string): TheaterManifest {
       ...(holes ? { holes } : {}),
     };
   });
-  let imagery: TerrainImagery | undefined;
-  if (m.imagery !== undefined) {
-    const image = object(m.imagery);
+  const parseImage = (value: unknown): TerrainImagery => {
+    const image = object(value);
     const path = safeRelativePath(image.path);
     const width = coordinate(image.width),
       height = coordinate(image.height);
@@ -171,7 +170,12 @@ export function parseManifest(text: string): TheaterManifest {
       [...paths].some((p) => p === path || p.startsWith(path + '/') || path.startsWith(p + '/'))
     )
       throw new Error('Imagery path conflicts with terrain files');
-    imagery = {
+    const attributionDisplay = image.attributionDisplay ?? 'overlay';
+    if (attributionDisplay !== 'overlay' && attributionDisplay !== 'credits')
+      throw new Error('Invalid imagery attribution display');
+    paths.add(path);
+    return {
+      attributionDisplay,
       path,
       width,
       height,
@@ -180,9 +184,41 @@ export function parseManifest(text: string): TheaterManifest {
       attribution: string(image.attribution),
       license: string(image.license),
     };
+  };
+  const imagery = m.imagery === undefined ? undefined : parseImage(m.imagery);
+  const colorMaps: Partial<Record<'summer' | 'spring' | 'autumn' | 'winter', TerrainImagery>> = {};
+  if (m.colorMaps !== undefined) {
+    const maps = object(m.colorMaps);
+    for (const key of Object.keys(maps)) {
+      if (key !== 'summer' && key !== 'spring' && key !== 'autumn' && key !== 'winter')
+        throw new Error('Invalid terrain palette');
+      colorMaps[key] = parseImage(maps[key]);
+    }
+  }
+  let shorelines;
+  if (m.shorelines !== undefined) {
+    const s = object(m.shorelines),
+      path = safeRelativePath(s.path);
+    const byteLength = coordinate(s.byteLength),
+      decodedBytes = coordinate(s.decodedBytes),
+      sha256 = string(s.sha256);
+    if (
+      byteLength < 1 ||
+      byteLength > 32 * 1024 * 1024 ||
+      decodedBytes < 1 ||
+      decodedBytes > 64 * 1024 * 1024 ||
+      !/^[0-9a-f]{64}$/.test(sha256) ||
+      path === 'manifest.json' ||
+      path.startsWith('manifest.json/') ||
+      [...paths].some((p) => p === path || p.startsWith(path + '/') || path.startsWith(p + '/'))
+    )
+      throw new Error('Invalid shoreline transport');
+    shorelines = { path, byteLength, decodedBytes, sha256 };
   }
   return {
+    ...(shorelines ? { shorelines } : {}),
     schemaVersion: 1,
+    ...(Object.keys(colorMaps).length ? { colorMaps } : {}),
     ...(imagery ? { imagery } : {}),
     id: string(m.id),
     name: string(m.name),

@@ -300,6 +300,7 @@ test('optional imagery rejects excessive size and conflicting paths; decode is b
       .imagery?.width,
   ).toBe(6144);
   for (const bad of [
+    { attributionDisplay: 'hidden' },
     { width: 6145 },
     { width: 1 },
     { byteLength: 1.5 },
@@ -310,6 +311,28 @@ test('optional imagery rejects excessive size and conflicting paths; decode is b
     expect(() =>
       parseManifest(JSON.stringify({ ...manifest, imagery: { ...image, ...bad } })),
     ).toThrow();
+  expect(
+    parseManifest(
+      JSON.stringify({ ...manifest, imagery: { ...image, attributionDisplay: 'credits' } }),
+    ).imagery?.attributionDisplay,
+  ).toBe('credits');
+  expect(
+    parseManifest(JSON.stringify({ ...manifest, imagery: image })).imagery?.attributionDisplay,
+  ).toBe('overlay');
+  expect(
+    parseManifest(JSON.stringify({ ...manifest, colorMaps: { summer: image } })).colorMaps?.summer
+      ?.width,
+  ).toBe(2);
+  for (const colorMaps of [
+    { unknown: image },
+    { summer: { ...image, width: 1 } },
+    { summer: { ...image, path: '../outside' } },
+    { summer: image, winter: image },
+  ])
+    expect(() => parseManifest(JSON.stringify({ ...manifest, colorMaps }))).toThrow();
+  expect(() =>
+    parseManifest(JSON.stringify({ ...manifest, imagery: image, colorMaps: { summer: image } })),
+  ).toThrow();
   const { decodeTerrainBytes } = await import('./chunk');
   const { bytes, metadata } = await compressed(new Uint8Array(17));
   for (const [size, message] of [

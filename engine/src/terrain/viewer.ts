@@ -21,6 +21,9 @@ import { probeWebGL2 } from '../render/glProbe';
 import { ByteCache } from './cache';
 import { initialCamera } from './camera';
 import { WaterWorkerBuilder } from './water-worker-client';
+import { ShoreLayer } from './shoreline';
+import { parseShorelines } from './shoreline-data';
+import type { Texture } from 'three';
 import { WaterLayer } from './water';
 import { decodeChunk, decodeTerrainBytes } from './chunk';
 import {
@@ -40,7 +43,13 @@ import { SourceTransition } from './transition';
 import { waypointDestination, type TeleportWaypoint } from './teleport';
 
 export interface TerrainDiagnostics {
+  shorelineTriangles?: number;
+  shorelineBytes?: number;
+  shorelinePending?: number;
+  shorelineOmitted?: number;
   imageryAttribution?: string;
+  paint?: string;
+  paintModes?: string[];
   flight?: FlightDiagnostics;
   status: 'loading' | 'ready' | 'error';
   error: string;
@@ -85,6 +94,7 @@ declare global {
   }
 }
 interface PatchResource {
+  shoreMaskUniform: { value: Texture | null };
   mesh: Mesh;
   material: MeshStandardMaterial;
   morphUniform: { value: number };
@@ -107,6 +117,7 @@ export function startTerrainViewer(
 ): {
   dispose(): void;
   setFuelFraction(fraction: number): void;
+  setTerrainPaint(mode: string): Promise<void>;
   teleportToWaypoint(point: TeleportWaypoint): Promise<void>;
 } {
   const flightMode = new URLSearchParams(window.location.search).get('mode') === 'flight';
@@ -139,9 +150,12 @@ export function startTerrainViewer(
   let yaw = 0,
     pitch = -0.45;
   const data = new ByteCache<Float32Array>(32 * 1024 * 1024);
+  const terrainMaterials = new Set<MeshStandardMaterial>();
+  let paintRequest = 0;
   const patches = new ByteCache<PatchResource>(96 * 1024 * 1024, (p) => {
     scene.remove(p.mesh);
     p.mesh.geometry.dispose();
+    terrainMaterials.delete(p.material);
     p.material.dispose();
   });
   const transition = new SourceTransition();
@@ -154,6 +168,7 @@ export function startTerrainViewer(
   let imagery: DataTexture | undefined;
   let imageryBytes = 0;
   let water: WaterLayer | undefined;
+  let shoreline: ShoreLayer | undefined;
   let reportedWaterBytes = 0;
   let desired: TerrainChunk[] = [],
     displayed: TerrainChunk[] = [],
@@ -303,45 +318,88 @@ export function startTerrainViewer(
         });
     }
   };
+  const loadPaint = async (m: TheaterManifest, mode: string): Promise<void> => {
+    const meta =
+      mode === 'satellite'
+        ? m.imagery
+        : mode === 'summer' || mode === 'spring' || mode === 'autumn' || mode === 'winter'
+          ? m.colorMaps?.[mode]
+          : undefined;
+    if (!meta) throw new Error('This terrain does not contain the selected color map');
+    const request = ++paintRequest;
+    if (Math.max(meta.width, meta.height) > renderer.capabilities.maxTextureSize)
+      throw new Error('Terrain imagery exceeds this GPU’s texture size limit');
+    const compressed = await platform.fs.readBytes(root, folder + meta.path);
+    if (disposed || request !== paintRequest) return;
+    const pixels = await decodeTerrainBytes(compressed, meta, meta.width * meta.height * 4);
+    if (disposed || request !== paintRequest) return;
+    const next = new DataTexture(pixels, meta.width, meta.height);
+    next.colorSpace = SRGBColorSpace;
+    next.generateMipmaps = true;
+    next.minFilter = LinearMipmapLinearFilter;
+    next.magFilter = LinearFilter;
+    next.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    next.needsUpdate = true;
+    const previous = imagery;
+    imagery = next;
+    for (const material of terrainMaterials) {
+      material.map = next;
+      material.vertexColors = false;
+      material.needsUpdate = true;
+    }
+    previous?.dispose();
+    imageryBytes = pixels.byteLength + Math.ceil((pixels.byteLength * 4) / 3);
+    d.uploadBytesTotal += Math.ceil((pixels.byteLength * 4) / 3);
+    d.paint = mode;
+    delete d.imageryAttribution;
+    if (meta.attributionDisplay !== 'credits') d.imageryAttribution = meta.attribution;
+    update(diagnostics());
+  };
   void (async () => {
     const path = safeRelativePath(manifestPath);
     folder = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
     const text = await platform.fs.readText(root, path);
     const m = parseManifest(text);
     if (disposed) return;
-    if (m.imagery) {
-      const meta = m.imagery;
-      if (Math.max(meta.width, meta.height) > renderer.capabilities.maxTextureSize)
-        throw new Error('Terrain imagery exceeds this GPU’s texture size limit');
-      const pixels = await decodeTerrainBytes(
-        await platform.fs.readBytes(root, folder + meta.path),
-        meta,
-        meta.width * meta.height * 4,
+    d.paintModes = [...(m.imagery ? ['satellite'] : []), ...Object.keys(m.colorMaps ?? {})];
+    const requestedPaint = new URLSearchParams(window.location.search).get('paint');
+    if (d.paintModes.length)
+      await loadPaint(
+        m,
+        requestedPaint ??
+          (m.colorMaps?.summer ? 'summer' : m.imagery ? 'satellite' : d.paintModes[0]!),
       );
-      if (disposed) return;
-      imagery = new DataTexture(pixels, meta.width, meta.height);
-      imagery.colorSpace = SRGBColorSpace;
-      imagery.generateMipmaps = true;
-      imagery.minFilter = LinearMipmapLinearFilter;
-      imagery.magFilter = LinearFilter;
-      imagery.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-      imagery.needsUpdate = true;
-      imageryBytes = pixels.byteLength + Math.ceil((pixels.byteLength * 4) / 3);
-      d.uploadBytesTotal += Math.ceil((pixels.byteLength * 4) / 3);
-      d.imageryAttribution = meta.attribution + ' · ' + meta.license;
-    }
+    if (disposed) return;
     manifest = m;
     d.name = m.name;
     d.source = m.source;
     d.attribution = [
       ...m.attribution,
-      ...(m.imagery ? [m.imagery.attribution, m.imagery.license] : []),
+      ...new Set(
+        [...(m.imagery ? [m.imagery] : []), ...Object.values(m.colorMaps ?? {})].flatMap(
+          (image) => [image.attribution, image.license],
+        ),
+      ),
     ];
     const pose = initialCamera(m, window.location.search);
     Object.assign(world, pose.position);
     yaw = pose.yaw;
     pitch = pose.pitch;
     water = new WaterLayer(scene, m.waterBodies, new WaterWorkerBuilder());
+    if (m.shorelines) {
+      const raw = await decodeTerrainBytes(
+        await platform.fs.readBytes(root, folder + m.shorelines.path),
+        m.shorelines,
+        m.shorelines.decodedBytes,
+      );
+      if (disposed) return;
+      shoreline = new ShoreLayer(
+        scene,
+        parseShorelines(new TextDecoder().decode(raw), m.extents),
+        m.waterBodies,
+        fail,
+      );
+    }
     if (flightMode) {
       const layer = await FlightLayer.create(scene, m, platform, root, folder);
       if (disposed) {
@@ -362,7 +420,7 @@ export function startTerrainViewer(
       water?.select(world, horizon);
       if (water?.error) fail(new Error(water.error));
       if (scene.fog instanceof Fog) {
-        scene.fog.near = horizon * 0.65;
+        scene.fog.near = horizon * 0.825;
         scene.fog.far = horizon;
       }
       camera.far = horizon * 1.2;
@@ -416,19 +474,25 @@ export function startTerrainViewer(
               roughness: 1,
               side: DoubleSide,
             });
+          terrainMaterials.add(material);
+          const shoreMaskUniform: { value: Texture | null } = { value: null };
+          const shoreMaskActive = { value: false };
           const morphUniform = { value: 0 };
           const fadeUniform = { value: 1 };
           const outgoingUniform = { value: false };
           material.onBeforeCompile = (shader) => {
+            shader.uniforms.shoreWaterMask = shoreMaskUniform;
+            shader.uniforms.shoreMaskActive = shoreMaskActive;
+            shader.uniforms.shorePatchSpan = { value: patch.span };
             shader.uniforms.terrainMorph = morphUniform;
             shader.uniforms.sourceFade = fadeUniform;
             shader.uniforms.sourceOutgoing = outgoingUniform;
             shader.vertexShader =
-              'attribute float seamHeight;\nattribute vec3 seamNormal;\nattribute float seamWeight;\nattribute float coarseHeight;\nattribute vec3 coarseNormal;\nattribute vec3 coarseColor;\nuniform float terrainMorph;\n' +
+              'varying vec2 vShoreMaskUv; uniform float shorePatchSpan;\nattribute float seamHeight;\nattribute vec3 seamNormal;\nattribute float seamWeight;\nattribute float coarseHeight;\nattribute vec3 coarseNormal;\nattribute vec3 coarseColor;\nuniform float terrainMorph;\n' +
               shader.vertexShader;
             shader.vertexShader = shader.vertexShader.replace(
               '#include <begin_vertex>',
-              '#include <begin_vertex>\ntransformed.y=mix(mix(position.y,coarseHeight,terrainMorph),seamHeight,seamWeight);',
+              '#include <begin_vertex>\nvShoreMaskUv=position.xz/shorePatchSpan;\ntransformed.y=mix(mix(position.y,coarseHeight,terrainMorph),seamHeight,seamWeight);',
             );
             shader.vertexShader = shader.vertexShader.replace(
               '#include <beginnormal_vertex>',
@@ -439,10 +503,12 @@ export function startTerrainViewer(
               '#include <color_vertex>\n#ifdef USE_COLOR\nvColor.rgb=mix(color,coarseColor,terrainMorph);\n#endif',
             );
             shader.fragmentShader =
-              'uniform float sourceFade;\nuniform bool sourceOutgoing;\n' + shader.fragmentShader;
+              'uniform sampler2D shoreWaterMask; uniform bool shoreMaskActive; varying vec2 vShoreMaskUv;\nuniform float sourceFade;\nuniform bool sourceOutgoing;\n' +
+              shader.fragmentShader;
             shader.fragmentShader = shader.fragmentShader.replace(
               '#include <clipping_planes_fragment>',
               `#include <clipping_planes_fragment>
+              if(shoreMaskActive && texture2D(shoreWaterMask,vShoreMaskUv).r>0.5) discard;
               // Complementary screen-space masks: depth-writing opaque surfaces,
               // no coincident alpha blend or dependence on source-grid nesting.
               float sourceNoise=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
@@ -451,8 +517,12 @@ export function startTerrainViewer(
           };
           material.customProgramCacheKey = () => 'terrain-shared-edge-imagery-v4';
           const mesh = new Mesh(built.geometry, material);
+          mesh.onBeforeRender = () => {
+            shoreMaskActive.value = shoreMaskUniform.value !== null;
+          };
           resource = {
             mesh,
+            shoreMaskUniform,
             material,
             morphUniform,
             patch,
@@ -563,6 +633,17 @@ export function startTerrainViewer(
     for (const seam of seams) {
       d.uploadBytesTotal += seam.update(dt);
     }
+    shoreline?.update(
+      [...visible, ...outgoing].flatMap((key) => {
+        const p = patches.get(key);
+        return p ? [p] : [];
+      }),
+      world,
+    );
+    d.shorelineTriangles = shoreline?.triangles ?? 0;
+    d.shorelineBytes = shoreline?.bytes ?? 0;
+    d.shorelinePending = shoreline?.pending ?? 0;
+    d.shorelineOmitted = shoreline?.omitted ?? 0;
     water?.rebase(d.origin);
     d.waterCacheBytes = water?.bytes ?? 0;
     d.waterBatches = water?.count ?? 0;
@@ -579,7 +660,13 @@ export function startTerrainViewer(
     d.cpuMs = performance.now() - start;
     d.loadedChunks = data.size;
     d.pendingChunks = pending.size;
-    d.cacheBytes = data.bytes + patches.bytes + d.waterCacheBytes + imageryBytes + antialias.bytes;
+    d.cacheBytes =
+      data.bytes +
+      patches.bytes +
+      d.waterCacheBytes +
+      imageryBytes +
+      antialias.bytes +
+      (shoreline?.bytes ?? 0);
     d.patches = visible.size + outgoing.size;
     d.geometryCacheBytes = patches.bytes;
     d.outgoingPatches = outgoing.size;
@@ -605,6 +692,10 @@ export function startTerrainViewer(
   }
   raf = requestAnimationFrame(frame);
   return {
+    async setTerrainPaint(mode: string): Promise<void> {
+      if (disposed || !manifest) throw new Error('Terrain viewer is not ready');
+      await loadPaint(manifest, mode);
+    },
     async teleportToWaypoint(point: TeleportWaypoint): Promise<void> {
       const request = ++teleportRequest;
       if (disposed || !manifest || (flightMode && !flight))
@@ -637,6 +728,7 @@ export function startTerrainViewer(
     dispose() {
       disposed = true;
       teleportRequest++;
+      paintRequest++;
       cancelAnimationFrame(raf);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKey);
@@ -647,6 +739,7 @@ export function startTerrainViewer(
       data.clear();
       patches.clear();
       water?.dispose();
+      shoreline?.dispose();
       imagery?.dispose();
       flight?.dispose();
       antialias.dispose();

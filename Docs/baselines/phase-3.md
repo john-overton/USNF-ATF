@@ -1,5 +1,344 @@
 # Phase 3 baseline: packaged terrain on Apple M3
 
+## 2026-09-09: analytic water depth and selectable seasonal maps
+
+Source: dirty tree based on `f5625d3c0dac0ecf3ba1a0bbb2f6fc1250783867`.
+Exact changed product/tool/source copies and patch:
+`extracted/terrain-plane-palette-source`; source-files.json SHA-256
+`489c827bf11148c99518d11ad3d92feaaea154725b57848c1e462fa00024fca1`.
+Machine: Apple M3 arm64, macOS 26.6.2, Bun 1.4.2, Node 22.14.0,
+Python 3.14.6, Three.js 0.185.1, Electron 44.2.0. Final Mac package build
+23.2 s. x64 artifacts built, not launched; Linux remains deferred.
+
+The user's 22,476 m altitude screenshot was reproduced at projected
+304726/272303, yaw 0.80285, pitch -0.45. CPU ray intersections at five sampled
+stripe locations found one covering water triangle at +0.200000003 m and actual
+morphed terrain near +0.001 m. One triangle had edges approximately 252.9 km,
+123.7 m and 252.8 km. The accepted water shader reconstructs view depth from the
+fragment's ray intersecting its horizontal plane, then computes logarithmic
+depth with four 24-bit depth steps of bias. Camera roll/pitch, plane elevation,
+floating-origin X/Z and framebuffer viewport are included. Geometry/contact are
+unchanged and normal depth occlusion remains enabled. The formula assumes the
+current centered perspective camera; asymmetric projection would need extension.
+
+Observed unsuccessful experiments: four-step and 32-step biases retained stripes
+(`water-overlap-fixed` and `terrain-palette-acceptance`); a diagnostic 10000-step
+bias cleared them but displaced depth too much to accept (`water-depth-probe`).
+Using reciprocal gl_FragCoord.w instead of interpolated vFragDepth also retained
+the stripes (`water-reciprocal-probe`). These folders are diagnostic evidence,
+not accepted builds. The final analytic-plane comparison clears the repeated
+stripe pattern with the original small bias and retains the dry spit/island.
+It does not remove coarse-LOD coast outlines or change the original water mask.
+
+New `colorMaps` metadata uses the existing checked RGBA transport. Runtime
+selects one image, releases the previous texture, and checks superseded loads
+before decode and before GPU ownership. The helper exposes satellite plus four
+seasons; the new dataset defaults to summer. Offline `weights.npz` preserves four
+uint8 appearance weights and grid identity; editable hex palettes bake directly
+from those weights. They are RGB-derived appearance approximations, not verified
+land-cover classes or observed seasonal weather. The current map is 1024²
+(~548 m/pixel), intentionally broad; it does not specify 25 m shoreline detail.
+
+Output source `extracted/terrain/ukraine-palettes`, installed into
+`~/Library/Application Support/usnf-atf/data/terrains/ukraine`:
+
+| Map | Compressed bytes | SHA-256 |
+|---|---:|---|
+| Summer | 1,159,132 | `2f438e5e37b3278df2cea9f72f39141fde1e143696881c8e2f8e0a7b593894f8` |
+| Spring | 1,177,437 | `66235184621918a16b52717d26361caba3a13934e5a4ccff6e48c84aa6d5659c` |
+| Autumn | 1,178,170 | `f573cce3195969ec1e62dfc4ee0bd3bc8c78c5c8e3fa48b85aee18205b412d17` |
+| Winter | 1,055,141 | `b6119573b6f02325b880548991ebc669b5d115dc6c4a46c751a280c975b71cbb` |
+
+Satellite imagery remains available for comparison. Every height chunk/water
+record equals the previous installed dataset; the installed manifest equals the
+accepted source manifest exactly. The installer validates/copies all declared
+palettes. Authoring weights, palettes and provenance stay in the generated source
+folder; source imagery and generated pixels remain ignored and outside app bundles.
+
+```sh
+cp -R extracted/terrain/ukraine-sentinel-coast extracted/terrain/ukraine-palettes
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline color-maps extracted/terrain/ukraine-palettes/manifest.json
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline probe extracted/terrain/ukraine-palettes/manifest.json
+PYTHONPATH=terrain-pipeline .venv/bin/python -m unittest discover -s terrain-pipeline/tests
+bun run check
+bun run build
+bun tools/terrain/palette-smoke.ts extracted/terrain-plane-palette-final
+bun tools/terrain/waypoint-performance.ts --terrain extracted/terrain/ukraine-palettes --flight --retail --ids 2,3,1 --assert-recovery --out extracted/terrain-plane-palette-flight
+bun tools/terrain/install.ts --terrain extracted/terrain/ukraine-palettes --data-root "$HOME/Library/Application Support/usnf-atf/data" --replace
+bun tools/terrain/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --terrain extracted/terrain/ukraine-palettes --out extracted/terrain-plane-palette-low --camera '219144.16245100333,1800,267020.80352811713,-1.5707963267948966,-0.35' --seconds 5
+git diff --check
+```
+
+Checks: 135 Bun tests / 22,108 assertions pass; 30 Python tests pass in 1.788 s,
+no skips (rasterio deprecation warnings only). Probe validates 832 chunks and all
+palette transports; maximum shared-edge error 0.021069959933129212 m. Tests cover
+water-color exclusion, unchanged physical records, palette-only rebake without
+satellite bytes, exact weight preservation, invalid palette/weight rejection
+before replacing valid output, and alternate-image path/transport validation.
+Independent review caught and corrected weight requantization drift, invalid
+float weights, late palette validation, and a winter-only startup default.
+Final lint initially rejected five redundant type assertions; removed and full
+check passed. An unpackaged diagnostic launch reported Electron sandbox startup
+errors; it was rejected and subsequent acceptance used fresh packaged builds.
+
+The 2560 × 1440 six-mode desktop comparison reports 59.985–60.014 fps after
+300-frame settling per swap, no runtime errors, no pending/omitted water. Cache
+estimate: 410.839 MiB satellite, 84.282 MiB color map, same 84.282 MiB after the
+return to summer. This is the app's combined CPU/GPU cache estimate, not physical
+GPU-memory measurement. GPU image mip estimate alone falls from ~191.94 MiB to
+5.33 MiB. No FPS increase is claimed; the display is already near 60 Hz. Initial
+satellite switching still incurs a decode/upload hitch; the earlier 180-frame
+settle run included it in its 240-frame average, so final measurement waits 300.
+
+Packaged practice-flight jumps 2/3/1 average 59.55 / 59.86 / 60.17 fps; tails
+60.005 / 59.997 / 60.000 fps. Maximum intervals 100 / 50 / 17.8 ms: brief jump
+hitches remain, with recovery and zero runtime errors. Reports/screenshots live
+in `terrain-plane-palette-final` and `terrain-plane-palette-flight`. The final
+rebuild only removed TypeScript assertions after those runs; emitted behavior is
+unchanged. The lower coast check uses that final package: 60.137 fps, p95 17.6 ms, zero
+runtime errors and zero omitted water. Its screenshot was inspected; the near
+shore remains visibly stepped from the existing geometry, with no repeated
+water/ground stripes.
+
+Shoreline ribbons remain a design, not an implementation: see
+[terrain-colors.md](../terrain-colors.md) for continuous coast parameterization,
+material confidence, shared tile endpoints/UVs, variable widths and acceptance
+cases. Next reproducible user step is the Ground colors selector at the coast;
+palette-only authoring commands in that document need no source-image reread.
+
+
+## 2026-09-09: coastal color padding, installed
+
+Source: dirty tree based on `f5625d3c0dac0ecf3ba1a0bbb2f6fc1250783867`.
+Source copies and tracked patch: `extracted/terrain-coast-paint-source`;
+`source-files.json` SHA-256
+`d0b882a535caf5bd28cb4e8d12eac4278fbc1cf30e29ffdc7a96b676c99cb1b8`.
+Machine: Apple M3 arm64, macOS 26.6.2, Bun 1.4.2, Node 22.14.0,
+Python 3.14.6, Three.js 0.185.1, Electron 44.2.0. Runtime source hashes exactly
+match the preceding Sentinel packaged build; this pass changes only Python,
+data and documentation, so no new app package was needed. Prior Bun check
+remains the runtime evidence; it was not rerun for this Python-only change.
+Linux remains deferred; no x64 launch or new waypoint benchmark claimed.
+
+The new CLI repairs a 200 m landward band plus a 100 m feather, and pads up to
+3,000 m offshore under the rendered water. Donors are at least 300 m inside
+known land, excluding all water bodies. Reflected sampling preserves texture
+variation; out-of-bounds/water/other-component reflections use nearest safe
+interior pixels. Component mismatch skips a target rather than copying across
+islands. This does not classify photographed water or measure a new coastline.
+The output is a synthetic land-color underlay, with no contact/geometry edits.
+
+Input atlas SHA-256:
+`1125e6d4465e03a18534f6d81e03b5ce5f7d674dee1e5a5fc225d310a194d610`.
+Output `extracted/terrain/ukraine-sentinel-coast`: 6142 × 6144,
+84,947,985 compressed bytes, SHA-256
+`c8f7f8623df864f8f1fef8ea4b76831d72e7d170e4061c7278cdc4c7b500418a`.
+Changed 204,153 land pixels / 850,411 water-underlay pixels; 309,358 candidates
+skipped by the component guard. Manifest and imagery-info retain parameters,
+counts and input hash. Original source atlas and dataset remain available.
+Every chunk record and water polygon compares equal to the original Sentinel
+manifest. The verified installer replaced local app data, and its resulting
+manifest compares exactly equal to the accepted output.
+
+```sh
+cp -R extracted/terrain/ukraine-sentinel extracted/terrain/ukraine-sentinel-coast
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline paint-coasts extracted/terrain/ukraine-sentinel-coast/manifest.json
+PYTHONPATH=terrain-pipeline .venv/bin/python -m unittest discover -s terrain-pipeline/tests
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline probe extracted/terrain/ukraine-sentinel-coast/manifest.json
+bun tools/terrain/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --terrain extracted/terrain/ukraine-sentinel-coast --out extracted/terrain-coast-paint-final-overview --camera '280000,12000,280000,1.5,-0.9' --seconds 5
+bun tools/terrain/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --terrain extracted/terrain/ukraine-sentinel-coast --out extracted/terrain-coast-paint-final-detail --camera '219144.16245100333,1800,267020.80352811713,-1.5707963267948966,-0.35' --seconds 5
+bun tools/terrain/install.ts --terrain extracted/terrain/ukraine-sentinel-coast --data-root "$HOME/Library/Application Support/usnf-atf/data" --replace
+git diff --check
+```
+
+Tests: 26 pass in 1.886 s, no failures/skips; rasterio Affine deprecation warnings
+only. They cover physical padding distance, feathering, texture variation, lake
+exclusion, island ownership, dry holes, unchanged alpha/geometry, hashes,
+repeat-pass rejection and clearing stale paint provenance on a new imagery bake.
+All 832 chunks pass probe, 33,731 water bodies, maximum seam error
+0.021069959933129212 m. `git diff --check` passes; no files staged.
+
+Final 2560 × 1440 packaged overview: 60.135 fps, p95 17.6 ms; detail:
+60.062 fps, p95 17.6 ms. Both report no runtime errors and zero omitted water.
+Screenshots and reports are in the two `terrain-coast-paint-final-*` directories.
+Earlier unmodified overview was 60.103 fps; these short runs show no measurable
+cadence regression, not a broad GPU benchmark. Texture dimensions, samplers,
+mipmaps and runtime code are unchanged.
+
+Observed iteration: initial nearest-only fill passed tests and removed the main
+fringe, but its screenshot showed long stretched field stripes. Replaced it with
+component-checked reflected samples and rebaked from the original atlas. Review
+found `add_imagery` left stale `coastPaint` metadata, which blocked a later repair
+on a fresh image; fixed and regression-tested. No failing verification runs.
+The final overview removes the mainland water-colored fringe, but the small
+island without a safe donor still has a dark halo. Distant coast geometry remains
+stepped, and repaired texture can repeat inland features. This is not complete
+imagery/shoreline alignment. Reproduce with the overview command above before
+any future geometry refinement; preserve contact behavior and dry islands.
+
+## 2026-09-09: installed direct Sentinel-2 bake
+
+Source: dirty tree based on `f5625d3c0dac0ecf3ba1a0bbb2f6fc1250783867`, including
+prior range/fog/water-budget and credit-UI changes. Exact source copies/patch are
+in `extracted/terrain-sentinel-source`; source-files.json SHA-256
+`d3a3db044bb174c4bc10e1718312a30b4b112664b9e89017b63118e2baec2fb4`.
+Machine: Apple M3 arm64, macOS26.6.2, Bun1.4.2, Node22.14.0, Python3.14.6,
+Three.js0.185.1, Electron44.2.0. Mac packages rebuilt in25.8s; x64 not launched,
+Linux deferred. This is actual direct Sentinel data, not EOX or Blue Marble pixels.
+
+Summer2024 Sentinel-2 L2A RGB/TCI (native10m), using public Earth Search COGs and
+native20m SCL. Catalog:696 low-cloud candidates /48 MGRS tiles; up to6 ranked scenes
+per tile,246 scenes processed. COG overviews feed the~91m RGB bake. Native mask
+contamination aggregates with `max`, explicit255 nodata and a one-output-pixel
+buffer. The source API and download paths are absent from runtime loading.
+
+The first strict composite left357,643 land color pixels masked. A documented
+fallback filled301,478 where at least3 distinct dates were within12/255 of the
+per-channel median (pairwise differences can reach24). Residual56,165 pixels were
+filled from nearest valid color: median radius1 pixel, max5.83095 (~533m). Guards
+permit this only below0.5% of land and within6 pixels. These are lower-confidence
+texture colors, not measured replacement terrain. Remaining3,089,517 pixels without
+satellite coverage were flat-colored only where existing water polygons allow it.
+No elevation or water-classification changes. Direct comparison confirms every
+DEM chunk record and all water polygons match the earlier installed4× theater.
+
+Output `extracted/terrain/ukraine-sentinel`:6142×6144,85,056,009 compressed bytes,
+SHA-256 `1125e6d4465e03a18534f6d81e03b5ce5f7d674dee1e5a5fc225d310a194d610`.
+Provenance: `extracted/terrain-source/sentinel-2/sentinel-2024-b4fa15a3cf6639a8.json`,
+including scene IDs/dates/URLs, scene-cache hashes and all fallback counts.
+Original EOX copies and the uninstalled Blue Marble experiment remain ignored.
+
+```sh
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline imagery extracted/terrain/ukraine-sentinel/manifest.json --provider sentinel --cache extracted/terrain-source/sentinel-2 --size 6144
+bun run check
+PYTHONPATH=terrain-pipeline .venv/bin/python -m unittest discover -s terrain-pipeline/tests
+bun run build
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline probe extracted/terrain/ukraine-sentinel/manifest.json
+bun tools/terrain/install.ts --terrain extracted/terrain/ukraine-sentinel --data-root "$HOME/Library/Application Support/usnf-atf/data" --replace
+bun tools/terrain/waypoint-performance.ts --terrain extracted/terrain/ukraine-sentinel --flight --retail --ids 2,3,1 --assert-recovery --out extracted/terrain-sentinel-accepted
+```
+
+All832 chunks pass probe, maxshared-edge error0.02106996m. Verified installer
+replaced `~/Library/Application Support/usnf-atf/data/terrains/ukraine` only after
+checksums/inflated lengths passed. Credits read “Contains modified Copernicus
+Sentinel data 2024” in About / Data credits, ATTRIBUTIONS.md and the manifest;
+`attributionDisplay: credits` suppresses the permanent line. Legacy manifests
+default to overlay, preserving EOX behavior. Source terms checked against the
+[Copernicus legal notice](https://cds.climate.copernicus.eu/licences/ec-sentinel).
+
+Observed failures/corrections: initial TypeScript exact-optional assignment of
+undefined replaced with conditional assignment. Review found nearest-downsampled
+SCL could miss small clouds. The first max-mask attempt failed its regression
+because using1 as nodata collided with the binary contamination value. Explicit
+255 source/destination nodata fixes that; distinct cache versions prevent reuse
+of those masks. The invalid-mask bake was never installed. Two intentionally
+strict coverage runs stopped before installation, motivating the explicitly
+bounded/documented color-gap treatments above. Final independent review found no
+additional confirmed gap-fill array/date/indexing errors. The final mask regression
+covers small clouds, all-cloud, all-nodata and outside-source regions.
+
+
+Final checks: 135 Bun tests /22,102 expectations plus20 Python tests pass,
+including type/lint/format; Python has no failures/skips, only existing rasterio
+warnings. Packaged three-jump flight averages59.77/59.89/60.14 fps at1440p, with
+~60 fps final windows, zero omitted/pending water and no runtime errors. Cold
+mountain/coast peak frames66.6/50.0 ms; initial post-ready sample includes83.4 ms.
+Inspected final flight screenshot: baked ground imagery present, no persistent
+imagery credit, About / Data credits present/closed. Diagnostic attribution includes
+the exact Copernicus notice; it has not been removed from the dataset.
+
+Additional overview command:
+```sh
+bun tools/terrain/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --terrain extracted/terrain/ukraine-sentinel --out extracted/terrain-sentinel-overview --camera '280000,12000,280000,1.5,-0.9' --seconds 5
+bun tools/terrain/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --terrain extracted/terrain/ukraine-sentinel --out extracted/terrain-sentinel-land --camera '280000,10000,450000,0,-1.4' --seconds 5
+```
+The first overview averaged60.103 fps /17.6ms p95 with zero omitted water/runtime
+errors. Screenshot shows coastline/sea and loaded imagery; it primarily covers
+water, so the second viewpoint targets inland mosaic appearance. The inland run
+averaged60.154 fps /17.6ms p95 with no runtime errors; inspected screenshot shows
+continuous field/vegetation paint with no blank land regions in that view. Fine
+features remain softened by the~91m bake. Existing coarse
+source-LOD shoreline silhouettes remain a limit, separate from texture resolution.
+Final source checksum map matches the working tree; diff check passes, staged set
+is empty. These latest changes have not been committed/pushed.
+
+## 2026-09-09: attribution UI relocation
+
+Source: working tree based on `f5625d3c0dac0ecf3ba1a0bbb2f6fc1250783867`, including
+the prior range/fog/water-budget changes. Changed product files and attribution
+document are hashed in `extracted/terrain-attribution-ui/source-files.json`, SHA-256
+`37d6f808072c5af7a906a433e40b046242ec41993a41364ed0c99e50afd35767`. Mac M3/macOS 26.6.2, Bun 1.4.2, Electron 44.2.0.
+
+The required EOX source credit stays visible. Full license text is removed from
+the persistent line, and full dataset credits are in a closed helper disclosure.
+Root `ATTRIBUTIONS.md` records source/license/modification notices and is linked
+from README. This avoids treating a source-only document as a substitute for
+EOX's stated visible-credit requirement. Attribution metadata and installed data
+are unchanged.
+
+Commands: `bun run check`, `bun run build`, then an isolated packaged flight CDP
+check through `tools/flight/desktop.ts`. Check passes 135 tests / 22,099 expectations,
+including type/lint/format. Python not rerun for UI/document changes. Mac packages
+rebuilt; x64 launch and Linux remain untested/deferred as previously recorded.
+Packaged UI check passes: visible footer contains EOxCloudless without the license
+paragraph; Data credits exists and starts closed, contains CC BY-NC-SA notices,
+and opens on demand. `verification.json`, `credits-open.png` and runtime logs are
+in `extracted/terrain-attribution-ui`; no runtime errors. Final diff check passes.
+
+
+## 2026-09-09: doubled range / half-width fog band
+
+Source: working tree based on `f5625d3c0dac0ecf3ba1a0bbb2f6fc1250783867`, with
+three changed product files: lod.ts SHA-256
+`c9b065160d2f0ac5e5f4c0b2ec3f6643abd69c2d80fc4e9307e6b03cfb75d829`, viewer.ts SHA-256
+`e617a7a03bcfb76048bcc3dc4e06d68e36d2aba76a72d6ec406ffe992b832b91`, water.ts SHA-256
+`ca4282632b82dac6670837d380aa5d237458b540eae3b3dc86b73f40d937f718`.
+Mac M3 arm64 / macOS 26.6.2, Bun 1.4.2, Node 22.14.0, Electron 44.2.0,
+Three.js 0.185.1. Dataset: installed real 4× imagery, identical to prior acceptance.
+
+Range now uses world altitude ×16, clamped 24–300 km. Fog's fade width changes
+from 35% to 17.5% of that range, starting at 82.5%; full fog remains at the horizon.
+Far clipping remains 1.2× horizon. The earlier answer's fixed 80–180 km fog claim
+was incorrect: the selection loop overrides startup values every 200 ms.
+
+A central-theater selection probe at altitude 1/3/10/20 km selects horizons
+24/48/160/300 km, source LOD 1/1/2/3, and 4/16/22/9 source chunks. Existing water
+budgets omit 0/0/40/443 distant batches at those positions. The initial 300 km packaged smoke failed its omitted-water gate, while frame
+cadence was ~16.67 ms and there were no renderer exceptions. The failing output
+is retained in `/tmp/usnf-range-fog-high.log` and `extracted/terrain-range-fog-high`.
+Water caps were then expanded to 1024 batches / 32 MiB; selection at the same
+position fits 571 batches / 16,528,800 estimated bytes with zero omissions.
+The worker still has four outstanding jobs maximum. Flight physics is unchanged.
+
+`bun run check`: 135 tests / 22,099 expectations pass, including type/lint/format.
+Python was not rerun for these renderer-only constants. Linux remains deferred;
+building x64 is not x64 launch acceptance. Source and metadata changes are local.
+
+An interim doubled-range build before the fog follow-up passed six flight jumps
+at 59.76–60.19 fps, with final windows ~60 fps; first mountain/coast peak frames
+66.6/50.9 ms. Artifacts: `extracted/terrain-range-flight`. These interim numbers
+do not claim the narrower fog was present.
+
+Final source verification commands:
+```sh
+bun run check
+bun run build
+bun tools/terrain/waypoint-performance.ts --terrain extracted/terrain/ukraine-4x --flight --retail --ids 2,3,1 --assert-recovery --out extracted/terrain-range-fog-flight
+bun tools/terrain/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --terrain extracted/terrain/ukraine-4x --out extracted/terrain-range-fog-high-accepted --camera '280000,20000,280000,1.5,-0.35' --seconds 5
+```
+
+
+Final narrow-fog flight (before only the water-cap expansion) averaged
+59.78/59.88/60.19 fps across mountain/coast/runway, final windows ~60 fps,
+zero omitted water and no runtime errors. Peak cold mountain/coast frames were
+65.8/50.9 ms. Final expanded-cap package built in 23.7 seconds and passes the
+300 km high-altitude smoke: 60.178 fps, 17.7 ms p95, all 571 water batches loaded,
+zero omitted batches and zero runtime exceptions. Its screenshot was inspected:
+long-range terrain/water are present; coarse source silhouettes and shoreline
+mismatch remain visible at source LOD3. This is not finer elevation data.
+All 135 tests / 22,099 expectations pass after the cap expansion. Final diff check
+passes and no files are staged. Restart the rebuilt app for these local changes.
+
 ## 2026-09-09: installed higher-detail imagery
 
 Source tested: **9658fd8**, Apple M3 arm64/macOS 26.6.2, Bun 1.4.2,

@@ -1,4 +1,12 @@
-import { type BufferGeometry, Mesh, MeshStandardMaterial, type Scene } from 'three';
+import {
+  type BufferGeometry,
+  Mesh,
+  MeshStandardMaterial,
+  type Scene,
+  Vector2,
+  Vector3,
+  Vector4,
+} from 'three';
 import type { WaterBody } from '../data';
 import { waterGeometry, type WaterBatch } from './water-geometry';
 import type { WaterGeometryBuilder } from './water-worker-client';
@@ -11,7 +19,7 @@ interface WaterResource {
   x: number;
   z: number;
 }
-export const WATER_CACHE_BYTES = 16 * 1024 * 1024;
+export const WATER_CACHE_BYTES = 32 * 1024 * 1024;
 /** Cluster nearby small polygons into draw batches, bounding each batch's triangulation work. */
 export function waterBatches(bodies: readonly WaterBody[]): WaterBatch[] {
   const groups = new Map<string, WaterBatch[]>();
@@ -64,7 +72,7 @@ export function nearbyWater(
   let bytes = 0;
   const selected: WaterBatch[] = [];
   for (const batch of near) {
-    if (selected.length >= 128 || bytes + batch.bytes > WATER_CACHE_BYTES) continue;
+    if (selected.length >= 1024 || bytes + batch.bytes > WATER_CACHE_BYTES) continue;
     selected.push(batch);
     bytes += batch.bytes;
   }
@@ -76,6 +84,13 @@ export class WaterLayer {
   private visible = new Set<string>();
   private readonly building = new Set<string>();
   private disposed = false;
+  private depthFrame = -1;
+  private readonly depthUniforms = {
+    waterCameraHeight: { value: 0 },
+    waterViewUp: { value: new Vector3() },
+    waterProjectionScale: { value: new Vector2() },
+    waterViewport: { value: new Vector4() },
+  };
   error = '';
   uploadedBytes = 0;
   omitted = 0;
@@ -136,6 +151,46 @@ export class WaterLayer {
       geometry,
       new MeshStandardMaterial({ color: 0x285e82, roughness: 0.35, metalness: 0.25 }),
     );
+    // Huge, slender sea triangles can lose depth precision in interpolation.
+    // Reconstruct the horizontal plane's view depth from the pixel ray instead.
+    mesh.onBeforeRender = (renderer, _scene, camera) => {
+      if (this.depthFrame === renderer.info.render.frame) return;
+      this.depthFrame = renderer.info.render.frame;
+      const e = camera.matrixWorld.elements,
+        p = camera.projectionMatrix.elements;
+      this.depthUniforms.waterCameraHeight.value = e[13]!;
+      this.depthUniforms.waterViewUp.value.set(e[1], e[5], e[9]);
+      this.depthUniforms.waterProjectionScale.value.set(1 / p[0], 1 / p[5]);
+      renderer.getCurrentViewport(this.depthUniforms.waterViewport.value);
+    };
+    mesh.material.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, this.depthUniforms);
+      shader.vertexShader = 'varying float waterHeight;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\nwaterHeight = (modelMatrix * vec4(position, 1.0)).y;',
+      );
+      shader.fragmentShader =
+        `varying float waterHeight;
+        uniform float waterCameraHeight;
+        uniform vec3 waterViewUp;
+        uniform vec2 waterProjectionScale;
+        uniform vec4 waterViewport;
+      ` + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <logdepthbuf_fragment>',
+        `
+        #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+          vec2 waterNdc = ((gl_FragCoord.xy - waterViewport.xy) / waterViewport.zw) * 2.0 - 1.0;
+          vec3 waterRay = vec3(waterNdc * waterProjectionScale, -1.0);
+          float waterViewDepth = (waterHeight - waterCameraHeight) / dot(waterViewUp, waterRay);
+          gl_FragDepth = vIsPerspective == 0.0 ? gl_FragCoord.z
+            : clamp(log2(max(1.0, 1.0 + waterViewDepth)) * logDepthBufFC * 0.5 - 4.0 / 16777216.0, 0.0, 1.0);
+        #endif
+      `,
+      );
+    };
+    mesh.material.customProgramCacheKey = () => 'water-analytic-plane-depth-v1';
     this.cache.put(batch.id, { mesh, x: batch.x, z: batch.z }, bytes);
     this.scene.add(mesh);
     this.uploadedBytes += bytes;

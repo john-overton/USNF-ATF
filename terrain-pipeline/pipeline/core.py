@@ -332,8 +332,10 @@ def probe(path):
             for y in range(math.ceil(height/(255*SPACINGS[lod]))):
                 if (lod,x,y) not in cache:
                     raise ValueError('missing base/coarse coverage')
-    if 'imagery' in manifest:
-        image=manifest['imagery']; w,h=image['width'],image['height']
+    for image in ([manifest['imagery']] if 'imagery' in manifest else []) + list(manifest.get('colorMaps',{}).values()):
+        w,h=image['width'],image['height']
+        if image.get('attributionDisplay','overlay') not in ('overlay','credits'):
+            raise ValueError('invalid imagery attribution display')
         if not all(isinstance(n,int) and 2<=n<=6144 for n in (w,h)):
             raise ValueError('invalid imagery dimensions')
         target=(path.parent/image['path']).resolve()
@@ -345,6 +347,9 @@ def probe(path):
         with gzip.GzipFile(fileobj=io.BytesIO(data)) as stream:
             if len(stream.read(w*h*4+1))!=w*h*4:
                 raise ValueError('invalid inflated imagery size')
+    if 'shorelines' in manifest:
+        from .shoreline import validate_shorelines
+        validate_shorelines(path, manifest)
     max_seam=0
     for (lod,x,y),(vals,c) in cache.items():
         for neighbour,edge in [((lod,x+1,y),'east'),((lod,x,y+1),'north')]:
@@ -410,8 +415,16 @@ def main():
         if command=='build':p.add_argument('--source',type=Path,required=True)
     p=sub.add_parser('imagery');p.add_argument('manifest',type=Path)
     p.add_argument('--source',type=Path);p.add_argument('--cache',type=Path)
+    p.add_argument('--provider',choices=['sentinel','eox'],default='sentinel')
     p.add_argument('--size',type=int,default=3072);p.add_argument('--attribution');p.add_argument('--license')
     p=sub.add_parser('smooth-coasts');p.add_argument('manifest',type=Path)
+    sub.add_parser('probe-shorelines').add_argument('manifest',type=Path)
+    p=sub.add_parser('shorelines');p.add_argument('manifest',type=Path);p.add_argument('--overrides',type=Path)
+    p=sub.add_parser('color-maps');p.add_argument('manifest',type=Path)
+    p.add_argument('--size',type=int,default=1024);p.add_argument('--palettes',type=Path);p.add_argument('--weights',type=Path)
+    p=sub.add_parser('paint-coasts');p.add_argument('manifest',type=Path)
+    p.add_argument('--inland',type=float,default=200);p.add_argument('--feather',type=float,default=100)
+    p.add_argument('--offshore',type=float,default=3000)
     sub.add_parser('probe').add_argument('manifest',type=Path)
     sub.add_parser('compare-compression').add_argument('manifest',type=Path)
     args=parser.parse_args()
@@ -423,8 +436,23 @@ def main():
                     raise ValueError('local imagery requires --attribution and --license')
                 result=add_imagery(args.manifest,args.source,args.attribution,args.license,args.size)
             elif args.cache:
-                result=fetch_eox(args.manifest,args.cache,args.size)
-            else:raise ValueError('imagery requires --source or --cache for EOX')
+                if args.provider=='sentinel':
+                    from .sentinel import fetch_sentinel
+                    result=fetch_sentinel(args.manifest,args.cache,args.size)
+                else:result=fetch_eox(args.manifest,args.cache,args.size)
+            else:raise ValueError('imagery requires --source or --cache for the selected provider')
+        elif args.command=='probe-shorelines':
+            from .shoreline import probe_shorelines
+            result=probe_shorelines(args.manifest)
+        elif args.command=='shorelines':
+            from .shoreline import bake_shorelines
+            result=bake_shorelines(args.manifest,args.overrides)
+        elif args.command=='color-maps':
+            from .color_map import bake_color_maps
+            result=bake_color_maps(args.manifest,args.size,args.palettes,args.weights)
+        elif args.command=='paint-coasts':
+            from .coast_paint import paint_coasts
+            result=paint_coasts(args.manifest,args.inland,args.feather,args.offshore)
         elif args.command=='smooth-coasts':
             from .coast import smooth_coasts
             manifest=json.loads(args.manifest.read_text())

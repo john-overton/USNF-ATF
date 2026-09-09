@@ -29,6 +29,7 @@ export interface WaterBody {
   readonly holes?: readonly (readonly (readonly [number, number])[])[];
 }
 export interface TerrainImagery {
+  readonly attributionDisplay?: 'overlay' | 'credits';
   readonly path: string;
   readonly width: number;
   readonly height: number;
@@ -37,8 +38,18 @@ export interface TerrainImagery {
   readonly attribution: string;
   readonly license: string;
 }
+export interface TerrainShorelines {
+  readonly path: string;
+  readonly byteLength: number;
+  readonly decodedBytes: number;
+  readonly sha256: string;
+}
 export interface TheaterManifest {
+  readonly shorelines?: TerrainShorelines;
   readonly imagery?: TerrainImagery;
+  readonly colorMaps?: Readonly<
+    Partial<Record<'summer' | 'spring' | 'autumn' | 'winter', TerrainImagery>>
+  >;
   readonly schemaVersion: 1;
   readonly id: string;
   readonly name: string;

@@ -2,13 +2,15 @@
 
 A non-commercial fan remake of Jane's US Navy Fighters '97 (and, later, ATF Gold), built with TypeScript, Three.js, React, and Electron. The goal is retail aircraft and missions over real-elevation terrain, using assets imported from your own copy.
 
-**Current status (2026-09-09):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, stitched panel edges, water, optional georeferenced satellite paint, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. Practice flight now supports a locally imported F-14 with throttle presets, engine/gear/hook controls, retail engine sounds, moving control surfaces, a flight HUD, bracket-selected waypoints, a zoomable regional terrain map and F2/F3 chase views over the generated theater. The existing assisted flight remains the default, with separate opt-in PT-calibrated and recovered-envelope models for comparison. Combat, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
+**Current status (2026-09-09):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, stitched panel edges, water, optional satellite paint, compact seasonal color maps, classified shoreline ribbons, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. Practice flight now supports a locally imported F-14 with throttle presets, engine/gear/hook controls, retail engine sounds, moving control surfaces, a flight HUD, bracket-selected waypoints, a zoomable regional terrain map and F2/F3 chase views over the generated theater. The existing assisted flight remains the default, with separate opt-in PT-calibrated and recovered-envelope models for comparison. Combat, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
 
 Start with [progress and review findings](Docs/progress.md), the [build plan](Docs/build-plan.md) (phase order and exit criteria), and the [design brief](Docs/usnf-atf-plan.md). Contributor and agent instructions are in [AGENTS.md](AGENTS.md). The [full US Navy Fighters manual](Docs/reference/JANES_US_NAVY_FIGHTERS_djvu.txt) is available locally; [reference details](Docs/reference/README.md) record its source and checksum.
 
 > Inspired by Jane's US Navy Fighters '97, ATF, and Fighters Anthology by Jane's Combat Simulations and Electronic Arts. This is a non-profit fan project, not affiliated with or endorsed by Electronic Arts Inc. No retail game assets are distributed. A legally owned copy of the original is required. EA has not endorsed and does not support this product. If you are a rights holder and would like anything changed or removed, open an issue and it will be handled immediately.
 >
-> Terrain derived from Copernicus DEM GLO-30 (ESA) and ESA WorldCover. Engine built on Three.js, React, Vite, and Bun. Project approach informed by the Chrono Divide lineage RA2 community ports.
+> Terrain derived from Copernicus DEM GLO-30 and its water body mask, with optional Sentinel-2 imagery. Engine built on Three.js, React, Vite, and Bun. Project approach informed by the Chrono Divide lineage RA2 community ports.
+
+Terrain/data source notices are in [ATTRIBUTIONS.md](ATTRIBUTIONS.md).
 
 ## macOS development setup
 
@@ -139,3 +141,7 @@ The engine talks to its host only through `engine/src/platform/Platform.ts`. `br
 ## Retail media
 
 Retail discs, ISOs, installs, and anything extracted or converted from them stay in repo-relative `gameassets/` and `extracted/`, which are git-ignored. Nothing derived from retail assets is ever committed, packaged, or published; the planned in-app importer will write only to the user's app data directory. See `Docs/build-plan.md` section 1.
+
+The terrain helper’s **Ground colors** selector compares satellite imagery with
+compact summer/spring/autumn/winter color maps when installed. See the
+[color-map and shoreline material workflow](Docs/terrain-colors.md).

@@ -148,6 +148,29 @@ export function TerrainViewer() {
               Load terrain
             </button>
           </form>
+          {!!stats?.paintModes?.length && (
+            <label>
+              Ground colors{' '}
+              <select
+                id="terrain-paint"
+                value={stats.paint ?? ''}
+                onChange={(event) => {
+                  setError('');
+                  void viewerRef.current
+                    ?.setTerrainPaint(event.target.value)
+                    .catch((err: unknown) => setError(String(err)));
+                }}
+              >
+                {stats.paintModes.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode === 'satellite'
+                      ? 'Satellite imagery'
+                      : `${mode[0]?.toUpperCase()}${mode.slice(1)} color map`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <p className="terrain-path">{rootPath}</p>
           {(error || stats?.error) && (
             <p className="probe-error">
@@ -377,7 +400,10 @@ export function TerrainViewer() {
                   {stats.origin.x} / {stats.origin.z} m
                 </dd>
               </dl>
-              <small>{stats.attribution.join(' · ')}</small>
+              <details>
+                <summary>About / Data credits</summary>
+                <small>{stats.attribution.join(' · ')}</small>
+              </details>
             </>
           )}
           <p>

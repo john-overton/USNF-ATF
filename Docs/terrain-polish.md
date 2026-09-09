@@ -4,16 +4,57 @@ This is a phase 2/3 follow-up, not a new phase. The preserved assisted flight ph
 an exact water index to avoid repeated full-coast scans. Measurements and source scope
 are in [phase 3 baseline](baselines/phase-3.md).
 
-## Imagery choice and scale
+## Current source: direct Sentinel-2 bake
+
+The default imagery source is now direct Sentinel-2 L2A true-color COGs, accessed
+through Element 84 Earth Search / AWS Open Data. Source RGB is 10 m; the installed
+atlas target stays 6142×6144 (~91.39 m per pixel). The offline pipeline selects
+June–August 2024 scenes with <5% scene-level cloud cover, ranks coverage/clarity,
+then conservatively projects the native cloud/shadow/snow mask with maximum
+aggregation and adds a one-output-pixel safety margin.
+It fills missing clear pixels from up to six ranked scenes per MGRS tile. Persistent
+mask gaps may use a separately recorded temporal-agreement fallback: at least three
+distinct dates must each be within 12/255 of the per-channel median. This lower-confidence
+fallback is not proof that the scene classifier was wrong. The pipeline reprojects
+into the terrain CRS, and bakes a local RGBA texture. It uses COG overviews instead
+of transferring every 10 m pixel only to downsample it. Acquisition-date and color
+differences can remain; this is not a claim of EOX-quality seamless compositing.
+
+Residual color gaps may be interpolated only when they total at most 0.5% of land
+and every gap is within six output pixels of valid color. Larger uncovered areas
+fail the build; interpolation counts and maximum radius are recorded separately. Only existing manifest water polygons may
+supply flat water color where satellite coverage is missing. It never fills land
+by assuming sea level. Scene IDs, URLs, acquisition dates, cache checksums and
+processing choices stay in the ignored source cache/provenance. Gameplay uses
+local files only, with no imagery-service calls.
+
+```sh
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline imagery extracted/terrain/ukraine-sentinel/manifest.json --provider sentinel --cache extracted/terrain-source/sentinel-2 --size 6144
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline probe extracted/terrain/ukraine-sentinel/manifest.json
+bun tools/terrain/install.ts --terrain extracted/terrain/ukraine-sentinel --data-root "$HOME/Library/Application Support/usnf-atf/data" --replace
+```
+
+Credit: **Contains modified Copernicus Sentinel data 2024**, in
+[ATTRIBUTIONS.md](../ATTRIBUTIONS.md), About / Data credits and the manifest.
+The direct dataset uses `attributionDisplay: "credits"`, so no permanent overlay.
+[Copernicus legal notice](https://cds.climate.copernicus.eu/licences/ec-sentinel),
+[ESA band resolutions](https://www.esa.int/Applications/Observing_the_Earth/Copernicus/Sentinel-2/Instrument),
+[public COG collection](https://registry.opendata.aws/sentinel-2-l2a-cogs/).
+Elevation remains Copernicus DEM GLO-30; Sentinel-2 provides imagery, not heights.
+
+## Earlier EOX imagery choice and scale
+
 
 Optional imagery now paints terrain in projected world coordinates. One shared
 atlas covers the theater, so its registration does not change with patch/source
 LOD, camera movement or floating-origin rebasing. It has no map labels or road
 overlays. Photographed roads remain part of satellite imagery.
 
-The offline command uses the EOX Sentinel-2 cloudless 2024 mosaic. EOX permits
+The earlier offline command used the EOX Sentinel-2 cloudless 2024 mosaic. EOX permits
 non-commercial use under CC BY-NC-SA 4.0, with attribution and license retained.
-The app displays its attribution even with the flight helper minimized; imagery
+The app displays its source attribution even with the flight helper minimized;
+full license notices are in the helper’s Data credits disclosure and root
+[ATTRIBUTIONS.md](../ATTRIBUTIONS.md). Imagery
 stays outside the application bundle. These imagery terms do not relicense the
 original application source. Keep the imagery's license when sharing derived
 textures. See [EOX license summary](https://cloudless.eox.at/documentation/license)
@@ -38,7 +79,7 @@ The original height tint remains the fallback for manifests without imagery.
 
 ```sh
 # Work on a separate copy if preserving an existing generated theater.
-PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline imagery extracted/terrain/ukraine/manifest.json --cache extracted/terrain-source/imagery --size 3072
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline imagery extracted/terrain/ukraine/manifest.json --provider eox --cache extracted/terrain-source/imagery --size 3072
 # Or reproject a local 0..255 RGB raster with complete theater coverage:
 PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline imagery extracted/terrain/ukraine/manifest.json --source extracted/terrain-source/imagery/rgb.tif --attribution 'Source credit' --license 'Source license'
 PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline probe extracted/terrain/ukraine/manifest.json
@@ -142,3 +183,14 @@ The default CLI size stays 3072 for smaller builds. Runtime and producer limits
 now allow 6144 per axis and 152 MiB compressed; the renderer explicitly rejects
 an atlas exceeding the current GPU's maximum texture size. The installed theater
 is replaced only after all transport and height checks pass.
+
+
+## View distance and fog
+
+Current range is `clamp(worldAltitude * 16, 24000, 300000)` metres. Fog fades
+from `range * 0.825` to `range`, with far clipping at `range * 1.2`. For example,
+3 km world altitude selects 48 km of terrain, with fog from 39.6 to 48 km.
+This doubles the former view range and halves the fade band's proportional width.
+Coverage still obeys the source/chunk budget and may use coarser sources at high
+altitude. Water is bounded to 1024 batches / 32 MiB to accommodate the larger range;
+worker concurrency remains four.

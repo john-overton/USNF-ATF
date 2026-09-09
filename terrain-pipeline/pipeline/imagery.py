@@ -44,6 +44,8 @@ def add_imagery(manifest_path, source_path, attribution, license_text, size=3072
     target = manifest_path.parent/path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
+    # A newly projected atlas has not received the optional coastal color pass.
+    manifest.pop('coastPaint', None)
     manifest['imagery'] = dict(path=path, width=width, height=height, byteLength=len(data),
                               sha256=hashlib.sha256(data).hexdigest(),
                               attribution=attribution, license=license_text)

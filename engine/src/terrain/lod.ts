@@ -66,7 +66,7 @@ export function selectPatches(chunk: TerrainChunk, camera: WorldPosition, maxDep
   return result;
 }
 export function viewDistance(camera: WorldPosition): number {
-  return Math.max(12000, Math.min(150000, camera.y * 8));
+  return Math.max(24000, Math.min(300000, camera.y * 16));
 }
 /** Source levels are not dyadic/nested. Switch the entire visible source set together. */
 export function selectSourceChunks(
