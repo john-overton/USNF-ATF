@@ -51,3 +51,19 @@ The batch SH command returns nonzero for stopped or zero-polygon shapes.
 See [SH notes](../../Docs/formats/sh.md), the [review log](../../Docs/progress.md),
 and [phase 0 baseline](../../Docs/baselines/phase-0.md) for coverage and next steps.
 Keep all converted assets and previews under ignored `extracted/`.
+
+### Neutral F-14 flight-test mesh
+
+The bounded static SH projection restores the full nearest-detail USNF97 F-14
+body and translated wings, with palette colors and its texture atlas:
+
+```sh
+PYTHONPATH=tools/retail python3 -m retail.sh_static extracted/usnf97/USNF_2.LIB/F14.SH --pal extracted/usnf97/USNF_2.LIB/PALETTE.PAL --out extracted/flight/f14.json
+```
+
+The output stays ignored and must be installed separately into local app data;
+never copy it into `engine/public/` or package it. The export contains neutral
+static geometry, not imported flight dynamics or recovered gear/hook animation.
+See [SH notes](../../Docs/formats/sh.md) for the shared-buffer fix, structured
+scope interpretation, JSON contract and remaining limits. The older OBJ/census
+walker is still partial; use the static JSON route for this flight-test model.

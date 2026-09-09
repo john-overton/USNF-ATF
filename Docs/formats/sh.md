@@ -1,8 +1,73 @@
-# SH: partial shape decoder
+# SH: shape research and neutral F-14 projection
 
 Reviewed 2026-09-08 against `31f733e` and locally extracted media. Implementation:
 [`tools/retail/retail/sh.py`](../../tools/retail/retail/sh.py). This describes the
 current decoder and its limits, not a complete format specification.
+
+## 2026-09-09: bounded nearest-detail F-14 development export
+
+New implementation: [`sh_static.py`](../../tools/retail/retail/sh_static.py).
+It projects a single neutral static pose from locally extracted USNF97 media;
+it does not load or execute the retail x86 code and is not a general SH renderer.
+The older `sh.py` graph census and OBJ route remain partial, as described below.
+
+```sh
+PYTHONPATH=tools/retail python3 -m retail.sh_static extracted/usnf97/USNF_2.LIB/F14.SH --pal extracted/usnf97/USNF_2.LIB/PALETTE.PAL --out extracted/flight/f14.json
+python3 -m unittest discover -s tools/retail/tests -p test_sh_static.py
+```
+
+Confirmed export corrections and bounded interpretations:
+
+- `0x82`'s +4 uint16 is a destination in eight-byte shared vertex slots.
+  Updates preserve the other slots. Each emitted polygon captures its resolved
+  positions immediately, so later writes cannot alter earlier geometry.
+  Unresolved references are errors, not silently omitted faces.
+- Following `0x38` only as an unconditional jump had skipped most fuselage
+  polygons. In the observed F-14 program its forward target also identifies a
+  structured subtree end. The static projection reads the enclosed records,
+  including both painter-order sides, and ends the scope at its final `0x1e`.
+  This establishes a useful static projection, **not full interpreter call or
+  visibility semantics**. Inner `0x1e` markers do not truncate an enclosing scope.
+- Nearest-detail projection stays on distance-test/far-model fallthrough and
+  ends before following LOD definitions. It does not superimpose distant models.
+- `0xc4` selects a part block through its final relative offset, with a translated
+  coordinate frame. Its translation words are renderer X/up/forward, whereas
+  vertex records store X/forward/up. Child scopes restore the caller's placement.
+  The two verified neutral F-14 wing parts become separate meshes with pivots.
+- Opaque `0xf0` records accept only relocated `push target; push thunk; ret`
+  reentry patterns and a bounded observed word-compare guard. A zero-state
+  static branch is selected; arithmetic that would patch animation angles is
+  not run. Unknown guards/reentries fail. This is not an x86 virtual machine.
+- Stored +Z is vertical and +Y points toward the nose. The earlier bounds-based
+  axis concern below is superseded for this F-14. Export maps to +X right,
+  +Y up, -Z nose. Longitudinal length is normalized to **19.1 m as a presentation
+  choice**, not a decoded unit conversion. Vertical zero is preserved; centering
+  on the high tail fins would incorrectly lower the belly into the runway.
+- Palette faces retain colors; textured faces carry atlas pixel UVs and decoded
+  PIC RGBA. Meshes split by component and textured/untextured material. Texture
+  orientation is a separate packaged visual acceptance item.
+
+The local export contains **186 resolved polygons / 326 triangles**, six meshes
+(body and two wings, each split by material), and the locally decoded 256×411
+atlas. The standalone oblique preview shows a recognizable fuselage, nose,
+canopy silhouette, twin tails, stabilizers and wings. Parser success, this shape
+recognition, packaged texture review and original game parity remain distinct.
+No model, palette or texture bytes are committed or packaged.
+
+JSON contract is version 1: nonindexed triangle `positions` in body-space metres,
+matching per-vertex sRGB `colors`, optional `uvs` and
+`texture: {width,height,rgba}`, plus `parts` with unique `name` and body-space
+`pivot`. A renderer places each part group at its pivot and subtracts that pivot
+from its vertices. Root arrays may be empty. `source` records input hashes and
+projection scope; `limitations` states what is not recovered.
+
+Nine synthetic regressions cover shared-buffer replacement, structured scope
+and LOD isolation, translated parts, missing indices, controlled truncation,
+opaque-code rejection, target bounds, and the optional-UV/vertical-origin export contract. No fixture contains retail geometry.
+The neutral projection does **not** recover original gear/hook animation,
+wing-sweep scheduling, textures' original shading, or flight coefficients.
+Flight-test gear/hook animation may be original adapter geometry and must be
+identified that way. Other aircraft and ATF are not accepted by this experiment.
 
 ## Container and implemented records
 
