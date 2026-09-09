@@ -1,4 +1,4 @@
-import { BoxGeometry, Group, Mesh, type MeshStandardMaterial } from 'three';
+import { BoxGeometry, type Group, Mesh, type MeshStandardMaterial } from 'three';
 import type { AircraftId } from './aircraft-catalog';
 
 /** Original visual hook; no arresting force or recovered retail animation. */
@@ -23,5 +23,6 @@ export function configureAircraftHook(
   }
   hook.visible = id !== 'x31';
   hook.userData.armLength = length;
+  hook.userData.stowedAngle = skyhawk ? -0.18 : 0;
   hook.userData.deployAngle = skyhawk ? 0.4 : Math.PI / 4;
 }

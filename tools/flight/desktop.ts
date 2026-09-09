@@ -190,6 +190,12 @@ export async function openDesktop(options: DesktopOptions) {
     });
     await send('Page.bringToFront');
     await send('Emulation.setFocusEmulationEnabled', { enabled: true });
+    // Do not navigate away while Electron is still initializing the first renderer.
+    await poll(async () => {
+      try {
+        return await evaluate('document.readyState === "complete" && location.href !== "about:blank"') ? true : undefined;
+      } catch { return undefined; }
+    }, 'initial document ready');
     const url = new URL(page.url);
     for (const [key, value] of Object.entries({
       view: 'terrain',

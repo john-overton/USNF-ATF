@@ -33,8 +33,8 @@ for (const id of ['a4e', 'x31'] as const) {
     await session.capture('airborne');
     await session.evaluate(`const select=document.querySelector('#flight-model-selector'); select.value='retail-envelope'; select.dispatchEvent(new Event('change',{bubbles:true}));`);
     await session.poll(async () => {
-      try { return await session.evaluate('window.__flightDiagnostics?.().flightModelId === "retail-envelope"'); }
-      catch { return false; }
+      try { return (await session.evaluate('window.__flightDiagnostics?.().flightModelId === "retail-envelope"')) || undefined; }
+      catch { return undefined; }
     }, 'retail flight model');
     const fitted = await ready();
     const profile = await Bun.file(`extracted/flight/${id}-flight.json`).json();
@@ -51,15 +51,15 @@ for (const id of ['a4e', 'x31'] as const) {
     // Exercise the actual React dropdown and its full navigation/reset path.
     await session.evaluate(`const select=document.querySelector('#aircraft-selector'); select.value='f14'; select.dispatchEvent(new Event('change',{bubbles:true}));`);
     await session.poll(async () => {
-      try { return await session.evaluate('window.__flightDiagnostics?.().aircraftId === "f14"'); }
-      catch { return false; }
+      try { return (await session.evaluate('window.__flightDiagnostics?.().aircraftId === "f14"')) || undefined; }
+      catch { return undefined; }
     }, 'dropdown navigation');
     const fallback = await ready();
     assert(fallback.modelTriangles === 0 && fallback.aircraftName.includes('not installed'), 'missing import not identified');
     await session.evaluate(`const select=document.querySelector('#aircraft-selector'); select.value=${JSON.stringify(id)}; select.dispatchEvent(new Event('change',{bubbles:true}));`);
     await session.poll(async () => {
-      try { return await session.evaluate(`window.__flightDiagnostics?.().aircraftId === ${JSON.stringify(id)}`); }
-      catch { return false; }
+      try { return (await session.evaluate(`window.__flightDiagnostics?.().aircraftId === ${JSON.stringify(id)}`)) || undefined; }
+      catch { return undefined; }
     }, 'dropdown return');
     const restored = await ready();
     assert(restored.modelTriangles === d.modelTriangles, 'selection did not reload geometry');

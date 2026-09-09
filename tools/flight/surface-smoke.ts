@@ -1,6 +1,8 @@
 /** Actual Electron key-driven surface and hook checks, with optional model inspection views. */
 import { openDesktop } from './desktop';
-const preview = await Bun.build({ entrypoints: ['tools/flight/aircraft-preview.ts'], target: 'browser', format: 'iife', minify: true });
+import { createRequire } from 'node:module';
+const engineRequire = createRequire(new URL('../../engine/package.json', import.meta.url));
+const preview = await Bun.build({ entrypoints: ['tools/flight/aircraft-preview.ts'], target: 'browser', format: 'iife', minify: true, plugins: [{name: 'engine-three', setup(build) { build.onResolve({filter: /^three$/}, () => ({path: engineRequire.resolve('three')})); }}] });
 if (!preview.success) throw new Error(String(preview.logs));
 const previewScript = await preview.outputs[0]!.text();
 
@@ -23,7 +25,7 @@ for (const id of ['a4e', 'x31'] as const) {
   async function checkAngle(prefix: string, min: number) {
     const d = await read();
     const angles = Object.entries(d.animation).filter(([name]) => name.startsWith(prefix));
-    assert(angles.length > 0 && angles.every(([, value]) => Number(value) > min), `${prefix} did not move`);
+    assert(angles.length > 0 && angles.every(([, value]) => Number(value) > min), `${prefix} did not move: ${JSON.stringify({angles, systems:d.systems})}`);
   }
   try {
     await session.poll(async () => {
@@ -41,12 +43,12 @@ for (const id of ['a4e', 'x31'] as const) {
     await key('KeyE', true); await Bun.sleep(350);
     await checkAngle('rudder-', 0.05); await save('rudder'); await key('KeyE', false);
     await tap('KeyF'); await tap('KeyB');
-    await session.poll(async () => (await read()).systems.flapFraction > 0.99, 'flaps extended');
+    await session.poll(async () => (await read()).systems.flapFraction > 0.99 ? true : undefined, 'flaps extended');
     await checkAngle(id === 'a4e' ? 'flap-' : 'elevon-', 0.2);
     if (id === 'a4e') {
       await checkAngle('airbrake-', 0.6);
       await tap('KeyH');
-      await session.poll(async () => (await read()).systems.hookFraction > 0.99, 'hook down');
+      await session.poll(async () => (await read()).systems.hookFraction > 0.99 ? true : undefined, 'hook down');
       const d = await read();
       const a = d.animation;
       const tipY = a.hookPivotY - Math.sin(a.hookRotation) * a.hookArmLength;
@@ -56,7 +58,7 @@ for (const id of ['a4e', 'x31'] as const) {
     }
     await save('devices');
     await tap('KeyF'); await tap('KeyB'); if (id === 'a4e') await tap('KeyH');
-    await session.poll(async () => (await read()).systems.flapFraction < 0.01 && (await read()).systems.hookFraction < 0.01, 'devices retracted');
+    await session.poll(async () => (await read()).systems.flapFraction < 0.01 && (await read()).systems.hookFraction < 0.01 ? true : undefined, 'devices retracted');
     await save('returned');
     const returned = checkpoints.returned;
     const prefixes = ['elevator-', 'aileron-', 'canard-', 'elevon-', 'rudder-', 'flap-', 'airbrake-'];
@@ -74,6 +76,7 @@ for (const id of ['a4e', 'x31'] as const) {
       await session.evaluate(`window.aircraftPreview(${JSON.stringify(data)},${JSON.stringify(id)},${JSON.stringify(controls)},${hook},${JSON.stringify(view)})`);
       await session.capture(name);
     }
+    assert(session.errors.length === 0, 'inspection renderer errors');
     console.log(`${id}: pitch, roll, rudder, flaps, device return and hook placement pass`);
   } finally { await session.close(); }
 }

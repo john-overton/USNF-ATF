@@ -534,7 +534,10 @@ export class FlightLayer {
         );
     }
     this.model?.setAfterburner(this.input.engineRunning && this.systems.afterburnerFraction > 0.1);
-    this.hook.rotation.x = this.systems.hookFraction * Number(this.hook.userData.deployAngle);
+    this.hook.rotation.x =
+      Number(this.hook.userData.stowedAngle) +
+      this.systems.hookFraction *
+        (Number(this.hook.userData.deployAngle) - Number(this.hook.userData.stowedAngle));
     for (const burner of this.burners) {
       burner.visible = this.systems.afterburnerFraction > 0.01 && this.input.engineRunning;
       burner.scale.y = Math.max(0.01, this.systems.afterburnerFraction);

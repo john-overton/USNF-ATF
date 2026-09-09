@@ -28,11 +28,13 @@ Object.assign(window, {
     }
     for (const part of aircraft!.data.parts ?? [])
       if (part.rotationAxis) aircraft!.setSurfaceAngle(part.name, surfaceAngle(part.name, controls));
-    hook.rotation.x = hookFraction * Number(hook.userData.deployAngle);
+    hook.rotation.x = Number(hook.userData.stowedAngle) + hookFraction * (Number(hook.userData.deployAngle) - Number(hook.userData.stowedAngle));
     camera.up.set(0, 1, 0);
     if (view === 'top') { camera.position.set(0, 40, 0); camera.up.set(0, 0, -1); }
     else if (view === 'side') camera.position.set(40, 0, 0);
     else camera.position.set(20, 12, -25);
+    camera.zoom = view === 'top' ? 0.75 : 1;
+    camera.updateProjectionMatrix();
     camera.lookAt(0, 0, 0);
     renderer.render(scene, camera);
   },
