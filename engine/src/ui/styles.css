@@ -60,3 +60,54 @@ th {
   font-weight: 500;
   white-space: nowrap;
 }
+.terrain-panel {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 400px;
+  max-width: calc(100% - 64px);
+  max-height: calc(100% - 64px);
+  overflow: auto;
+  background: #09131be8;
+  border: 1px solid #64829a;
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 12px;
+}
+.terrain-panel h1 {
+  font-size: 18px;
+  margin-top: 0;
+}
+.terrain-panel form {
+  display: grid;
+  gap: 8px;
+}
+.terrain-panel label {
+  display: grid;
+  gap: 4px;
+}
+.terrain-panel input,
+.terrain-panel select,
+.terrain-panel button {
+  padding: 6px;
+  font: inherit;
+}
+.terrain-panel a {
+  color: #9bcfff;
+}
+.terrain-path {
+  overflow-wrap: anywhere;
+  color: #9aafbf;
+}
+.terrain-stats {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 12px;
+}
+.terrain-stats dt {
+  color: #a3b5c5;
+}
+.terrain-stats dd {
+  margin: 0;
+  text-align: right;
+}

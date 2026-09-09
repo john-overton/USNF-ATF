@@ -1,9 +1,9 @@
 /**
- * Terrain streamer (phase 3). For now: the chunk addressing scheme from brief 5.3 so
- * the manifest schema in `../data` has something to point at.
+ * Terrain source chunk addressing. Runtime validation, decoding and rendering live
+ * in sibling modules; these constants are shared with the offline pipeline.
  */
 
-/** LOD 0 is the finest level (30 m detail); each level up is 3x coarser. */
+/** LOD 0 is the finest level (30 m detail); 30 → 100 is not a factor of three. */
 export type LodLevel = 0 | 1 | 2 | 3 | 4;
 
 export const LOD_METERS: Readonly<Record<LodLevel, number>> = {

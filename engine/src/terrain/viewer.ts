@@ -1,0 +1,439 @@
+import {
+  AmbientLight,
+  Color,
+  DirectionalLight,
+  DoubleSide,
+  Fog,
+  Mesh,
+  MeshStandardMaterial,
+  PerspectiveCamera,
+  Scene,
+  Shape,
+  ShapeGeometry,
+  Vector3,
+  WebGLRenderer,
+} from 'three';
+import type { TerrainChunk, TheaterManifest } from '../data';
+import type { FsRoot, Platform } from '../platform/Platform';
+import { probeWebGL2 } from '../render/glProbe';
+import { ByteCache } from './cache';
+import { decodeChunk } from './chunk';
+import {
+  floatingOrigin,
+  selectPatches,
+  selectSourceChunks,
+  viewDistance,
+  type WorldPosition,
+} from './lod';
+import { parseManifest, safeRelativePath } from './manifest';
+import { buildPatch } from './mesh';
+
+export interface TerrainDiagnostics {
+  status: 'loading' | 'ready' | 'error';
+  error: string;
+  frames: number;
+  frameMs: number;
+  frameP95Ms: number;
+  cpuMs: number;
+  triangles: number;
+  drawCalls: number;
+  loadedChunks: number;
+  pendingChunks: number;
+  cacheBytes: number;
+  uploadBytesTotal: number;
+  uploadBytesPerSecond: number;
+  camera: WorldPosition;
+  origin: { x: number; z: number };
+  sourceLod: number;
+  patches: number;
+  width: number;
+  height: number;
+  name: string;
+  source: string;
+  attribution: readonly string[];
+}
+declare global {
+  interface Window {
+    __terrainDiagnostics?: () => TerrainDiagnostics;
+  }
+}
+interface PatchResource {
+  mesh: Mesh;
+  material: MeshStandardMaterial;
+  cameraUniform: { value: Vector3 };
+  chunk: TerrainChunk;
+  x: number;
+  z: number;
+  bytes: number;
+}
+
+export function startTerrainViewer(
+  canvas: HTMLCanvasElement,
+  platform: Platform,
+  root: FsRoot,
+  manifestPath: string,
+  update: (d: TerrainDiagnostics) => void,
+): { dispose(): void } {
+  const renderer = new WebGLRenderer({
+    canvas,
+    antialias: true,
+    powerPreference: 'high-performance',
+  });
+  // CSS pixels, intentionally 1:1: 2560x1440 means a measured 1440p drawing buffer.
+  renderer.setPixelRatio(1);
+  renderer.setClearColor(new Color(0x91b1c8));
+  void platform.diagnostics.reportProbe(
+    probeWebGL2(renderer.getContext() as WebGL2RenderingContext),
+  );
+  const scene = new Scene();
+  scene.fog = new Fog(0x91b1c8, 80000, 180000);
+  scene.add(new AmbientLight(0xffffff, 1.7));
+  const sun = new DirectionalLight(0xfff0d0, 2.4);
+  sun.position.set(-1, 2, -0.5);
+  scene.add(sun);
+  const camera = new PerspectiveCamera(60, 1, 5, 400000);
+  const world: WorldPosition = { x: 0, y: 4000, z: 0 };
+  let yaw = 0,
+    pitch = -0.45;
+  const data = new ByteCache<Float32Array>(32 * 1024 * 1024);
+  const patches = new ByteCache<PatchResource>(96 * 1024 * 1024, (p) => {
+    scene.remove(p.mesh);
+    p.mesh.geometry.dispose();
+    p.material.dispose();
+  });
+  const visible = new Set<string>(),
+    pending = new Set<string>(),
+    failed = new Set<string>();
+  const water: Mesh<ShapeGeometry, MeshStandardMaterial>[] = [];
+  let desired: TerrainChunk[] = [],
+    displayed: TerrainChunk[] = [],
+    manifest: TheaterManifest | undefined,
+    folder = '';
+  let disposed = false,
+    raf = 0,
+    last = performance.now(),
+    lastSelect = -Infinity,
+    lastStats = last,
+    uploadedAtStats = 0;
+  const frameTimes: number[] = [];
+  const d: TerrainDiagnostics = {
+    status: 'loading',
+    error: '',
+    frames: 0,
+    frameMs: 0,
+    frameP95Ms: 0,
+    cpuMs: 0,
+    triangles: 0,
+    drawCalls: 0,
+    loadedChunks: 0,
+    pendingChunks: 0,
+    cacheBytes: 0,
+    uploadBytesTotal: 0,
+    uploadBytesPerSecond: 0,
+    camera: world,
+    origin: { x: 0, z: 0 },
+    sourceLod: 0,
+    patches: 0,
+    width: 0,
+    height: 0,
+    name: '',
+    source: '',
+    attribution: [],
+  };
+  const diagnostics = (): TerrainDiagnostics => ({
+    ...d,
+    camera: { ...world },
+    origin: { ...d.origin },
+  });
+  window.__terrainDiagnostics = diagnostics;
+  const keys = new Set<string>();
+  const onKey = (event: KeyboardEvent): void => {
+    if (
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLSelectElement ||
+      event.target instanceof HTMLButtonElement
+    )
+      return;
+    if (
+      [
+        'KeyW',
+        'KeyS',
+        'KeyA',
+        'KeyD',
+        'KeyQ',
+        'KeyE',
+        'ShiftLeft',
+        'ShiftRight',
+        'ArrowLeft',
+        'ArrowRight',
+        'ArrowUp',
+        'ArrowDown',
+      ].includes(event.code)
+    ) {
+      event.preventDefault();
+      if (event.type === 'keydown') keys.add(event.code);
+      else keys.delete(event.code);
+    }
+  };
+  const blur = (): void => {
+    keys.clear();
+  };
+  const move = (event: PointerEvent): void => {
+    if (event.buttons === 1) {
+      yaw -= event.movementX * 0.003;
+      pitch = Math.max(-1.5, Math.min(1.5, pitch - event.movementY * 0.003));
+    }
+  };
+  const down = (event: PointerEvent): void => {
+    canvas.focus();
+    canvas.setPointerCapture(event.pointerId);
+  };
+  const resize = (): void => {
+    const w = canvas.clientWidth || 1280,
+      h = canvas.clientHeight || 800;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    d.width = w;
+    d.height = h;
+  };
+  window.addEventListener('keydown', onKey);
+  window.addEventListener('keyup', onKey);
+  window.addEventListener('blur', blur);
+  window.addEventListener('resize', resize);
+  canvas.addEventListener('pointermove', move);
+  canvas.addEventListener('pointerdown', down);
+  resize();
+  const fail = (error: unknown): void => {
+    if (disposed) return;
+    d.status = 'error';
+    d.error = error instanceof Error ? error.message : String(error);
+    update(diagnostics());
+  };
+  const pump = (): void => {
+    if (disposed) return;
+    for (const chunk of desired) {
+      if (pending.size >= 4) break;
+      if (data.get(chunk.path) || pending.has(chunk.path) || failed.has(chunk.path)) continue;
+      pending.add(chunk.path);
+      void platform.fs
+        .readBytes(root, folder + chunk.path)
+        .then((bytes) => decodeChunk(bytes, chunk))
+        .then((samples) => {
+          if (!disposed) {
+            data.put(chunk.path, samples, samples.byteLength);
+            lastSelect = -Infinity;
+          }
+        })
+        .catch((error: unknown) => {
+          failed.add(chunk.path);
+          fail(error);
+        })
+        .finally(() => {
+          pending.delete(chunk.path);
+          pump();
+        });
+    }
+  };
+  void (async () => {
+    const path = safeRelativePath(manifestPath);
+    folder = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
+    const text = await platform.fs.readText(root, path);
+    const m = parseManifest(text);
+    if (disposed) return;
+    manifest = m;
+    d.name = m.name;
+    d.source = m.source;
+    d.attribution = m.attribution;
+    world.x = m.extents.width * 0.5;
+    world.z = m.extents.height * 0.35;
+    world.y = Math.max(2000, Math.min(12000, m.extents.width * 0.08));
+    for (const body of m.waterBodies) {
+      const shape = new Shape();
+      const [waterX, waterZ] = body.polygon[0]!;
+      body.polygon.forEach(([x, z], i) => {
+        if (i === 0) shape.moveTo(x - waterX, waterZ - z);
+        else shape.lineTo(x - waterX, waterZ - z);
+      });
+      shape.closePath();
+      const geometry = new ShapeGeometry(shape);
+      geometry.rotateX(-Math.PI / 2);
+      const mesh = new Mesh(
+        geometry,
+        new MeshStandardMaterial({
+          color: 0x285e82,
+          roughness: 0.35,
+          metalness: 0.25,
+          side: DoubleSide,
+        }),
+      );
+      mesh.position.y = body.elevation + 0.2;
+      mesh.userData.originX = waterX;
+      mesh.userData.originZ = waterZ;
+      water.push(mesh);
+      scene.add(mesh);
+    }
+  })().catch(fail);
+
+  function select(now: number): void {
+    if (!manifest || now - lastSelect < 200) return;
+    lastSelect = now;
+    const horizon = viewDistance(world);
+    if (scene.fog instanceof Fog) {
+      scene.fog.near = horizon * 0.65;
+      scene.fog.far = horizon;
+    }
+    camera.far = horizon * 1.2;
+    camera.updateProjectionMatrix();
+    const selection = selectSourceChunks(manifest, world);
+    desired = selection.chunks;
+    pump();
+    // Preserve previous coverage until a complete new source set is available.
+    if (desired.every((c) => data.get(c.path))) {
+      displayed = desired;
+      d.sourceLod = selection.lod;
+      if (d.status !== 'error') d.status = 'ready';
+    } else if (!displayed.length) displayed = desired.filter((c) => data.get(c.path));
+    const nextVisible = new Set<string>();
+    for (const chunk of displayed) {
+      const samples = data.get(chunk.path);
+      if (!samples) continue;
+      for (const patch of selectPatches(chunk, world)) {
+        if (
+          chunk.originX + patch.x >= manifest.extents.width ||
+          chunk.originZ + patch.z >= manifest.extents.height
+        )
+          continue;
+        const key = `${chunk.path}:${patch.key}`;
+        nextVisible.add(key);
+        let resource = patches.get(key);
+        if (!resource) {
+          const built = buildPatch(chunk, samples, patch, manifest.extents),
+            material = new MeshStandardMaterial({
+              vertexColors: true,
+              roughness: 1,
+              side: DoubleSide,
+            });
+          const cameraUniform = { value: new Vector3() };
+          material.onBeforeCompile = (shader) => {
+            shader.uniforms.terrainCamera = cameraUniform;
+            shader.uniforms.terrainSpan = { value: patch.span };
+            shader.vertexShader =
+              'attribute float coarseHeight;\nuniform vec3 terrainCamera;\nuniform float terrainSpan;\n' +
+              shader.vertexShader;
+            shader.vertexShader = shader.vertexShader.replace(
+              '#include <begin_vertex>',
+              '#include <begin_vertex>\nfloat terrainDistance=distance(position,terrainCamera);\nfloat terrainMorph=smoothstep(terrainSpan*2.0,terrainSpan*2.8,terrainDistance);\ntransformed.y=mix(position.y,coarseHeight,terrainMorph);',
+            );
+          };
+          material.customProgramCacheKey = () => 'terrain-height-morph-v1';
+          const mesh = new Mesh(built.geometry, material);
+          resource = {
+            mesh,
+            material,
+            cameraUniform,
+            chunk,
+            x: patch.x,
+            z: patch.z,
+            bytes: built.bytes,
+          };
+          patches.put(key, resource, built.bytes);
+          scene.add(mesh);
+          d.uploadBytesTotal += built.bytes;
+        }
+        resource.mesh.visible = true;
+      }
+    }
+    for (const key of visible)
+      if (!nextVisible.has(key)) {
+        const p = patches.get(key);
+        if (p) p.mesh.visible = false;
+      }
+    visible.clear();
+    for (const key of nextVisible) visible.add(key);
+  }
+  function frame(now: number): void {
+    if (disposed) return;
+    const start = performance.now(),
+      dt = Math.min(0.1, (now - last) / 1000);
+    frameTimes.push(now - last);
+    if (frameTimes.length > 240) frameTimes.shift();
+    last = now;
+    const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 6000 : 1200) * dt;
+    if (keys.has('ArrowLeft')) yaw += dt;
+    if (keys.has('ArrowRight')) yaw -= dt;
+    if (keys.has('ArrowUp')) pitch = Math.min(1.5, pitch + dt);
+    if (keys.has('ArrowDown')) pitch = Math.max(-1.5, pitch - dt);
+    const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS')),
+      right = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
+    world.x += (-Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
+    world.z += (-Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
+    world.y = Math.max(25, world.y + (Number(keys.has('KeyE')) - Number(keys.has('KeyQ'))) * speed);
+    if (manifest) {
+      world.x = Math.max(0, Math.min(manifest.extents.width, world.x));
+      world.z = Math.max(0, Math.min(manifest.extents.height, world.z));
+    }
+    select(now);
+    d.origin = floatingOrigin(world);
+    camera.position.set(world.x - d.origin.x, world.y, world.z - d.origin.z);
+    camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    for (const key of visible) {
+      const p = patches.get(key);
+      if (!p) continue;
+      p.mesh.position.set(
+        p.chunk.originX + p.x - d.origin.x,
+        0,
+        p.chunk.originZ + p.z - d.origin.z,
+      );
+      p.cameraUniform.value.set(
+        world.x - p.chunk.originX - p.x,
+        world.y,
+        world.z - p.chunk.originZ - p.z,
+      );
+    }
+    for (const mesh of water) {
+      mesh.position.x = (mesh.userData.originX as number) - d.origin.x;
+      mesh.position.z = (mesh.userData.originZ as number) - d.origin.z;
+    }
+    renderer.render(scene, camera);
+    d.frames++;
+    d.triangles = renderer.info.render.triangles;
+    d.drawCalls = renderer.info.render.calls;
+    d.cpuMs = performance.now() - start;
+    d.loadedChunks = data.size;
+    d.pendingChunks = pending.size;
+    d.cacheBytes = data.bytes + patches.bytes;
+    d.patches = visible.size;
+    if (now - lastStats >= 500) {
+      d.frameMs = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length;
+      const sorted = [...frameTimes].sort((a, b) => a - b);
+      d.frameP95Ms = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]!;
+      d.uploadBytesPerSecond = (d.uploadBytesTotal - uploadedAtStats) / ((now - lastStats) / 1000);
+      uploadedAtStats = d.uploadBytesTotal;
+      lastStats = now;
+      update(diagnostics());
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+  return {
+    dispose() {
+      disposed = true;
+      cancelAnimationFrame(raf);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKey);
+      window.removeEventListener('blur', blur);
+      window.removeEventListener('resize', resize);
+      canvas.removeEventListener('pointermove', move);
+      canvas.removeEventListener('pointerdown', down);
+      data.clear();
+      patches.clear();
+      for (const mesh of water) {
+        mesh.geometry.dispose();
+        mesh.material.dispose();
+      }
+      renderer.dispose();
+      if (window.__terrainDiagnostics === diagnostics) delete window.__terrainDiagnostics;
+    },
+  };
+}
