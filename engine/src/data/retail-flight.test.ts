@@ -1,3 +1,4 @@
+import { validateAircraftProfile } from '../flight/aircraft-catalog';
 import { expect, test } from 'bun:test';
 import { parseRetailFlightProfile } from './retail-flight';
 
@@ -146,4 +147,23 @@ test('native routine inputs preserve exact integers and agree with SI envelope v
     mutate(invalid);
     expect(() => parseRetailFlightProfile(invalid)).toThrow();
   }
+});
+
+test('ATF provenance survives parsing and aircraft profiles cannot cross slots', () => {
+  const imported = parseRetailFlightProfile({
+    ...fixture(),
+    source: { ...fixture().source, game: 'atf-gold', file: 'F31.PT' },
+  });
+  expect(imported.source.game).toBe('atf-gold');
+  expect(() => validateAircraftProfile('x31', imported)).not.toThrow();
+  expect(() => validateAircraftProfile('f14', imported)).toThrow('does not match');
+  const skyhawk = parseRetailFlightProfile({
+    ...fixture(),
+    source: { ...fixture().source, file: 'A4E.PT' },
+    afterburnerThrustN: fixture().militaryThrustN,
+  });
+  expect(() => validateAircraftProfile('a4e', skyhawk)).not.toThrow();
+  expect(() => validateAircraftProfile('a4e', { ...skyhawk, afterburnerThrustN: 200000 })).toThrow(
+    'afterburner',
+  );
 });

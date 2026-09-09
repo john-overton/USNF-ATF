@@ -1,7 +1,7 @@
 /** Locally imported PT facts. The force law fitted to these is original code. */
 export interface RetailFlightProfile {
   schemaVersion: 1;
-  source: { game: 'usnf97'; file: string; sha256: string };
+  source: { game: 'usnf97' | 'atf-gold'; file: string; sha256: string };
   name: string;
   emptyMassKg: number;
   fuelCapacityKg: number;
@@ -36,7 +36,7 @@ export function parseRetailFlightProfile(value: unknown): RetailFlightProfile {
     source = object(p.source);
   if (
     p.schemaVersion !== 1 ||
-    source.game !== 'usnf97' ||
+    (source.game !== 'usnf97' && source.game !== 'atf-gold') ||
     typeof source.file !== 'string' ||
     !source.file.trim() ||
     [...source.file].some((character) => character.charCodeAt(0) < 32) ||
@@ -127,7 +127,7 @@ export function parseRetailFlightProfile(value: unknown): RetailFlightProfile {
   }
   return {
     schemaVersion: 1,
-    source: { game: 'usnf97', file: source.file, sha256: source.sha256 },
+    source: { game: source.game, file: source.file, sha256: source.sha256 },
     name: p.name,
     emptyMassKg,
     fuelCapacityKg,

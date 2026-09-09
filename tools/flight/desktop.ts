@@ -1,3 +1,4 @@
+import { aircraftId } from '../../engine/src/flight/aircraft-catalog';
 /** Isolated real Electron/CDP session for flight acceptance, never a mocked renderer. */
 import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -17,6 +18,7 @@ export interface DesktopOptions {
 }
 
 export async function openDesktop(options: DesktopOptions) {
+  const id = aircraftId(options.query?.aircraft ?? null);
   const out = path.resolve(options.out);
   const profile = await mkdtemp(path.join(tmpdir(), 'usnf-flight-smoke-'));
   await mkdir(out, { recursive: true });
@@ -25,17 +27,17 @@ export async function openDesktop(options: DesktopOptions) {
   });
   if (options.aircraft) {
     await mkdir(path.join(profile, 'data/aircraft'), { recursive: true });
-    await cp(path.resolve(options.aircraft), path.join(profile, 'data/aircraft/f14.json'));
+    await cp(path.resolve(options.aircraft), path.join(profile, `data/aircraft/${id}.json`));
   }
   if (options.audio) {
     await mkdir(path.join(profile, 'data/audio'), { recursive: true });
-    await cp(path.resolve(options.audio), path.join(profile, 'data/audio/f14.json'));
+    await cp(path.resolve(options.audio), path.join(profile, `data/audio/${id}.json`));
   }
   if (options.flightProfile) {
     await mkdir(path.join(profile, 'data/aircraft'), { recursive: true });
     await cp(
       path.resolve(options.flightProfile),
-      path.join(profile, 'data/aircraft/f14-flight.json'),
+      path.join(profile, `data/aircraft/${id}-flight.json`),
     );
   }
   const command = [path.resolve(options.binary)];

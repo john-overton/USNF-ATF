@@ -158,6 +158,19 @@ class StaticShapeTest(unittest.TestCase):
         for side in ('left', 'right'):
             self.assertEqual(rigged['rig'][f'flap-{side}']['parent'], f'wing-{side}-color')
 
+    def test_non_f14_export_identity_scale_and_no_f14_rig_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, palette = root / 'OTHER.SH', root / 'PALETTE.PAL'
+            source.write_bytes(image(table([(0, 0, 0), (10, 0, 0), (0, 20, 5)]) + polygon([0, 1, 2]) + b'\0'))
+            palette.write_bytes(bytes(768))
+            result = export(source, palette, root / 'mesh.json', 12, 'Synthetic jet')
+            self.assertEqual(result['name'], 'Synthetic jet')
+            self.assertEqual(result['source']['lengthMetres'], 12)
+            positions = result['parts'][0]['positions']
+            self.assertAlmostEqual(max(positions[2::3]) - min(positions[2::3]), 12)
+            self.assertFalse(any('taileron' in text for text in result['limitations']))
+
     def test_out_of_range_part_target_rejected(self):
         code = bytes([0xc4, 0]) + struct.pack('<hhhhhhh', 0, 0, 0, 0, 0, 0, 500)
         with self.assertRaisesRegex(SHError, 'part target'):

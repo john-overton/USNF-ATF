@@ -37,7 +37,7 @@ def export(pt_path: Path, output: Path) -> dict:
             raise ValueError(f'missing {field} sample: {name}')
         source = files[name.upper()]
         clips[role] = {**decode_pcm(source.read_bytes(), source.name), 'ptField': field}
-    result = {'schemaVersion': 1, 'provenance': 'USNF97 F14.PT sound references',
+    result = {'schemaVersion': 1, 'provenance': f'{pt_path.name} sound references',
               'aircraftSource': pt_path.name,
               'aircraftSha256': hashlib.sha256(pt_path.read_bytes()).hexdigest(),
               'rateConfidence': 'extension convention; executable mixer rates not recovered',

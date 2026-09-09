@@ -1,4 +1,4 @@
-"""Convert a locally supplied USNF97 F14.PT into attributed flight parameters.
+"""Convert supported local USNF97/ATF-GOLD aircraft PT records into attributed flight parameters.
 
 Original runtime force laws are not present in PT. This exports exact data and
 explicit unit assumptions, not a recovered implementation of _PLANEProc.
@@ -26,14 +26,23 @@ RAW_FIELDS = ('_gpullDrag', 'coefDrag', 'airBrakesDrag', 'wheelBrakesDrag',
 
 
 def convert(pt: PlaneType, source_bytes: bytes, source_file: str = 'F14.PT') -> dict:
-    # The USNF vs ATF variant is material: ATF changes device drag and G envelopes.
-    # This is a bounded F14 converter, not an archive/game autodetector.
-    if (Path(source_file).name.upper() != 'F14.PT' or pt.labeled
-            or pt.obj.get('typeSize') != 632 or pt.env_min != -4 or pt.env_max != 9):
-        raise ValueError('requires the unlabelled USNF97 F14.PT variant (-4..9 G, typeSize 632)')
+    # Deliberately bounded to inspected variants, not game auto-detection.
+    variants = {
+        'F14.PT': (False, 632, -4, 9, 'usnf97'),
+        'A4E.PT': (False, 608, -4, 7, 'usnf97'),
+        'F31.PT': (True, 660, -4, 9, 'atf-gold'),
+    }
+    filename = Path(source_file).name.upper()
+    expected = variants.get(filename)
+    if expected is None or (pt.labeled, pt.obj.get('typeSize'), pt.env_min, pt.env_max) != expected[:4]:
+        raise ValueError('requires inspected USNF97 F14/A4E or ATF-GOLD F31 PT variant')
+    afterburner_thrust = pt.aft_thrust
+    if filename == 'A4E.PT' and afterburner_thrust == 0:
+        # The force fitter needs available maximum thrust, even without a burner.
+        afterburner_thrust = pt.thrust
     if not (0 < pt.weight < pt.max_takeoff_weight < 1_000_000
             and 0 < pt.internal_fuel < pt.max_takeoff_weight
-            and 0 < pt.thrust <= pt.aft_thrust < 1_000_000):
+            and 0 < pt.thrust <= afterburner_thrust < 1_000_000):
         raise ValueError('unsupported aircraft mass/thrust bounds')
     envelopes = []
     native_envelopes = []
@@ -51,8 +60,8 @@ def convert(pt: PlaneType, source_bytes: bytes, source_file: str = 'F14.PT') -> 
             'points': [{'speedFps': speed, 'altitudeFt': altitude} for speed, altitude in points]})
         envelopes.append({'g': e.gload, 'points': [
             {'speedMps': s * FT_M, 'altitudeM': h * FT_M} for s, h in points]})
-    if [e['g'] for e in envelopes] != list(range(-4, 10)):
-        raise ValueError('missing or unordered USNF97 F14 envelope rows')
+    if [e['g'] for e in envelopes] != list(range(pt.env_min, pt.env_max + 1)):
+        raise ValueError('missing or unordered PT envelope rows')
     raw = {}
     keys = list(RAW_FIELDS) + [k for k in pt.plane if k.startswith(('_bv.', '_brv.', 'rudderYaw.', 'puffRot.', 'spin'))]
     for k in keys:
@@ -75,17 +84,22 @@ def convert(pt: PlaneType, source_bytes: bytes, source_file: str = 'F14.PT') -> 
             raise ValueError(f'noninteger OBJ_TYPE {k}')
         raw[k] = {'value': value, 'unit': 'raw OBJ_TYPE integer; runtime scaling applies',
                   'confidence': 'field name aligned from labelled ATF; no unit conversion'}
-    return {'schemaVersion': 1, 'source': {'game': 'usnf97', 'file': source_file,
+    result = {'schemaVersion': 1, 'source': {'game': expected[4], 'file': source_file,
             'sha256': hashlib.sha256(source_bytes).hexdigest()}, 'name': pt.long_name,
             'emptyMassKg': pt.weight * LB_KG, 'fuelCapacityKg': pt.internal_fuel * LB_KG,
             'maxTakeoffMassKg': pt.max_takeoff_weight * LB_KG,
-            'militaryThrustN': pt.thrust * LBF_N, 'afterburnerThrustN': pt.aft_thrust * LBF_N,
+            'militaryThrustN': pt.thrust * LBF_N, 'afterburnerThrustN': afterburner_thrust * LBF_N,
             'envelopes': envelopes, 'native': {'envelopes': native_envelopes,
                 'structuralSpeedFps': {'seaLevel': structure[0], 'at36000Ft': structure[1]}}, 'rawFields': raw,
             'semantics': {'mass': 'lb to kg', 'thrust': 'total-engine lbf to N',
                           'envelope': 'ft/s and ft to m/s and m; polygon sustain interpretation inferred',
                           'runtime': 'PT facts only; selected executable routines are translated separately'}}
 
+    if filename != 'F14.PT':
+        del result['native']  # Native-helper parity is not established for these aircraft.
+        result['semantics']['runtime'] = 'Original envelope fit; native flight/vectoring laws not recovered.'
+    result['rawFields']['aftThrust'] = {'value': pt.aft_thrust, 'unit': 'lbf; zero means no afterburner'}
+    return result
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)

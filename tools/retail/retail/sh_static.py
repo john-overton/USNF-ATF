@@ -217,7 +217,7 @@ def f14_surfaces(model: dict) -> dict:
     return {**model, 'polygons': polygons, 'parts': pivots, 'rig': rig}
 
 
-def export(source: Path, palette_path: Path, output: Path, length_metres: float = 19.1) -> dict:
+def export(source: Path, palette_path: Path, output: Path, length_metres: float = 19.1, name: str | None = None) -> dict:
     data = source.read_bytes()
     model = project(data, source.stem)
     source_polygons = len(model['polygons'])
@@ -270,7 +270,7 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
                     # flipY=false; special 0x44 exhaust material is separately named.
                     # Original material/UV dispatch beyond this projection is unproven.
                     group['uvs'].extend((u / group['texture']['width'], 1 - v / group['texture']['height']))
-    result = {'version': 1, 'name': 'F-14 Tomcat', 'positions': [], 'colors': [],
+    result = {'version': 1, 'name': name or ('F-14 Tomcat' if source.stem.upper() == 'F14' else source.stem), 'positions': [], 'colors': [],
               'parts': list(groups.values()),
               'source': {'file': source.name, 'sha256': hashlib.sha256(data).hexdigest(),
                          'paletteSha256': hashlib.sha256(palette_path.read_bytes()).hexdigest(),
@@ -278,11 +278,14 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
                          'polygons': source_polygons, 'partitionPolygons': len(model['polygons']), 'instructions': model['instructions']},
               'limitations': ['Original flight dynamics are not imported.',
                               'Static neutral pose; original x86 animation and renderer are not executed.',
-                              '19.1 m length is a presentation scale, not decoded retail units.',
+                              f'{length_metres} m length is a presentation scale, not decoded retail units.',
                               'Retail faces are partitioned into authored taileron/rudder/flap/airbrake rig; hinges and motion are not decoded retail semantics.',
                               'Neutral projection includes wings; gear and hook animation are not recovered.',
                               'Special exhaust disks are separated for authored engine-state presentation.',
                               'Original texture dispatch is partial; DataTexture uses flipY=false.']}
+    if source.stem.upper() != 'F14':
+        result['limitations'] = [result['limitations'][i] for i in (0, 1, 2, 6)] + [
+            'Static exterior only; control surfaces, gear and engine animation are not recovered.']
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, separators=(',', ':')) + '\n')
     return result
@@ -293,8 +296,10 @@ def main():
     parser.add_argument('source', type=Path)
     parser.add_argument('--pal', required=True, type=Path)
     parser.add_argument('--out', required=True, type=Path)
+    parser.add_argument('--name')
+    parser.add_argument('--length-metres', type=float, default=19.1)
     args = parser.parse_args()
-    result = export(args.source, args.pal, args.out)
+    result = export(args.source, args.pal, args.out, args.length_metres, args.name)
     print(json.dumps({'source': result['source'], 'parts': [(p['name'], len(p['positions']) // 9) for p in result['parts']]}))
 
 

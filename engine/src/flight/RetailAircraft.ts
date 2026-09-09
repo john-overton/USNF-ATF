@@ -1,3 +1,4 @@
+import type { AircraftId } from './aircraft-catalog';
 import {
   BufferGeometry,
   Color,
@@ -178,9 +179,12 @@ export class RetailAircraft {
       if (part.parent) this.parts.get(part.parent)!.attach(this.parts.get(part.name)!);
     }
   }
-  static async load(platform: Platform): Promise<RetailAircraft | undefined> {
-    if (!(await platform.fs.exists('appData', 'aircraft/f14.json'))) return undefined;
-    const text = await platform.fs.readText('appData', 'aircraft/f14.json');
+  static async load(
+    platform: Platform,
+    id: AircraftId = 'f14',
+  ): Promise<RetailAircraft | undefined> {
+    if (!(await platform.fs.exists('appData', `aircraft/${id}.json`))) return undefined;
+    const text = await platform.fs.readText('appData', `aircraft/${id}.json`);
     if (text.length > 64 * 1024 * 1024) throw new Error('Aircraft import exceeds 64 MiB');
     return new RetailAircraft(parseRetailAircraft(JSON.parse(text)));
   }

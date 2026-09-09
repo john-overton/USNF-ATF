@@ -32,6 +32,7 @@ const session = await openDesktop({
   out: option('--out', `extracted/flight-smoke-${scenario}`),
   query: {
     mode: 'flight',
+    aircraft: option('--aircraft-id', 'f14'),
     flightStart: scenario === 'approach' ? 'approach' : 'runway',
     flightModel: args.includes('--flight-model') ? option('--flight-model') : 'assisted',
   },

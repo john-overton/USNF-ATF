@@ -1,4 +1,7 @@
 import unittest
+from pathlib import Path
+from _paths import REPO
+from retail.pt import load_pt
 from types import SimpleNamespace
 from _paths import TOOLS_RETAIL  # noqa: F401
 from retail.flight import convert, RAW_FIELDS, OBJ_RAW_FIELDS, LB_KG, FT_M, LBF_N
@@ -87,3 +90,39 @@ class FlightExportTest(unittest.TestCase):
         pt.plane['structure[1]'] = -1
         with self.assertRaises(ValueError):
             convert(pt, b'synthetic')
+
+
+class AdditionalAircraftExportTest(unittest.TestCase):
+    def test_a4_no_afterburner_exports_effective_maximum_without_native_claim(self):
+        pt = fixture()
+        pt.obj['typeSize'] = 608
+        pt.env_max = 7
+        pt.envelopes = pt.envelopes[:-2]
+        pt.aft_thrust = 0
+        result = convert(pt, b'synthetic', 'A4E.PT')
+        self.assertEqual(result['militaryThrustN'], result['afterburnerThrustN'])
+        self.assertEqual(result['rawFields']['aftThrust']['value'], 0)
+        self.assertNotIn('native', result)
+        self.assertEqual(len(result['envelopes']), 12)
+
+    def test_atf_x31_keeps_game_identity_without_usnf_native_claim(self):
+        pt = fixture()
+        pt.labeled = True
+        pt.obj['typeSize'] = 660
+        result = convert(pt, b'synthetic', 'F31.PT')
+        self.assertEqual(result['source']['game'], 'atf-gold')
+        self.assertNotIn('native', result)
+        self.assertGreater(result['afterburnerThrustN'], result['militaryThrustN'])
+
+    def test_local_aircraft_profiles(self):
+        sources = ['extracted/usnf97/USNF_2.LIB/A4E.PT', 'extracted/atf-gold/ATF_2.LIB/F31.PT']
+        if not all((Path(REPO) / path).is_file() for path in sources):
+            self.skipTest('local A4E/F31 PT records unavailable')
+        for path in sources:
+            p = Path(REPO) / path
+            pt = load_pt(str(p))
+            result = convert(pt, p.read_bytes(), p.name)
+            self.assertEqual(result['name'], pt.long_name)
+            self.assertEqual(result['emptyMassKg'], pt.weight * LB_KG)
+            self.assertEqual(len(result['envelopes']), pt.env_max - pt.env_min + 1)
+            self.assertNotIn('native', result)

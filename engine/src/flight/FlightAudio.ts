@@ -1,3 +1,4 @@
+import type { AircraftId } from './aircraft-catalog';
 import type { Platform } from '../platform/Platform';
 
 type ClipRole = 'jet' | 'burner' | 'start' | 'stop';
@@ -120,12 +121,12 @@ export class FlightAudio {
   private transitionGain?: GainNode;
   private transitionEvents = { start: 0, stop: 0 };
   private lastTransition: 'start' | 'stop' | undefined;
-  static async create(platform: Platform): Promise<FlightAudio> {
+  static async create(platform: Platform, id: AircraftId = 'f14'): Promise<FlightAudio> {
     let samples: FlightSamples | undefined;
     let error: string | undefined;
     try {
-      if (await platform.fs.exists('appData', 'audio/f14.json')) {
-        const text = await platform.fs.readText('appData', 'audio/f14.json');
+      if (await platform.fs.exists('appData', `audio/${id}.json`)) {
+        const text = await platform.fs.readText('appData', `audio/${id}.json`);
         if (text.length > 16000000) throw new Error('Flight audio manifest too large');
         samples = parseFlightSamples(JSON.parse(text));
       }

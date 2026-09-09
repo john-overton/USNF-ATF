@@ -1,3 +1,4 @@
+import { AIRCRAFT } from '../flight/aircraft-catalog';
 import { useEffect, useRef, useState } from 'react';
 import { getPlatform } from '../platform';
 import { FlightNavigationOverlay } from '../flight/FlightNavigationOverlay';
@@ -243,7 +244,7 @@ export function TerrainViewer() {
                 <dt>Sound assets</dt>
                 <dd>
                   {stats.flight.audio.source === 'retail-pt-samples'
-                    ? 'USNF ’97 F-14 samples'
+                    ? 'Imported aircraft samples'
                     : 'Original fallback'}
                   {stats.flight.audio.error ? ` · ${stats.flight.audio.error}` : ''}
                 </dd>
@@ -261,6 +262,29 @@ export function TerrainViewer() {
                 </dd>
               </dl>
               <label>
+                Aircraft{' '}
+                <select
+                  id="aircraft-selector"
+                  value={stats.flight.aircraftId}
+                  onChange={(event) => {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('aircraft', event.target.value);
+                    url.searchParams.set(
+                      'flightModel',
+                      stats.flight!.flightModelId === 'assisted' ? 'assisted' : 'retail-envelope',
+                    );
+                    url.searchParams.set('flightFuel', String(stats.flight!.fuelFraction));
+                    window.location.assign(url.href);
+                  }}
+                >
+                  {Object.entries(AIRCRAFT).map(([id, aircraft]) => (
+                    <option key={id} value={id}>
+                      {aircraft.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 Flight model{' '}
                 <select
                   id="flight-model-selector"
@@ -274,7 +298,7 @@ export function TerrainViewer() {
                 >
                   <option value="assisted">Preserved assisted (default)</option>
                   <option value="retail-envelope" disabled={!stats.flight.retailProfileAvailable}>
-                    USNF ’97 envelope fit (experimental)
+                    Retail PT envelope fit (experimental)
                   </option>
                   <option
                     value="recovered-envelope"
@@ -407,11 +431,23 @@ export function TerrainViewer() {
             </>
           )}
           <p>
-            <a href="?mode=flight">Practice runway</a>
+            <a
+              href={`?mode=flight&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'assisted'}`}
+            >
+              Practice runway
+            </a>
             {' · '}
-            <a href="?mode=flight&flightStart=approach">Final approach</a>
+            <a
+              href={`?mode=flight&flightStart=approach&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'assisted'}`}
+            >
+              Final approach
+            </a>
             {' · '}
-            <a href="?mode=flight&flightStart=airborne">Airborne practice</a>
+            <a
+              href={`?mode=flight&flightStart=airborne&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'assisted'}`}
+            >
+              Airborne practice
+            </a>
             {' · '}
             <a href="?">Terrain explorer</a>
             {' · '}

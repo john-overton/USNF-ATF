@@ -1,3 +1,4 @@
+import { AIRCRAFT, aircraftId, validateAircraftProfile, type AircraftId } from './aircraft-catalog';
 import {
   BoxGeometry,
   type BufferGeometry,
@@ -64,6 +65,7 @@ export interface FlightDiagnostics {
   landings: number;
   runway: PracticeStrip;
   aircraftName: string;
+  aircraftId: AircraftId;
   modelTriangles: number;
   flightModel: string;
   flightModelId: 'assisted' | 'retail-envelope' | 'recovered-envelope';
@@ -135,18 +137,24 @@ export class FlightLayer {
     folder: string,
   ): Promise<FlightLayer> {
     const ground = new GroundSampler(manifest, platform, root, folder);
+    let model: RetailAircraft | undefined;
+    let audio: FlightAudio | undefined;
     try {
       const strip = await preparePractice(ground);
-      const model = await RetailAircraft.load(platform);
-      const audio = await FlightAudio.create(platform);
+      const id = aircraftId(new URLSearchParams(window.location.search).get('aircraft'));
+      model = await RetailAircraft.load(platform, id);
+      audio = await FlightAudio.create(platform, id);
       let profile: RetailFlightProfile | undefined;
-      if (await platform.fs.exists('appData', 'aircraft/f14-flight.json')) {
-        const text = await platform.fs.readText('appData', 'aircraft/f14-flight.json');
+      if (await platform.fs.exists('appData', `aircraft/${id}-flight.json`)) {
+        const text = await platform.fs.readText('appData', `aircraft/${id}-flight.json`);
         if (text.length > 1000000) throw new Error('Flight profile exceeds 1 MB');
         profile = parseRetailFlightProfile(JSON.parse(text));
+        validateAircraftProfile(id, profile);
       }
-      return new FlightLayer(scene, ground, strip, audio, model, profile);
+      return new FlightLayer(scene, ground, strip, audio, id, model, profile);
     } catch (error) {
+      model?.dispose();
+      audio?.dispose();
       ground.dispose();
       throw error;
     }
@@ -162,6 +170,7 @@ export class FlightLayer {
     readonly ground: GroundSampler,
     readonly strip: PracticeStrip,
     private readonly audio: FlightAudio,
+    readonly aircraftId: AircraftId,
     private readonly model?: RetailAircraft,
     private readonly profile?: RetailFlightProfile,
   ) {
@@ -189,7 +198,7 @@ export class FlightLayer {
       this.useRetail && profile
         ? {
             ...PLACEHOLDER_AIRCRAFT,
-            id: 'f14-retail-envelope',
+            id: `${this.aircraftId}-retail-envelope`,
             name: profile.name,
             massKg: profile.emptyMassKg + this.fuel.fuelKg + this.payloadMassKg,
             // Reference area only: the envelope fit normalizes lift/drag to PT forces.
@@ -229,13 +238,14 @@ export class FlightLayer {
       fin.position.set(0, 1, 3.3);
       this.aircraft.add(fin);
     } else this.aircraft.add(model.group);
+    const presentationScale = model ? AIRCRAFT[this.aircraftId].length / 19.1 : 1;
     for (const [x, z] of [
       [-1.7, 1.2],
       [1.7, 1.2],
       [0, model ? -5 : -3],
     ]) {
       const pivot = new Group();
-      pivot.position.set(x!, -0.65, z);
+      pivot.position.set(x! * presentationScale, -0.65, z! * presentationScale);
       const strut = new Mesh(new BoxGeometry(0.15, 1.25, 0.15), fuselage);
       strut.position.y = -0.6;
       const wheel = new Mesh(new CylinderGeometry(0.3, 0.3, 0.3, 12), dark);
@@ -248,10 +258,17 @@ export class FlightLayer {
     // Original moving hook and burner effects supplement imported geometry when needed.
     const hookArm = new Mesh(new BoxGeometry(0.12, 0.12, 2.4), dark);
     hookArm.position.z = 1.2;
-    this.hook.position.set(0, -0.6, model ? 6 : 3);
+    this.hook.position.set(0, -0.6, model ? 6 * presentationScale : 3);
+    this.hook.visible = AIRCRAFT[this.aircraftId].hook;
     this.hook.add(hookArm);
     this.aircraft.add(this.hook);
-    for (const x of model ? [-1.483, 1.424] : [-1.2, 1.2]) {
+    for (const x of !AIRCRAFT[this.aircraftId].afterburner
+      ? []
+      : this.aircraftId === 'x31'
+        ? [0]
+        : model
+          ? [-1.483, 1.424]
+          : [-1.2, 1.2]) {
       const flame = new Mesh(
         new ConeGeometry(0.55, 4, 12).translate(0, 2, 0),
         new MeshStandardMaterial({
@@ -264,7 +281,7 @@ export class FlightLayer {
         }),
       );
       flame.rotation.x = Math.PI / 2;
-      flame.position.set(x, model ? -0.297 : -0.2, model ? 9.075 : 4);
+      flame.position.set(x, model ? -0.297 : -0.2, model ? 9.075 * presentationScale : 4);
       this.burners.push(flame);
       this.aircraft.add(flame);
     }
@@ -383,6 +400,8 @@ export class FlightLayer {
       this.previous = this.state;
       if (this.fuel.fuelKg === 0) this.input.engineRunning = false;
       this.controls = this.input.sample(dt);
+      if (!AIRCRAFT[this.aircraftId].afterburner) this.input.afterburner = false;
+      if (!AIRCRAFT[this.aircraftId].hook) this.input.hookDown = false;
       this.systems = stepAircraftSystems(this.systems, this.input, dt);
       if (this.useRetail && this.profile)
         this.systems.thrustMultiplier =
@@ -526,6 +545,7 @@ export class FlightLayer {
     this.deck.position.set(this.strip.x - origin.x, this.strip.elevation, this.strip.z - origin.z);
   }
   private wingSweep(): number {
+    if (this.aircraftId !== 'f14') return 0;
     // Original visual schedule, held extended for landing. Not recovered retail animation.
     return (
       (1 - Math.max(this.systems.gearFraction, this.systems.flapFraction)) *
@@ -566,7 +586,10 @@ export class FlightLayer {
       takeoffs: this.takeoffs,
       landings: this.landings,
       runway: { ...this.strip },
-      aircraftName: this.model?.data.name ?? 'Peregrine original placeholder (F-14 not installed)',
+      aircraftId: this.aircraftId,
+      aircraftName:
+        this.model?.data.name ??
+        `Peregrine placeholder (${AIRCRAFT[this.aircraftId].name} not installed)`,
       flightModelId: this.useNativeEnvelope
         ? 'recovered-envelope'
         : this.useRetail
@@ -577,7 +600,7 @@ export class FlightLayer {
       flightModel: this.useNativeEnvelope
         ? 'Recovered USNF envelope · hybrid forces'
         : this.useRetail
-          ? 'USNF ’97 PT envelope fit'
+          ? `${this.profile!.source.game === 'atf-gold' ? 'ATF-GOLD' : 'USNF ’97'} PT envelope fit`
           : 'Preserved assisted model',
       massKg: this.definition.massKg,
       fuelMassKg: this.fuel.fuelKg,
@@ -586,7 +609,11 @@ export class FlightLayer {
       fuelBurnKgS: this.fuel.burnRateKgS,
       payloadMassKg: this.payloadMassKg,
       militaryThrustN: this.useRetail ? this.profile!.militaryThrustN : 70000,
-      afterburnerThrustN: this.useRetail ? this.profile!.afterburnerThrustN : 105000,
+      afterburnerThrustN: this.useRetail
+        ? this.profile!.afterburnerThrustN
+        : AIRCRAFT[this.aircraftId].afterburner
+          ? 105000
+          : 70000,
       flightProfileSha256: this.useRetail ? this.profile!.source.sha256 : null,
       modelTriangles: this.model?.triangles ?? 0,
       cameraMode: this.input.cameraMode,
