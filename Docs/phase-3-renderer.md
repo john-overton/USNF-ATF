@@ -211,3 +211,8 @@ Before commit: engine TypeScript, scoped ESLint, `git diff --check` pass;
 `bun test engine/src/terrain` passes 16 tests / 4470 expectations. Those checks do
 not prove depth precision. The next required step is a fresh packaged Odesa smoke,
 compare the controlled screenshot for striping, and record its frame times.
+
+Final packaged depth-fix verification: broad sea striping is removed in the
+Odesa screenshot, while coast and 30m detail runs remain ~60fps at1440p. See
+[phase 3 baseline](baselines/phase-3.md) for exact results, startup stalls,
+remaining fine edge artifacts and formal acceptance gaps.

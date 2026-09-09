@@ -11,9 +11,45 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 |---|---|---|
 | 0: retail toolkit | Containers, images/fonts and data readers; partial SH | F-14 export and integrated deliverable remain open; unchanged this development pass |
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks pending |
-| 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Full Ukraine output generated; final shared-border and water-ring validation underway |
-| 3: terrain renderer | Streaming, quadtree patches with height morph, floating origin, free camera, water cache/holes, diagnostics | Packaged synthetic Mac 1440p checks pass; real coast/mountain checks pending. Linux and native GPU DRAM measurements pending |
+| 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline pending |
+| 3: terrain renderer | Streaming, quadtree patches with height morph, floating origin, free camera, water cache/holes, diagnostics | Packaged real coast and 30m mountain-detail runs ~60 fps at 1440p on Mac. Linux, real DRAM counters and transition polish remain open |
 | 4–10 | Plans and importer contracts only | Flight model, gameplay, in-app retail import and release work not implemented |
+
+## 2026-09-08: real Ukraine installed; packaged terrain verified
+
+Final implementation checkpoint `0407365`; full pipeline implementation
+`f229ad7`. Evidence is in [phase 2](baselines/phase-2.md),
+[phase 3](baselines/phase-3.md), and [GPU trace notes](gpu-trace-notes.md).
+
+- All 832 real chunks pass the Python probe and TypeScript decoder/installer.
+  Build: 86.196 s, 71,245,197 gzip bytes + 24,907,069 manifest bytes.
+  Water: 33,731 components with 347,838 exterior/interior ring points.
+- Installed the validated theater into this Mac's normal app data. Run
+  `bun run dev:electron` or open `build/mac/mac-arm64/USNF-ATF.app`; the default
+  terrain panel loads `terrains/ukraine/manifest.json`. Nothing was published.
+- Final logarithmic-depth package: Odesa coast 60.057 mean fps, 17.6 ms p95;
+  Crimean 30m detail 60.039 mean fps, 17.6 ms p95, both at 2560×1440.
+  Movement loads detail chunks, screenshots show relief and water, no omitted
+  water batches or runtime errors. Measurements are short warm samples.
+- `bun run check` passes 37 tests / 4,543 expectations; typecheck/lint/format
+  clean. Final `bun run build` passes in 23.7 s, Mac arm64+x64 artifacts.
+  Terrain Python suite passes 13 tests in 1.901 s. GPU XML summary has two
+  passing synthetic tests. Retail code was unchanged during this development
+  pass; the previous 52-test retail result is historical, not rerun here.
+- Native Metal tracing and export succeed, but the default counter set has no
+  DRAM-bandwidth samples. Added a summary tool that reports unavailable rather
+  than zero; follow-up needs a correctly configured Instruments template.
+
+Additional lessons: fix shared GDAL border queries rather than loosening seam
+checks; preserve water holes rather than exploding polygons into scanline
+rectangles; check actual rendered depth over the sea; isolate automated input
+on a shared desktop; separate cold shader startup stalls from warm FPS.
+
+**Next work:** record Linux phase 1–3 checks on real GPU hardware; configure and
+measure native DRAM counters; agree a frame-time regression margin; improve
+source-LOD transitions, fine edge artifacts, shoreline detail and longer flight
+stress coverage. Phase 4 flight-model work remains separate. Phase 0 SH gaps
+remain unchanged; no claim of retail gameplay parity or complete phase 3 exit.
 
 ## 2026-09-08: phase 1 fixes and first terrain milestones
 
