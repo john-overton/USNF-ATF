@@ -7,7 +7,14 @@ import {
   sampleTelemetry,
   flightEuler,
   PLACEHOLDER_AIRCRAFT,
+  type Vec3,
 } from '../../engine/src/sim/flight';
+import {
+  createWindField,
+  windAt,
+  WIND_PRESETS,
+  type WindField,
+} from '../../engine/src/sim/environment';
 
 type State = ReturnType<typeof createFlightState>;
 type Controls = Parameters<typeof stepFlight>[1];
@@ -44,22 +51,29 @@ function finite(state: State, telemetry: Telemetry) {
   );
 }
 
+/** Wind sampled at the flight clock's time, exactly as FlightLayer does per step. */
+type Wind = (position: State['position'], seconds: number) => Vec3;
+
 function run(
   initial: State,
   seconds: number,
   pilot: Pilot,
   environment = land,
   stop?: (state: State, telemetry: Telemetry) => boolean,
+  wind?: Wind,
 ) {
   let state = initial;
   const samples: { state: State; telemetry: Telemetry }[] = [];
   const totalSteps = Math.round(seconds / DT);
   for (let step = 0; step < totalSteps; step++) {
-    const telemetry = sampleTelemetry(state, environment, PLACEHOLDER_AIRCRAFT);
+    const stepped: Environment = wind
+      ? { ...environment, wind: wind(state.position, step * DT) }
+      : environment;
+    const telemetry = sampleTelemetry(state, stepped, PLACEHOLDER_AIRCRAFT);
     const next = stepFlight(
       state,
       pilot(state, telemetry, step * DT),
-      environment,
+      stepped,
       PLACEHOLDER_AIRCRAFT,
       DT,
     );
@@ -69,7 +83,10 @@ function run(
     if (step % 12 === 0 || finished || step === totalSteps - 1) samples.push(next);
     if (finished) break;
   }
-  return { state, samples, telemetry: sampleTelemetry(state, environment, PLACEHOLDER_AIRCRAFT) };
+  const final: Environment = wind
+    ? { ...environment, wind: wind(state.position, seconds) }
+    : environment;
+  return { state, samples, telemetry: sampleTelemetry(state, final, PLACEHOLDER_AIRCRAFT) };
 }
 
 /** Feedback uses observed aircraft attitude, altitude and speed, never modifies state. */
@@ -88,7 +105,23 @@ function hold(altitude: number, speed: number, bank = 0): Pilot {
   };
 }
 
+/** A steady wind blowing from a compass bearing, for the deterministic cases. */
+function steadyWind(speed: number, fromBearingDeg: number): Wind {
+  const theta = ((fromBearingDeg + 180) * Math.PI) / 180;
+  const v = { x: -Math.sin(theta) * speed, y: 0, z: Math.cos(theta) * speed };
+  return () => v;
+}
+/** The preset field, evaluated at the flight clock's time. */
+function presetWind(field: WindField): Wind {
+  return (position, seconds) => windAt(field, position, seconds);
+}
+
 export {
+  createWindField,
+  windAt,
+  WIND_PRESETS,
+  steadyWind,
+  presetWind,
   createFlightState,
   stepFlight,
   sampleTelemetry,
@@ -107,4 +140,4 @@ export {
   DT,
   FixedStepClock,
 };
-export type { State, Controls, Environment, Telemetry, Pilot };
+export type { State, Controls, Environment, Telemetry, Pilot, Wind, Vec3, WindField };

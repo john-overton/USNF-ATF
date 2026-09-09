@@ -1,17 +1,16 @@
 import {
-  AmbientLight,
   DataTexture,
   SRGBColorSpace,
   LinearMipmapLinearFilter,
   LinearFilter,
   Color,
-  DirectionalLight,
   DoubleSide,
   Fog,
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
   Scene,
+  Vector3,
   WebGLRenderer,
 } from 'three';
 import { FlightLayer, type FlightDiagnostics } from '../flight/FlightLayer';
@@ -41,8 +40,43 @@ import { TerrainAntialias } from './antialias';
 import { TerrainSeams, type SeamPatch } from './seams';
 import { SourceTransition } from './transition';
 import { waypointDestination, type TeleportWaypoint } from './teleport';
+import { SkyLayer } from './sky';
+import { patchCloudShadow } from './cloud-shadow';
+import { marchedLayer } from '../sim/environment/clouds';
+import {
+  Environment,
+  parseEnvironmentQuery,
+  theaterCenterFromCrs,
+  WEATHER_PRESETS,
+  WIND_PRESETS,
+  type CloudQuality,
+  type WeatherId,
+  type WindPresetId,
+} from '../sim/environment';
 
+export interface EnvironmentDiagnostics {
+  timeOfDayHours: number;
+  timeText: string;
+  dayOfYear: number;
+  season: string;
+  sunElevationDeg: number;
+  sunAzimuthDeg: number;
+  moonElevationDeg: number;
+  moonAzimuthDeg: number;
+  moonPhase: number;
+  weather: WeatherId;
+  weatherLabel: string;
+  wind: WindPresetId;
+  windLabel: string;
+  windAtCamera: { x: number; y: number; z: number };
+  windBearingDeg: number;
+  windSpeed: number;
+  cloudQuality: CloudQuality;
+  cloudSteps: number;
+  shadow: ReturnType<SkyLayer['shadowDiagnostics']>;
+}
 export interface TerrainDiagnostics {
+  environment: EnvironmentDiagnostics;
   shorelineTriangles?: number;
   shorelineBytes?: number;
   shorelinePending?: number;
@@ -117,10 +151,17 @@ export function startTerrainViewer(
 ): {
   dispose(): void;
   setFuelFraction(fraction: number): void;
+  setTimeOfDay(hours: number): void;
+  setWeather(id: WeatherId): void;
+  setWind(id: WindPresetId): void;
+  setCloudQuality(quality: CloudQuality): void;
   setTerrainPaint(mode: string): Promise<void>;
   teleportToWaypoint(point: TeleportWaypoint): Promise<void>;
 } {
   const flightMode = new URLSearchParams(window.location.search).get('mode') === 'flight';
+  // Parsed before any GPU resource exists: an invalid parameter must surface
+  // through the viewer's explicit error path without leaking a context.
+  const query = parseEnvironmentQuery(window.location.search);
   let flight: FlightLayer | undefined;
   const renderer = new WebGLRenderer({
     canvas,
@@ -137,15 +178,22 @@ export function startTerrainViewer(
     probeWebGL2(renderer.getContext() as WebGL2RenderingContext),
   );
   const scene = new Scene();
-  // Scene-owned background clears in the render target’s linear color space.
-  scene.background = new Color(0x91b1c8);
-  scene.fog = new Fog(0x91b1c8, 80000, 180000);
-  scene.add(new AmbientLight(0xffffff, 1.7));
-  const sun = new DirectionalLight(0xfff0d0, 2.4);
-  sun.position.set(-1, 2, -0.5);
-  scene.add(sun);
+  const environment = new Environment({
+    ...(query.timeOfDayHours === undefined ? {} : { timeOfDayHours: query.timeOfDayHours }),
+    ...(query.dayOfYear === undefined ? {} : { dayOfYear: query.dayOfYear }),
+    ...(query.weather === undefined ? {} : { weather: query.weather }),
+    ...(query.wind === undefined ? {} : { wind: query.wind }),
+  });
+  let cloudQuality: CloudQuality = query.clouds ?? 'half';
+  // Step count is a URL-only performance control; the panel exposes quality.
+  const cloudSteps = query.cloudSteps ?? 40;
+  // SkyLayer owns the background, fog and both lights from here on.
+  const sky = new SkyLayer(scene);
+  if (flightMode) sky.enableShadows(renderer);
   const camera = new PerspectiveCamera(60, 1, 5, 400000);
   const antialias = new TerrainAntialias(renderer, scene, camera);
+  antialias.clouds.quality = cloudQuality;
+  antialias.clouds.steps = cloudSteps;
   const world: WorldPosition = { x: 0, y: 4000, z: 0 };
   let yaw = 0,
     pitch = -0.45;
@@ -183,7 +231,47 @@ export function startTerrainViewer(
     lastFlightUi = last,
     uploadedAtStats = 0;
   const frameTimes: number[] = [];
+  const SHADOW_TARGET = new Vector3();
+  // Coverage drift, metres. Sampling is `worldXZ + cloudOffset`, so the pattern
+  // travels with the wind when the offset moves against it.
+  const cloudOffset = { x: 0, z: 0 };
+  const cloudSun = new Vector3();
+  const cloudFog = new Color();
+  const environmentDiagnostics = (): EnvironmentDiagnostics => {
+    const { sun, moon, settings } = {
+      sun: environment.sun,
+      moon: environment.moon,
+      settings: environment.settings,
+    };
+    const hours = Math.floor(settings.timeOfDayHours);
+    const minutes = Math.floor((settings.timeOfDayHours - hours) * 60);
+    const wind = environment.windAt(world, environment.settings.timeOfDayHours * 3600);
+    const speed = Math.hypot(wind.x, wind.z);
+    return {
+      timeOfDayHours: settings.timeOfDayHours,
+      timeText: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+      dayOfYear: settings.dayOfYear,
+      season: environment.season,
+      sunElevationDeg: (sun.elevationRad * 180) / Math.PI,
+      sunAzimuthDeg: (sun.azimuthRad * 180) / Math.PI,
+      moonElevationDeg: (moon.elevationRad * 180) / Math.PI,
+      moonAzimuthDeg: (moon.azimuthRad * 180) / Math.PI,
+      moonPhase: moon.phase,
+      weather: settings.weather,
+      weatherLabel: WEATHER_PRESETS[settings.weather].label,
+      wind: settings.wind,
+      windLabel: WIND_PRESETS[settings.wind].label,
+      windAtCamera: wind,
+      windSpeed: speed,
+      windBearingDeg:
+        speed < 1e-6 ? 0 : ((Math.atan2(-wind.x, wind.z) * 180) / Math.PI + 540) % 360,
+      cloudQuality,
+      cloudSteps,
+      shadow: sky.shadowDiagnostics(),
+    };
+  };
   const d: TerrainDiagnostics = {
+    environment: environmentDiagnostics(),
     status: 'loading',
     error: '',
     frames: 0,
@@ -223,6 +311,7 @@ export function startTerrainViewer(
   };
   const diagnostics = (): TerrainDiagnostics => ({
     ...d,
+    environment: environmentDiagnostics(),
     camera: { ...world },
     origin: { ...d.origin },
   });
@@ -363,14 +452,29 @@ export function startTerrainViewer(
     if (disposed) return;
     d.paintModes = [...(m.imagery ? ['satellite'] : []), ...Object.keys(m.colorMaps ?? {})];
     const requestedPaint = new URLSearchParams(window.location.search).get('paint');
+    // The date picks the color map when the dataset has one; the manual
+    // Ground colors selector still overrides it afterwards.
+    const seasonal = environment.season;
     if (d.paintModes.length)
       await loadPaint(
         m,
         requestedPaint ??
-          (m.colorMaps?.summer ? 'summer' : m.imagery ? 'satellite' : d.paintModes[0]!),
+          (m.colorMaps?.[seasonal]
+            ? seasonal
+            : m.colorMaps?.summer
+              ? 'summer'
+              : m.imagery
+                ? 'satellite'
+                : d.paintModes[0]!),
       );
     if (disposed) return;
     manifest = m;
+    // The pipeline's LAEA centre is the theater's latitude and longitude.
+    const centre = theaterCenterFromCrs(m.projection.crs);
+    if (centre) {
+      environment.settings.latitudeDeg = centre.latitudeDeg;
+      environment.settings.longitudeDeg = centre.longitudeDeg;
+    }
     d.name = m.name;
     d.source = m.source;
     d.attribution = [
@@ -407,6 +511,7 @@ export function startTerrainViewer(
         return;
       }
       flight = layer;
+      flight.environmentModel = environment;
       flight.activate();
       Object.assign(world, flight.pose().camera);
     }
@@ -514,9 +619,13 @@ export function startTerrainViewer(
               float sourceNoise=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
               if(sourceOutgoing ? sourceNoise<sourceFade : sourceNoise>=sourceFade) discard;`,
             );
+            patchCloudShadow(shader);
           };
-          material.customProgramCacheKey = () => 'terrain-shared-edge-imagery-v4';
+          material.customProgramCacheKey = () => 'terrain-shared-edge-imagery-v5-cloud-shadow';
           const mesh = new Mesh(built.geometry, material);
+          // The patch rewrites `transformed` inside begin_vertex, which runs
+          // before Three's shadow chunk, so morphed heights reach the receiver.
+          mesh.receiveShadow = true;
           mesh.onBeforeRender = () => {
             shoreMaskActive.value = shoreMaskUniform.value !== null;
           };
@@ -557,6 +666,8 @@ export function startTerrainViewer(
     frameTimes.push(now - last);
     if (frameTimes.length > 240) frameTimes.shift();
     last = now;
+    // The clock runs in real time; time acceleration is deferred.
+    environment.advance(frameSeconds);
     if (flight) {
       flight.advance(frameSeconds);
       Object.assign(world, flight.pose().camera);
@@ -652,6 +763,49 @@ export function startTerrainViewer(
     const waterBytes = water?.uploadedBytes ?? 0;
     d.uploadBytesTotal += waterBytes - reportedWaterBytes;
     reportedWaterBytes = waterBytes;
+    // Aim the shadow box at the aircraft, along the sun, down to the ground.
+    if (flightMode && flight) {
+      const pose = flight.pose();
+      SHADOW_TARGET.set(
+        pose.position.x - d.origin.x,
+        pose.position.y,
+        pose.position.z - d.origin.z,
+      );
+      const ground = flight.ground.sample(pose.position.x, pose.position.z)?.height ?? 0;
+      const key = environment.sun.elevationRad > 0 ? environment.sun : environment.moon;
+      // Distance along the light to reach the ground plane below the aircraft.
+      const height = Math.max(1, pose.position.y - ground);
+      sky.setShadowTarget(
+        SHADOW_TARGET,
+        height / Math.max(0.05, Math.abs(key.direction.y)),
+        // Coarser source LODs have longer triangles, so acne needs a larger offset.
+        1 + d.sourceLod * 1.5,
+      );
+    }
+    sky.update(environment, camera, dt);
+    const layer = marchedLayer(environment.weather);
+    const cirrus = environment.weather.layers.find((l) => l.type === 'cirrus');
+    if (layer) {
+      const drift = environment.layerWind((layer.baseM + layer.topM) / 2);
+      const bearing = ((drift.bearingDeg + 180) * Math.PI) / 180;
+      cloudOffset.x += Math.sin(bearing) * drift.speed * dt;
+      cloudOffset.z -= Math.cos(bearing) * drift.speed * dt;
+    }
+    const key = environment.sun.elevationRad > 0 ? environment.sun : environment.moon;
+    cloudSun.set(key.direction.x, key.direction.y, key.direction.z);
+    antialias.clouds.update({
+      offset: cloudOffset,
+      layer,
+      cirrus,
+      sunDirection: cloudSun,
+      sunColor: sky.sun.color,
+      zenithColor: sky.ambient.color,
+      groundColor: sky.ambient.groundColor,
+      origin: d.origin,
+      fogColor: scene.fog instanceof Fog ? scene.fog.color : cloudFog,
+      fogNear: scene.fog instanceof Fog ? scene.fog.near : 80000,
+      fogFar: scene.fog instanceof Fog ? scene.fog.far : 180000,
+    });
     renderer.info.reset();
     antialias.render();
     d.frames++;
@@ -666,6 +820,8 @@ export function startTerrainViewer(
       d.waterCacheBytes +
       imageryBytes +
       antialias.bytes +
+      antialias.clouds.bytes +
+      sky.bytes +
       (shoreline?.bytes ?? 0);
     d.patches = visible.size + outgoing.size;
     d.geometryCacheBytes = patches.bytes;
@@ -725,6 +881,23 @@ export function startTerrainViewer(
     setFuelFraction(fraction: number) {
       flight?.setFuelFraction(fraction);
     },
+    setTimeOfDay(hours: number) {
+      environment.setTimeOfDay(hours);
+      update(diagnostics());
+    },
+    setWeather(id: WeatherId) {
+      environment.setWeather(id);
+      update(diagnostics());
+    },
+    setWind(id: WindPresetId) {
+      environment.setWind(id);
+      update(diagnostics());
+    },
+    setCloudQuality(quality: CloudQuality) {
+      cloudQuality = quality;
+      antialias.clouds.quality = quality;
+      update(diagnostics());
+    },
     dispose() {
       disposed = true;
       teleportRequest++;
@@ -743,6 +916,7 @@ export function startTerrainViewer(
       imagery?.dispose();
       flight?.dispose();
       antialias.dispose();
+      sky.dispose();
       renderer.dispose();
       if (window.__terrainDiagnostics === diagnostics) delete window.__terrainDiagnostics;
     },

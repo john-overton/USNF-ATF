@@ -9,6 +9,7 @@ import {
   type Texture,
   type Scene,
 } from 'three';
+import { patchCloudShadow } from './cloud-shadow';
 import type { WaterBody } from '../data';
 import { ShoreWaterMask } from './shoreline-mask';
 import type { ShorePoint, ShoreRing } from './shoreline-data';
@@ -395,9 +396,11 @@ export class ShoreLayer {
             '#include <logdepthbuf_fragment>',
             '#include <logdepthbuf_fragment>\n#ifdef USE_LOGARITHMIC_DEPTH_BUFFER\ngl_FragDepth=max(0.0,gl_FragDepth-2.0/16777216.0);\n#endif',
           );
+          patchCloudShadow(shader);
         };
-        material.customProgramCacheKey = () => 'terrain-shore-ribbon-v1';
+        material.customProgramCacheKey = () => 'terrain-shore-ribbon-v2-cloud-shadow';
         const mesh = new Mesh(surface.geometry, material);
+        mesh.receiveShadow = true;
         mesh.renderOrder = 1;
         this.scene.add(mesh);
         const mask = this.waterMask.bake(

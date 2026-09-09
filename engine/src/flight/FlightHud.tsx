@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import type { FlightDiagnostics } from './FlightLayer';
-import { flightHudReadout, wrapHeading, HUD_PITCH_PIXELS_PER_DEGREE } from './hud';
+import { flightHudReadout, windReadoutText, wrapHeading, HUD_PITCH_PIXELS_PER_DEGREE } from './hud';
 import type { WaypointGuidance } from './navigation';
 
 /** Original SVG instruments; the retail HUD is an x86 plug-in, not browser artwork. */
@@ -229,6 +229,9 @@ export function FlightHud({
         </text>
         <text x="650" y="514" textAnchor="end" fontSize="13">
           {flight.controls.brake && flight.status === 'grounded' ? 'WHEEL BRAKE' : ''}
+        </text>
+        <text data-hud="wind" x="380" y="459" textAnchor="middle" fontSize="13">
+          {windReadoutText(flight.windBearingDeg, flight.windSpeed)}
         </text>
         {systems.map(([name, fraction], i) => (
           <text

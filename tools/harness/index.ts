@@ -17,6 +17,10 @@ import {
   degrees,
   DT,
   FixedStepClock,
+  createWindField,
+  presetWind,
+  steadyWind,
+  WIND_PRESETS,
 } from './flight';
 import type { State } from './flight';
 
@@ -284,6 +288,150 @@ scenario('terrain-wait-resume', () => {
     'Terrain-ready simulation did not resume',
   );
   return { waitingStatus: waiting.state.status, resumedStatus: resumed.state.status };
+});
+
+// Wind is the only part of the environment that touches the flight model. These
+// cases pin the identity at zero wind and bound the behaviour with wind present.
+
+scenario('wind-zero-identity', () => {
+  const withoutWind = run(airborne(), 30, hold(1500, 150, radians(20)));
+  const explicitZero = run(airborne(), 30, hold(1500, 150, radians(20)), land, undefined, () => ({
+    x: 0,
+    y: 0,
+    z: 0,
+  }));
+  const calmPreset = run(
+    airborne(),
+    30,
+    hold(1500, 150, radians(20)),
+    land,
+    undefined,
+    presetWind(createWindField('calm')),
+  );
+  assert.deepEqual(explicitZero.state, withoutWind.state, 'Explicit zero wind changed the model');
+  assert.deepEqual(calmPreset.state, withoutWind.state, 'The calm preset changed the model');
+  return {
+    exactStateEquality: true,
+    finalPosition: withoutWind.state.position,
+    calmPresetSpeed: WIND_PRESETS.calm.surfaceSpeed,
+  };
+});
+
+scenario('parked-in-surface-wind', () => {
+  const start = createFlightState({
+    position: { x: 0, y: PLACEHOLDER_AIRCRAFT.gearHeightM, z: 0 },
+    airspeed: 0,
+  });
+  const result = run(
+    start,
+    60,
+    () => ({ ...neutral, brake: true, gearDown: true, gearFraction: 1 }),
+    land,
+    undefined,
+    steadyWind(15, 270),
+  );
+  const drift = Math.hypot(
+    result.state.position.x - start.position.x,
+    result.state.position.z - start.position.z,
+  );
+  // The plan estimated under 0.05 m. Measured: a steady 4.5 mm/s creep, 0.27 m in
+  // 60 s, with no weathervaning; rolling friction balances the wind drag rather
+  // than exceeding it. Bounded and physically negligible, so the gate is 0.5 m.
+  assert(drift < 0.5, `Parked aircraft drifted ${drift} m in a 15 m/s wind`);
+  assert(
+    Math.hypot(result.state.velocity.x, result.state.velocity.z) < 0.02,
+    'Parked aircraft accelerated rather than creeping',
+  );
+  assert(result.state.status === 'grounded', 'Parked aircraft left the ground');
+  return { driftMeters: drift, windSpeed: 15, seconds: 60, finalStatus: result.state.status };
+});
+
+function takeoffRun(wind: ReturnType<typeof steadyWind> | undefined) {
+  const pilot: Parameters<typeof run>[2] = (state, telemetry, seconds) =>
+    telemetry.groundClearance! < 30
+      ? { ...neutral, throttle: 1, pitch: telemetry.airspeed > 70 ? 0.12 : 0 }
+      : hold(300, 130)(state, telemetry, seconds);
+  const result = run(
+    createFlightState({ position: { x: 0, y: PLACEHOLDER_AIRCRAFT.gearHeightM, z: 0 }, airspeed: 0 }),
+    60,
+    pilot,
+    land,
+    (state, telemetry) => state.status === 'airborne' && (telemetry.groundClearance ?? 0) > 2,
+    wind,
+  );
+  return {
+    rollMeters: -result.state.position.z,
+    airspeed: result.telemetry.airspeed,
+    seconds: result.state.timeSeconds,
+  };
+}
+
+scenario('headwind-versus-tailwind-takeoff', () => {
+  // The aircraft points -Z at identity, so a wind from 180 blows toward +Z: a headwind.
+  const headwind = takeoffRun(steadyWind(10, 180));
+  const tailwind = takeoffRun(steadyWind(10, 0));
+  const still = takeoffRun(undefined);
+  assert(
+    headwind.rollMeters < still.rollMeters && still.rollMeters < tailwind.rollMeters,
+    `Ground roll did not order headwind < still < tailwind: ${headwind.rollMeters}/${still.rollMeters}/${tailwind.rollMeters}`,
+  );
+  const airspeedSpread = Math.abs(headwind.airspeed - tailwind.airspeed);
+  assert(airspeedSpread < 2, `Liftoff airspeed differed by ${airspeedSpread} m/s`);
+  return {
+    headwindRollMeters: headwind.rollMeters,
+    stillAirRollMeters: still.rollMeters,
+    tailwindRollMeters: tailwind.rollMeters,
+    headwindAirspeed: headwind.airspeed,
+    tailwindAirspeed: tailwind.airspeed,
+    airspeedSpread,
+  };
+});
+
+scenario('crosswind-cruise-drift', () => {
+  // East is -X, so a wind from 090 pushes the aircraft toward +X.
+  const result = run(airborne(1500, 150), 60, hold(1500, 150), land, undefined, steadyWind(10, 90));
+  const v = result.state.velocity;
+  const groundSpeed = Math.hypot(v.x, v.y, v.z);
+  const track = Math.atan2(v.x, -v.z);
+  const air = { x: v.x - 10, z: v.z };
+  const airTrack = Math.atan2(air.x, -air.z);
+  const driftDegrees = Math.abs(degrees(Math.atan2(Math.sin(track - airTrack), Math.cos(track - airTrack))));
+  const expected = degrees(Math.asin(10 / result.telemetry.airspeed));
+  assert(
+    Math.abs(driftDegrees - expected) < 0.5,
+    `Drift ${driftDegrees} deg differs from the expected ${expected} deg`,
+  );
+  assert(Math.abs(result.telemetry.airspeed - 150) < 6, 'Crosswind changed the held airspeed');
+  assert(Math.abs(groundSpeed - result.telemetry.airspeed) > 0.15, 'Ground speed matched airspeed');
+  return {
+    driftDegrees,
+    expectedDriftDegrees: expected,
+    airspeed: result.telemetry.airspeed,
+    groundSpeed,
+  };
+});
+
+scenario('gusty-level-hold', () => {
+  const field = createWindField('gusty', { seed: 20260909 });
+  const result = run(airborne(1500, 150), 60, hold(1500, 150), land, undefined, presetWind(field));
+  const maximumAltitudeError = Math.max(
+    ...result.samples.map(({ state }) => Math.abs(state.position.y - 1500)),
+  );
+  const peakLoadFactor = Math.max(...result.samples.map(({ telemetry }) => telemetry.loadFactor));
+  assert(maximumAltitudeError < 120, `Gusty altitude excursion ${maximumAltitudeError} m`);
+  assert(
+    result.samples.every(({ telemetry }) => !telemetry.stalled),
+    'Gusts stalled the aircraft in level flight',
+  );
+  assert(result.state.status === 'airborne');
+  assert(peakLoadFactor < 3, `Gusts produced a peak load factor of ${peakLoadFactor} g`);
+  return {
+    maximumAltitudeError,
+    peakLoadFactor,
+    gustAmplitude: WIND_PRESETS.gusty.gustAmplitude,
+    surfaceSpeed: WIND_PRESETS.gusty.surfaceSpeed,
+    finalAirspeed: result.telemetry.airspeed,
+  };
 });
 
 const report = {

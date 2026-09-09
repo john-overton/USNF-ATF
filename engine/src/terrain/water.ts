@@ -7,6 +7,7 @@ import {
   Vector3,
   Vector4,
 } from 'three';
+import { patchCloudShadow } from './cloud-shadow';
 import type { WaterBody } from '../data';
 import { waterGeometry, type WaterBatch } from './water-geometry';
 import type { WaterGeometryBuilder } from './water-worker-client';
@@ -151,6 +152,7 @@ export class WaterLayer {
       geometry,
       new MeshStandardMaterial({ color: 0x285e82, roughness: 0.35, metalness: 0.25 }),
     );
+    mesh.receiveShadow = true;
     // Huge, slender sea triangles can lose depth precision in interpolation.
     // Reconstruct the horizontal plane's view depth from the pixel ray instead.
     mesh.onBeforeRender = (renderer, _scene, camera) => {
@@ -189,8 +191,9 @@ export class WaterLayer {
         #endif
       `,
       );
+      patchCloudShadow(shader);
     };
-    mesh.material.customProgramCacheKey = () => 'water-analytic-plane-depth-v1';
+    mesh.material.customProgramCacheKey = () => 'water-analytic-plane-depth-v2-cloud-shadow';
     this.cache.put(batch.id, { mesh, x: batch.x, z: batch.z }, bytes);
     this.scene.add(mesh);
     this.uploadedBytes += bytes;

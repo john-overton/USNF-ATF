@@ -7,6 +7,14 @@ const DEG = 180 / Math.PI;
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 export const wrapHeading = (degrees: number): number => ((degrees % 360) + 360) % 360;
 
+/** Wind is named by the bearing it blows from, as `WIND ddd/ss` in knots. */
+export function windReadoutText(bearingDegrees: number, speedMetersPerSecond: number): string {
+  const knots = Math.round(speedMetersPerSecond * 1.9438444924406);
+  if (knots === 0) return 'WIND CALM';
+  const bearing = String(Math.round(wrapHeading(bearingDegrees)) % 360).padStart(3, '0');
+  return `WIND ${bearing}/${String(knots).padStart(2, '0')}`;
+}
+
 /** Aircraft-relative instruments, not a projection through either chase camera. */
 export function flightHudReadout(state: FlightState, telemetry: FlightTelemetry) {
   const { pitchRad, yawRad, rollRad } = flightEuler(state.attitude);

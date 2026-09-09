@@ -18,6 +18,10 @@ bun tools/flight/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/Mac
 bun tools/flight/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --scenario approach --out extracted/flight-approach
 ```
 
+`--query 'time=7.5&weather=broken&wind=gusty&clouds=half'` sets viewer parameters
+such as the environment clock, weather, wind and cloud quality; invalid values
+fail the load with the viewer's explicit error.
+
 Replace `<built-commit>` with the actual hash; it is independent of the current
 working-tree HEAD recorded in the report. `--terrain` defaults to
 `extracted/terrain/ukraine`. The default durations are 15, 40 and 60 seconds;

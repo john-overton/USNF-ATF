@@ -35,6 +35,8 @@ const session = await openDesktop({
     aircraft: option('--aircraft-id', 'f14'),
     flightStart: scenario === 'approach' ? 'approach' : 'runway',
     flightModel: args.includes('--flight-model') ? option('--flight-model') : 'assisted',
+    // Environment and other viewer parameters, e.g. --query 'time=7&weather=broken'.
+    ...(args.includes('--query') ? Object.fromEntries(new URLSearchParams(option('--query'))) : {}),
   },
   initialization,
 });

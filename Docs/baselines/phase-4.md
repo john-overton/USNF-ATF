@@ -1,5 +1,48 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: wind is the only environment input to the flight model
+
+Source: dirty tree based on `0b10b548d8e6655466002819c3aa4cc0579d892b`.
+Machine: Apple M3 arm64, macOS 26.6.2, Bun 1.4.2. `bun run harness` now runs 16
+scenarios, all passing; the 11 pre-existing maneuver cases are unchanged. The new
+five exercise `FlightEnvironment.wind`, which `aerodynamics()` already subtracted
+from ground velocity in both the native and the preserved assisted backends.
+
+| Scenario | Measured |
+|---|---|
+| `wind-zero-identity` | Omitted wind, explicit `{0,0,0}` and the `calm` preset produce byte-identical `FlightState` over 30 s of banked flight (`assert.deepEqual`). A separate `bun test` case repeats this for the preserved assisted backend over 1200 steps. |
+| `parked-in-surface-wind` | Gear down, brakes on, 15 m/s wind from 270, 60 s: 0.269 m drift, terminal velocity 4.5 mm/s, still `grounded`. |
+| `headwind-versus-tailwind-takeoff` | Ground roll 424.8 m into a 10 m/s headwind, 538.3 m in still air, 666.1 m with a 10 m/s tailwind. Liftoff airspeed 87.425 vs 87.433 m/s, spread 0.008 m/s. |
+| `crosswind-cruise-drift` | 10 m/s crosswind at 150.9 m/s: drift 3.7997 deg against an expected 3.7998 deg; ground speed 150.66 vs airspeed 150.90 m/s. |
+| `gusty-level-hold` | `gusty` preset (9 m/s surface, 4 m/s gust), 60 s level hold: peak altitude excursion 4.13 m, peak load factor 1.281 g, no stall flag, finishes airborne at 150.5 m/s. |
+
+**The parked case contradicts the plan's estimate and the gate was set from the
+measurement, not the other way round.** The environment plan predicted under
+0.05 m of drift on the argument that rolling friction is two orders of magnitude
+above the aerodynamic drag of a 15 m/s wind. What the model actually does is
+reach a steady 4.5 mm/s creep, because the on-ground branch applies rolling
+friction as `min(friction, speed / dt)` — friction balances the wind drag at that
+speed rather than exceeding it. The drift is bounded, linear in time (0.27 m at
+60 s, 1.08 m at 240 s) and there is no weathervaning, so the harness asserts
+under 0.5 m in 60 s and separately that the residual velocity stays under
+0.02 m/s. This is an observation about the preserved model, not a change to it.
+
+The gusty case is the guard on feel: the plan's concern was that gusts would make
+the liked assisted model twitchy. A 1.28 g peak over a minute of level flight at
+the default gust amplitude is not twitchy. Nothing in the flight model changed;
+`assisted-flight.ts` is untouched.
+
+Wind reaches the model through `FlightLayer.environmentModel`, written by the
+terrain viewer, and is sampled once per fixed step at the flight clock's time so
+the app and the headless harness evaluate the same field. When no environment is
+attached the `wind` property is deleted rather than set to `undefined`, which is
+what keeps the zero-wind identity exact under `exactOptionalPropertyTypes`.
+`__flightDiagnostics()` gains `wind`, `windBearingDeg`, `windSpeed` and
+`groundSpeed`; the HUD gains a `WIND ddd/ss` readout in knots, `WIND CALM` at
+zero. Packaged confirmation: `WIND 250/15` on the practice approach with the
+`light` preset, `WIND CALM` with `wind=calm`.
+
+
 ## 2026-09-09: aircraft port helper conversion acceptance
 
 Helper/guide source **d56b3b7**, Apple M3 arm64, macOS 26.6.2 (25G83),

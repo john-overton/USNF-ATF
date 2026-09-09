@@ -22,9 +22,11 @@ import {
   stepFlight,
   sampleTelemetry,
   PLACEHOLDER_AIRCRAFT,
+  type FlightEnvironment,
   type FlightState,
   type FlightTelemetry,
 } from '../sim/flight';
+import type { Environment } from '../sim/environment';
 import {
   stepFlight as stepAssistedFlight,
   sampleTelemetry as sampleAssistedTelemetry,
@@ -39,6 +41,7 @@ import { createFuelState, setFuelFraction, stepFuel, type FuelState } from './Fu
 import { RetailAircraft } from './RetailAircraft';
 import { surfaceAngle } from './ControlSurfaces';
 import { waypointDestination, type TeleportWaypoint } from '../terrain/teleport';
+import { applyCloudShadow } from '../terrain/cloud-shadow';
 
 export interface FlightDiagnostics {
   state: FlightState;
@@ -52,6 +55,10 @@ export interface FlightDiagnostics {
   attitude: { x: number; y: number; z: number; w: number };
   airspeed: number;
   altitudeAGL: number | null;
+  wind: { x: number; y: number; z: number };
+  windBearingDeg: number;
+  windSpeed: number;
+  groundSpeed: number;
   throttle: number;
   alphaRad: number;
   loadFactor: number;
@@ -100,6 +107,19 @@ declare global {
   }
 }
 
+/** Wind is reported the way it is named: the bearing it blows *from*. */
+function windReadout(wind: { x: number; y: number; z: number } | undefined) {
+  const v = wind ?? { x: 0, y: 0, z: 0 };
+  const speed = Math.hypot(v.x, v.z);
+  // Air moving toward (-sin t, cos t) comes from the reciprocal bearing.
+  const toward = (Math.atan2(-v.x, v.z) * 180) / Math.PI;
+  return {
+    wind: { ...v },
+    windSpeed: speed,
+    windBearingDeg: speed < 1e-6 ? 0 : (toward + 540) % 360,
+  };
+}
+
 /** A thin rendering/input adapter; all forces and state evolution live in the pure sim. */
 export class FlightLayer {
   private controls: PilotControls = { pitch: 0, roll: 0, yaw: 0, throttle: 0, brake: false };
@@ -127,7 +147,9 @@ export class FlightLayer {
   private disposed = false;
   private teleportRequest = 0;
   private airborneArmed = this.approach || this.airborneStart;
-  private readonly environment;
+  private readonly environment: FlightEnvironment;
+  /** The theater clock and wind field; the terrain viewer owns and advances it. */
+  environmentModel: Environment | undefined;
   private readonly snapshot = (): FlightDiagnostics => this.diagnostics();
 
   static async create(
@@ -290,6 +312,22 @@ export class FlightLayer {
       stripe.position.set(0, 0.012, z);
       this.deck.add(stripe);
     }
+    // Only the aircraft casts: the depth pass stays a few hundred triangles.
+    this.aircraft.traverse((object) => {
+      object.castShadow = true;
+    });
+    this.deck.traverse((object) => {
+      object.receiveShadow = true;
+    });
+    // Cloud shadows are the same material patch the terrain uses, so the aircraft
+    // and the deck darken with the ground under the same cloud.
+    const shadowed = new Set<MeshStandardMaterial>();
+    for (const group of [this.aircraft, this.deck])
+      group.traverse((object) => {
+        if (object instanceof Mesh && object.material instanceof MeshStandardMaterial)
+          shadowed.add(object.material);
+      });
+    for (const material of shadowed) applyCloudShadow(material, 'aircraft-cloud-shadow-v1');
     scene.add(this.aircraft, this.deck);
   }
   /** Publish only after the viewer accepts this asynchronous result. */
@@ -395,6 +433,13 @@ export class FlightLayer {
     if (this.waiting || this.ground.error) return;
     const result = this.clock.advance(seconds, (dt) => {
       this.previous = this.state;
+      // The flight clock, not the render clock, drives the field so headless
+      // harness runs and the app evaluate exactly the same wind.
+      const wind = this.environmentModel?.windAt(this.state.position, this.state.timeSeconds);
+      // exactOptionalPropertyTypes: an absent field, not an undefined one, is
+      // what the zero-wind identity in the harness compares against.
+      if (wind) this.environment.wind = wind;
+      else delete this.environment.wind;
       if (this.fuel.fuelKg === 0) this.input.engineRunning = false;
       this.controls = this.input.sample(dt);
       if (!AIRCRAFT[this.aircraftId].afterburner) this.input.afterburner = false;
@@ -573,6 +618,8 @@ export class FlightLayer {
       attitude: { ...this.state.attitude },
       airspeed: this.telemetry.airspeed,
       altitudeAGL: this.telemetry.groundClearance ?? null,
+      ...windReadout(this.environment.wind),
+      groundSpeed: Math.hypot(this.state.velocity.x, this.state.velocity.y, this.state.velocity.z),
       throttle: this.input.throttle,
       alphaRad: this.telemetry.alphaRad,
       loadFactor: this.telemetry.loadFactor,

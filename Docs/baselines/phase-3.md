@@ -1,5 +1,95 @@
 # Phase 3 baseline: packaged terrain on Apple M3
 
+## 2026-09-09: sky, sun/moon lighting, shadows and volumetric clouds
+
+Source: dirty tree based on `0b10b548d8e6655466002819c3aa4cc0579d892b`
+(the environment work is uncommitted at measurement time; the follow-up commit
+names this parent). Machine: Apple M3 arm64, macOS 26.6.2, Bun 1.4.2, Node
+22.14.0, Three.js 0.185.1, Electron 44.3.0. Unpackaged bundle from current
+source (`buildUnpackaged`), driven by `tools/terrain/smoke.ts` and
+`tools/flight/smoke.ts` against `extracted/terrain/ukraine-shorelines`, which
+matches the installed app-data theater. Every run below reported zero renderer
+runtime errors and zero browser console errors, shader errors included.
+
+### Frame rate at 1440p, display vsync in force
+
+| Scene | Query | Mean fps | p95 frame | CPU submit |
+|---|---|---|---|---|
+| Odesa coast, noon | `time=12&date=07-15` | 59.9 | 17.6 ms | 6.8 ms |
+| Odesa coast, dawn | `time=6.2` | 59.8 | 17.6 ms | 6.5 ms |
+| Odesa coast, dusk | `time=19.6` | 59.9 | 17.6 ms | 6.7 ms |
+| Odesa coast, night | `time=23` | 59.9 | 17.6 ms | 6.6 ms |
+| Mountain waypoint, noon | `time=12` | 59.9 | 18.5 ms | 5.4 ms |
+| Broken cumulus, 4000 m | `weather=broken&wind=gusty` | 60.0 | 17.6 ms | 6.4 ms |
+| Practice flight, approach | `mode=flight&flightStart=approach` | 60.1 | 17.6 ms | 6.6 ms |
+
+Default cloud quality is `half`. Every one of these holds the 60 Hz cap, so the
+capped numbers cannot show what the cloud pass costs; the section below unlocks
+presentation to measure it.
+
+### Volumetric cloud cost, presentation unlocked
+
+`--unlock-vsync` was added to the terrain smoke: it launches Chromium with
+`--disable-gpu-vsync --disable-frame-rate-limit`. **These are relative GPU costs,
+not user-visible frame rates.** Same viewpoint (280000, 4000, 280000, yaw 1.5,
+pitch -0.15), `time=15&date=07-15&weather=broken&wind=gusty`, 10 s each, 1440p:
+
+| `clouds=` | Mean frame | p95 | Delta from `off` | Mean fps |
+|---|---|---|---|---|
+| `off` | 2.75 ms | 3.30 ms | — | 363.6 |
+| `quarter` | 4.07 ms | 5.40 ms | +1.32 ms | 245.5 |
+| `half` | 6.14 ms | 7.70 ms | +3.39 ms | 162.9 |
+| `full` | 14.47 ms | 16.10 ms | +11.72 ms | 69.1 |
+
+40 march steps, 5 light steps. The march scales close to pixel count: quarter to
+half is 2.6x the added cost for 4x the pixels, half to full is 3.5x for 4x. CPU
+submission stayed at 0.3-0.7 ms at every quality, so this is entirely GPU. `full`
+leaves only about 2 ms of a 16.7 ms budget on this scene and is not a safe
+default; `half` leaves about 10.5 ms and is the shipped default. WebGL2 has no
+GPU timer, so the frame-time delta is the measurement.
+
+### What the screenshots show
+
+Noon at the coast and at the mountain waypoint reproduces the previous calibrated
+look: the zenith lands on #8ca4c9 against the retired constant `0x91b1c8`, and the
+ground, water and shoreline colours are unchanged by eye. Dusk produces a graded
+orange horizon with the sun disc and a lit cirrus sheet; the terrain falls to a
+near-silhouette because the pipeline has no tone mapping and day/night is pure
+intensity scaling, which is the documented decision, not a defect. Night is black
+sky with round star points and a faint moonlit coastline. A full moon 29.8 deg up
+(`time=0&date=120`) lights the terrain and the cirrus visibly.
+
+The aircraft shadow is confirmed on the practice deck in
+`extracted/env-ground-shadow/final.png` (`--scenario ground`, `time=8`, sun 34.9
+deg elevation at azimuth 95): a distinct aircraft-shaped dark patch beside the
+gear. **Finding worth recording:** from the F2/F3 chase cameras the aircraft's own
+shadow is off screen in most conditions. The chase camera sits behind and slightly
+above, so the ground directly under the aircraft is below the bottom of the frame,
+and at this latitude the sun is never north of the aircraft's southbound heading,
+which puts the shadow behind or far to the side. Several apparently-negative
+shadow checks earlier in this session were this geometry, not a missing shadow.
+
+Cloud shadows are visible as broad darkened regions on the hills under a
+scattered deck (`extracted/env-shadow-low/terrain.png`). They are soft, because
+the coverage field is sampled at cloud-base scale with no penumbra term.
+
+### Known limits and open items
+
+- The sky table integrates from a 2 m eye, so its below-horizon rows are ground
+  rays. The shader clamps view elevation to the horizon row: at 1800 m the true
+  horizon is 1.4 deg below level and that band takes the horizon colour, which is
+  what the fog fades distant terrain to. A camera-altitude term in the table is
+  the correct fix and is not implemented; the current sky does not deepen with
+  altitude.
+- Cloud edges are soft at `half` because the upsample is bilinear. Depth-aware
+  upsampling is the named follow-up.
+- Terrain self-shadowing remains deferred; slope shading from normals is what
+  gives relief in these screenshots.
+- Fog is one colour per frame taken in the camera's forward direction. No seam
+  was visible at dawn or dusk in these captures, but the camera was not swept
+  through the sun's azimuth while recording.
+
+
 ## 2026-09-09: analytic water depth and selectable seasonal maps
 
 Source: dirty tree based on `f5625d3c0dac0ecf3ba1a0bbb2f6fc1250783867`.

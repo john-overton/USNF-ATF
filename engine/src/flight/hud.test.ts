@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { attitudeFromEuler, createFlightState, sampleTelemetry } from '../sim/flight';
-import { flightHudReadout } from './hud';
+import { windReadoutText, flightHudReadout } from './hud';
 import { FlightHud } from './FlightHud';
 import type { FlightDiagnostics } from './FlightLayer';
 
@@ -94,4 +94,13 @@ test('HUD renders live throttle, engine, flight warning and all four retail-name
   flight.throttle = 1;
   flight.afterburner = true;
   expect(renderToStaticMarkup(createElement(FlightHud, { flight }))).toContain('THR 100% AFT');
+});
+
+test('wind readout names the bearing the wind blows from, in knots', () => {
+  expect(windReadoutText(0, 0)).toBe('WIND CALM');
+  expect(windReadoutText(250, 5)).toBe('WIND 250/10');
+  expect(windReadoutText(9, 4)).toBe('WIND 009/08');
+  // Wrapping keeps 360 reading as 000 rather than a fourth digit.
+  expect(windReadoutText(360, 9)).toBe('WIND 000/17');
+  expect(windReadoutText(-10, 9)).toBe('WIND 350/17');
 });

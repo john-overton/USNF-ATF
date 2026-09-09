@@ -12,9 +12,82 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 0: retail toolkit | Containers, images/fonts and data readers; bounded nearest-detail F-14 static export with textures | F-14 is recognizable in packaged flight. General SH interpreter, native animation semantics and unified deliverable remain open |
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
-| 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics | Polished packaged coast/detail ~60 fps at 1440p; current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness, indexed exact water queries | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: theater clock, wind, sky, shadows and volumetric clouds
+
+Implements [environment-plan.md](environment-plan.md) steps 1–4. The theater now
+has a clock with a real sun and moon, a wind field, aircraft and cloud shadows,
+and authored cloud layers with a ray-marched cumulus deck and a cirrus sheet.
+
+New pure-simulation module `engine/src/sim/environment/`: NOAA solar position,
+truncated-Meeus moon with an approximate phase, four wind presets with a
+power-law surface profile blending to a veered upper wind by 3000 m and a bounded
+deterministic gust term, five weather presets with authored layer altitudes and
+coverage, and an `Environment` that owns the clock and season. No Three.js and no
+DOM, so all of it runs under `bun test`. Rendering support modules are equally
+headless and tested: a single-scattering Rayleigh/Mie sky table with an
+approximate multiple-scattering closure and an ozone layer, and tiling coverage
+and Perlin-Worley noise generators shared by the cloud march and the cloud
+shadows.
+
+**Wind is the only part of this that touches flight.** `aerodynamics()` already
+subtracted `FlightEnvironment.wind` from ground velocity in both backends;
+`FlightLayer` now writes it once per fixed step from the flight clock's time.
+Five harness cases and a unit test pin the behaviour, including a byte-identical
+zero-wind result for the preserved assisted model. Time of day, shadows and
+clouds are explicitly not flight-affecting. The parked-in-wind case measured a
+bounded 4.5 mm/s creep rather than the plan's predicted stillness; the gate was
+set from that measurement and the reason is recorded in the phase 4 baseline.
+
+Rendering: the fixed `AmbientLight`/`DirectionalLight`/`Fog` are replaced by a
+`SkyLayer` that rebuilds the scattering table only when the sun moves more than
+0.25 deg and feeds the sky shader, the fog colour and both lights from it, so CPU
+and GPU colours cannot disagree. Noon is the calibration anchor: the table's
+zenith lands on #8ca4c9 against the retired constant `0x91b1c8`, and the key
+light is scaled to reproduce the previous `2.4` at `0xfff0d0` at a summer local
+noon, reddening on its own through the model's transmittance. Below the horizon
+the key light follows the moon. Aircraft shadows use one tight orthographic box
+around the aircraft with only aircraft meshes casting. Cloud shadows are a shared
+GLSL snippet and one shared uniform set patched into the terrain, water,
+shoreline, aircraft and deck materials, sampling the same coverage texture the
+march samples, so no extra pass. The cloud march is a new composer pass between
+the scene and tone mapping, at selectable full/half/quarter resolution.
+
+The helper panel gains an Environment section: a time-of-day slider showing HH:MM
+and sun elevation, and Weather, Wind and Cloud quality selectors, all restoring
+canvas focus. URL parameters `time`, `date`, `weather`, `wind`, `clouds` and
+`cloudSteps` are validated and fail loudly. `__terrainDiagnostics()` gains an
+`environment` block including shadow state; `__flightDiagnostics()` gains wind and
+ground speed; the HUD gains `WIND ddd/ss`. The date picks the seasonal colour map
+on load when the dataset has one, and the manual selector still wins.
+
+Verified on this Mac: `bun run check` green (204 Bun tests), `bun run harness`
+green (16 scenarios). Unpackaged Electron acceptance at 2560x1440 held 59.8–60.1
+fps with zero renderer or console errors at noon, dawn, dusk, night, over a
+broken cumulus deck and in practice flight. With presentation unlocked the cloud
+pass costs +1.3 ms at quarter, +3.4 ms at half and +11.7 ms at full over a 2.75 ms
+baseline; half is the shipped default and full is not a safe one. Exact commands,
+tables and screenshot findings are in
+[baselines/phase-3.md](baselines/phase-3.md) and
+[baselines/phase-4.md](baselines/phase-4.md).
+
+Known gaps, none of them silent: the sky table integrates from a 2 m eye, so the
+shader clamps below-horizon views to the horizon row and the sky does not deepen
+with camera altitude; cloud edges are soft at half resolution because the upsample
+is bilinear; fog remains one colour per frame; terrain self-shadowing, time
+acceleration, precipitation and in-cloud turbulence stay deferred. From the chase
+cameras the aircraft's own shadow is off screen in most sun geometries — confirmed
+on the deck in the ground scenario, and the reason is written up in the phase 3
+baseline so the next reader does not repeat the search.
+
+Next reproducible step: open practice flight, drag the time slider through dusk
+with Weather set to Broken cumulus, and compare `clouds=half` against
+`clouds=full` at the mountain waypoint before deciding whether step 5 should spend
+its budget on depth-aware upsampling or on a camera-altitude term in the sky
+table.
 
 ## 2026-09-09: repeatable aircraft-port helper and worksheet
 

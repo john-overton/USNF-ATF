@@ -44,6 +44,13 @@ must use the real source build and clearly identify that provenance.
 
 Use `--camera 'x,y,z,yaw,pitch'` to reproduce a viewpoint (local meters and
 radians). Query values are validated and camera positions clamp to the theater.
+Use `--query 'time=6.2&weather=broken&wind=gusty&clouds=half'` to set viewer
+parameters such as the environment clock, weather, wind and cloud quality;
+invalid values fail the load with the viewer's explicit error.
+Use `--unlock-vsync` to drop `--disable-gpu-vsync --disable-frame-rate-limit`
+into the launch. Every quality level holds the display's 60 Hz cap otherwise,
+which hides the relative cost of an added pass. Numbers taken this way are a
+relative GPU cost, not a user-visible frame rate, and must be labeled as such.
 The report includes moving-frame mean/p95, water cache size and omitted batches;
 the smoke fails when selected water was omitted by its budget.
 

@@ -21,12 +21,16 @@ await mkdir(out, { recursive: true });
 await cp(terrain, path.join(profile, 'data', 'terrains', 'ukraine'), { recursive: true });
 const command = [binary];
 if (args.includes('--app')) command.push(path.resolve(option('--app')));
-command.push(
-  `--user-data-dir=${profile}`,
-  '--remote-debugging-port=0',
+// Vsync caps every quality at the display's 60 Hz, which hides the cost of an
+// added pass. --unlock-vsync frees the presentation rate so the delta is visible;
+// the resulting numbers are a relative cost, not a user-visible frame rate.
+const unlockVsync = args.includes('--unlock-vsync');
+const launchFlags = [
   '--disable-backgrounding-occluded-windows',
   '--disable-background-timer-throttling',
-);
+  ...(unlockVsync ? ['--disable-gpu-vsync', '--disable-frame-rate-limit'] : []),
+];
+command.push(`--user-data-dir=${profile}`, '--remote-debugging-port=0', ...launchFlags);
 const proc = Bun.spawn(command, { stdout: 'pipe', stderr: 'pipe' });
 const logs: string[] = [];
 async function collect(stream: ReadableStream<Uint8Array>): Promise<void> {
@@ -137,6 +141,10 @@ try {
   url.searchParams.set('view', 'terrain');
   url.searchParams.set('root', 'appData');
   url.searchParams.set('manifest', 'terrains/ukraine/manifest.json');
+  // Environment and other viewer parameters, e.g. --query 'time=6.2&weather=broken'.
+  if (args.includes('--query'))
+    for (const [key, value] of new URLSearchParams(option('--query')))
+      url.searchParams.set(key, value);
   if (args.includes('--camera')) {
     const camera = option('--camera').split(',').map(Number);
     if (camera.length !== 5 || !camera.every(Number.isFinite))
@@ -352,10 +360,7 @@ try {
     terrain,
     viewport: [2560, 1440],
     focusEmulation: true,
-    benchmarkFlags: [
-      '--disable-backgrounding-occluded-windows',
-      '--disable-background-timer-throttling',
-    ],
+    benchmarkFlags: launchFlags,
     sourceCommit: (
       await new Response(Bun.spawn(['git', 'rev-parse', 'HEAD'], { stdout: 'pipe' }).stdout).text()
     ).trim(),

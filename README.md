@@ -2,7 +2,7 @@
 
 A non-commercial fan remake of Jane's US Navy Fighters '97 (and, later, ATF Gold), built with TypeScript, Three.js, React, and Electron. The goal is retail aircraft and missions over real-elevation terrain, using assets imported from your own copy.
 
-**Current status (2026-09-09):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, stitched panel edges, water, optional satellite paint, compact seasonal color maps, classified shoreline ribbons, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. Practice flight now supports selectable locally imported F-14, A-4E and X-31 aircraft with throttle presets, engine/gear/hook controls, retail engine sounds, moving aircraft control surfaces, a flight HUD, bracket-selected waypoints, a zoomable regional terrain map and F2/F3 chase views over the generated theater. The existing assisted flight remains the default, with separate opt-in PT-calibrated and recovered-envelope models for comparison. Combat, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
+**Current status (2026-09-09):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, stitched panel edges, water, optional satellite paint, compact seasonal color maps, classified shoreline ribbons, a simulated atmosphere with a theater clock, sun and moon lighting, wind, aircraft and cloud shadows and volumetric clouds, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. Practice flight now supports selectable locally imported F-14, A-4E and X-31 aircraft with throttle presets, engine/gear/hook controls, retail engine sounds, moving aircraft control surfaces, a flight HUD, bracket-selected waypoints, a zoomable regional terrain map and F2/F3 chase views over the generated theater. The existing assisted flight remains the default, with separate opt-in PT-calibrated and recovered-envelope models for comparison. Wind is the only environment input the flight model reads; time of day, shadows and clouds do not affect flight. Combat, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
 
 Start with [progress and review findings](Docs/progress.md), the [build plan](Docs/build-plan.md) (phase order and exit criteria), and the [design brief](Docs/usnf-atf-plan.md). Contributor and agent instructions are in [AGENTS.md](AGENTS.md). The [full US Navy Fighters manual](Docs/reference/JANES_US_NAVY_FIGHTERS_djvu.txt) is available locally; [reference details](Docs/reference/README.md) record its source and checksum.
 
@@ -103,6 +103,24 @@ exteriors and the separate experimental per-aircraft flight-data mode. [F-14 set
   destination; the map stays visible when the helper is minimized.
 - Standard gamepads use the left stick for pitch/roll, right-stick X for rudder,
   triggers for throttle and B for brakes.
+
+## Environment
+
+Both the explorer and practice flight share an **Environment** section in the
+helper panel: a time-of-day slider showing HH:MM and sun elevation, and Weather,
+Wind and Cloud quality selectors. The clock runs in real time; time acceleration
+is deferred. The same settings can be given on the URL as `time=14.5`,
+`date=07-15`, `weather=`, `wind=`, `clouds=off|quarter|half|full` and
+`cloudSteps=`; an invalid value fails the load with an explicit message rather
+than silently defaulting.
+
+Wind is the only environment input the flight model reads. It shows on the HUD as
+`WIND ddd/ss` in knots, shortens or lengthens the takeoff roll, and produces the
+expected drift angle in a crosswind; the preserved assisted model is byte-for-byte
+unchanged at zero wind. Time of day, shadows and clouds are not flight-affecting.
+Volumetric clouds default to half resolution, which costs about 3.4 ms a frame on
+this Mac; see the [phase 3 baseline](Docs/baselines/phase-3.md) for the numbers at
+every quality.
 
 The free terrain explorer keeps its existing controls. Flight physics run at
 120 Hz with render interpolation. The automated pilot exists only in test tools;

@@ -6,6 +6,14 @@ import type { FsRoot } from '../platform/Platform';
 import { startTerrainViewer, type TerrainDiagnostics } from '../terrain/viewer';
 import { ExplorerNavigationOverlay } from './ExplorerNavigationOverlay';
 import type { MapWaypoint } from '../terrain/navigation-map';
+import {
+  CLOUD_QUALITIES,
+  WEATHER_PRESETS,
+  WIND_PRESETS,
+  type CloudQuality,
+  type WeatherId,
+  type WindPresetId,
+} from '../sim/environment';
 
 export function TerrainViewer() {
   const params = new URLSearchParams(window.location.search);
@@ -171,6 +179,85 @@ export function TerrainViewer() {
                 ))}
               </select>
             </label>
+          )}
+          {stats?.environment && (
+            <section aria-label="Environment">
+              <label htmlFor="environment-time">
+                Time of day {stats.environment.timeText} · sun{' '}
+                {stats.environment.sunElevationDeg.toFixed(1)}° elevation,{' '}
+                {stats.environment.sunAzimuthDeg.toFixed(0)}° azimuth
+              </label>
+              <input
+                id="environment-time"
+                type="range"
+                min="0"
+                max="24"
+                step="0.01"
+                value={stats.environment.timeOfDayHours}
+                onChange={(event) => viewerRef.current?.setTimeOfDay(Number(event.target.value))}
+                onPointerUp={() => canvas.current?.focus()}
+              />
+              <label>
+                Weather{' '}
+                <select
+                  id="environment-weather"
+                  value={stats.environment.weather}
+                  onChange={(event) => {
+                    viewerRef.current?.setWeather(event.target.value as WeatherId);
+                    canvas.current?.focus();
+                  }}
+                >
+                  {Object.values(WEATHER_PRESETS).map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Wind{' '}
+                <select
+                  id="environment-wind"
+                  value={stats.environment.wind}
+                  onChange={(event) => {
+                    viewerRef.current?.setWind(event.target.value as WindPresetId);
+                    canvas.current?.focus();
+                  }}
+                >
+                  {Object.values(WIND_PRESETS).map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Cloud quality{' '}
+                <select
+                  id="environment-clouds"
+                  value={stats.environment.cloudQuality}
+                  onChange={(event) => {
+                    viewerRef.current?.setCloudQuality(event.target.value as CloudQuality);
+                    canvas.current?.focus();
+                  }}
+                >
+                  {CLOUD_QUALITIES.map((quality) => (
+                    <option key={quality} value={quality}>
+                      {quality === 'off'
+                        ? 'Off'
+                        : `${quality[0]?.toUpperCase()}${quality.slice(1)} resolution`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p>
+                {stats.environment.season} · {stats.environment.weatherLabel} ·{' '}
+                {stats.environment.windSpeed < 0.05
+                  ? 'wind calm'
+                  : `wind ${String(Math.round(stats.environment.windBearingDeg) % 360).padStart(3, '0')}° at ${(stats.environment.windSpeed * 1.94384).toFixed(0)} kt`}{' '}
+                · {stats.environment.cloudSteps} march steps
+              </p>
+            </section>
           )}
           <p className="terrain-path">{rootPath}</p>
           {(error || stats?.error) && (
