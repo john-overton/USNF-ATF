@@ -74,7 +74,7 @@ Reproducible local template generation (no Xcode template modification):
 
 ```sh
 python3 tools/terrain/gpu-trace-template.py --output extracted/gpu-method/terrain-performance-limiters.tracetemplate
-bun tools/terrain/smoke.ts --terrain extracted/terrain/ukraine --out extracted/terrain-smoke-memory --seconds 15 --trace-gpu --trace-template extracted/gpu-method/terrain-performance-limiters.tracetemplate --camera '219144.16245100333,1800,267020.80352811713,-1.5707963267948966,-0.35'
+bun tools/terrain/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --terrain extracted/terrain/ukraine --out extracted/terrain-smoke-memory --seconds 15 --trace-gpu --trace-template extracted/gpu-method/terrain-performance-limiters.tracetemplate --camera '219144.16245100333,1800,267020.80352811713,-1.5707963267948966,-0.35'
 ```
 
 The generator selects profile **13** in both archived `counterprofile` and
