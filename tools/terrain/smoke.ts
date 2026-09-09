@@ -47,7 +47,7 @@ function send(method: string, params: Record<string, unknown> = {}): Promise<any
     const id = ++nextId;
     const timer = setTimeout(() => {
       pending.delete(id);
-      reject(new Error(`CDP timeout: ${method}`));
+      reject(new Error(`CDP timeout: ${method} ${String(params.expression ?? '').slice(0, 180)}`));
     }, 65_000);
     pending.set(id, {
       resolve: (value) => {
@@ -131,6 +131,7 @@ try {
     mobile: false,
   });
   await send('Page.bringToFront');
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true });
   // The viewer supports query parameters; load the staged theater in an isolated profile.
   const url = new URL(page.url);
   url.searchParams.set('view', 'terrain');
@@ -255,8 +256,13 @@ try {
     const capture = args.includes('--capture-transitions');
     const stages: unknown[] = [];
     let captureIndex = 0;
-    for (const code of ['KeyE', 'KeyQ']) {
+    const lateral = args.includes('--lateral-transitions');
+    for (const code of lateral ? ['KeyW', 'KeyS'] : ['KeyE', 'KeyQ']) {
       const start = await evaluate('window.__terrainDiagnostics()');
+      if (lateral)
+        await evaluate(
+          "window.dispatchEvent(new KeyboardEvent('keydown',{code:'ShiftLeft',bubbles:true}))",
+        );
       await evaluate(
         `window.dispatchEvent(new KeyboardEvent('keydown', {code:'${code}',bubbles:true}))`,
       );
@@ -265,7 +271,7 @@ try {
         function frame(now) {
           const d=window.__terrainDiagnostics();
           samples.push({...d,elapsedMs:now-begin,rafFrameMs:now-last,moving:!released}); last=now;
-          if(!released && now-begin>=4000) { window.dispatchEvent(new KeyboardEvent('keyup',{code:'${code}',bubbles:true})); released=true; }
+          if(!released && now-begin>=4000) { window.dispatchEvent(new KeyboardEvent('keyup',{code:'${code}',bubbles:true})); window.dispatchEvent(new KeyboardEvent('keyup',{code:'ShiftLeft',bubbles:true})); released=true; }
           if(now-begin < 6000) requestAnimationFrame(frame); else resolve(samples);
         } requestAnimationFrame(frame);
       })`);
@@ -327,7 +333,7 @@ try {
         Buffer.from(shot.data, 'base64'),
       );
     }
-    transitionFlight = { capturePerturbsTiming: capture, stages };
+    transitionFlight = { capturePerturbsTiming: capture, lateral, stages };
     await Bun.write(
       path.join(out, 'transition-flight.json'),
       JSON.stringify(transitionFlight, null, 2) + '\n',
@@ -345,6 +351,7 @@ try {
     binary,
     terrain,
     viewport: [2560, 1440],
+    focusEmulation: true,
     benchmarkFlags: [
       '--disable-backgrounding-occluded-windows',
       '--disable-background-timer-throttling',

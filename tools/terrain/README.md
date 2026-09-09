@@ -119,3 +119,10 @@ are documented by [Google's chrome-launcher](https://github.com/GoogleChrome/chr
 Browser console errors (including Three.js shader failures) now fail the smoke
 and are preserved in `runtime-errors.json`, even if geometric draw counters look
 healthy.
+
+Add `--lateral-transitions` alongside `--transition-flight` to replace the altitude
+route with four-second Shift+W / Shift+S legs (6 km/s), crossing the sparse-detail
+boundary and returning at the same altitude. The documented detail camera covers
+about 24 km per leg and crosses a floating-origin boundary. Both directions
+still must complete a source fade. CDP focus emulation keeps the isolated page
+active during automated sampling.
