@@ -94,3 +94,25 @@ load result. A delayed-old-load/new-load regression verifies that disposing the
 outdated layer cannot remove the accepted layer's diagnostics. Five adapter tests
 now pass (29 expectations), with TypeScript and scoped ESLint clean. Packaged
 checks must rebuild after this follow-up.
+
+## Packaged visual integration check
+
+The macOS arm64 package built from `49a3123` was inspected at1440p in three
+independent automated-input scenarios. Ground-start screenshot
+`extracted/phase4-ground-final/final.png` shows the original aircraft aligned with
+the marked runway and surrounding terrain; the initial contact correctly leaves
+both event counters at zero. `extracted/phase4-takeoff-final/final.png` shows the
+aircraft airborne above continuous land with one takeoff recorded. The final
+approach screenshot `extracted/phase4-approach-final/final.png` shows the aircraft
+stopped on the runway centerline, with one landing recorded. Its final state is
+x289000/z391217.614/y113.2, effectively zero velocity, brakes applied and throttle
+zero: inside the fictional deck, not an off-runway ground contact.
+
+These are desktop integration checks driven through the ordinary standard-gamepad
+API, not direct state mutation. Faint pre-existing terrain patch lines remain.
+The original procedural aircraft has simple fixed landing gear and no retail
+artwork; visual presence and successful landing do not establish historical
+handling parity. The phase 4 baseline owns exact frame times, source provenance,
+input recipe and the approach run's one clamped frame. Camera/renderer and sim
+snapshots update at different cadences; small HUD-versus-report differences are
+expected and not evidence of a second state.
