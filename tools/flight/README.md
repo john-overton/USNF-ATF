@@ -67,3 +67,16 @@ All recordings remain under ignored `extracted/`. The parallel MediaStream tap
 captures the actual app graph without replacing its playback nodes; it is not
 physical loopback or a subjective sound-quality judgment. The real retail sample
 rates/mixing still have the uncertainty described in [audio notes](../../Docs/formats/audio.md).
+
+## Stationary support and panel controls
+
+```sh
+bun tools/flight/ground-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --out extracted/ground-support-accepted
+```
+
+This trusted-key test holds both directions of pitch/roll/yaw for three seconds
+each on the runway, rejecting position/attitude drift or accumulated rotation.
+It measures actual HUD screen dimensions and pitch-rung spacing, verifies no
+blur filter, and collapses/restores the helper while checking canvas focus,
+visible HUD and advancing simulation. It loads local F-14 geometry/audio by
+default. Screenshots and the full report remain in the ignored output directory.

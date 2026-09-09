@@ -113,3 +113,21 @@ bun tools/flight/retail-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Conte
 
 To include sounds in other desktop tools, pass
 `--audio extracted/flight/audio/f14.json` alongside `--aircraft`.
+
+## HUD size and helper panel
+
+The HUD is 25% narrower and shorter than its initial version (570×465px at
+2560×1440), with thin Courier text, one-unit crisp strokes and no blurred halo.
+Pitch-ladder spacing is twice the original on-screen gap: 50px per 5° at that
+viewport. The flight-path marker uses the same vertical angular scale.
+
+Use **−** beside “Practice flight” to collapse the helper panel and **+** to
+restore it. The HUD and simulation keep running; either button returns keyboard
+focus to the flight canvas.
+
+Stationary aircraft now stay supported by the ground under held pitch, roll and
+yaw input. Aerodynamic control authority uses air density and true airspeed
+squared (including wind), with no minimum authority at zero airflow. Nose-up
+rotation opens progressively between 45 and 65 m/s sea-level equivalent airspeed.
+This is still original assisted physics with approximate gear support, not a
+ported USNF integrator or a per-wheel rigid-body/contact simulation.

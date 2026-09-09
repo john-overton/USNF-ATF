@@ -13,8 +13,46 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, diagnostics | Packaged coast/detail ~60 fps at 1440p; 0↔1 and 1↔2 fades plus 24km fast lateral flights pass. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Original 120 Hz assisted dynamics; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, F2/F3 chase, practice starts and 11-case harness | Packaged flight and systems/animation checks on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Original 120 Hz assisted dynamics with pressure-scaled controls and ground support; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, F2/F3 chase, practice starts and 11-case harness | Packaged flight and systems/animation checks on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: stationary support, compact retro HUD and helper minimize
+
+The parked-aircraft report reproduced a real defect: angular-rate assistance had
+an 8% minimum authority even at zero true airspeed, and ground contact only
+constrained translation. Source `16e3bd2` removes that floor. Control authority
+now follows air density × true airspeed², including wind. Main-gear support
+constrains roll to the terrain plane, parked yaw is suppressed, and low-pressure
+pitch settles to the ground. A bounded nose-up rotation envelope opens from 45 to
+65 m/s sea-level equivalent. Safe touchdown receives support only after impact
+classification, preserving unsafe-arrival rejection. Residual rotation is also
+cleared instead of accumulating invisibly against the constraint.
+
+Source `f70e10c` reduces HUD width and height 25% (75% linear scale), doubles
+actual screen spacing between 5° pitch rungs and keeps the flight-path marker on
+that vertical scale. Thin Courier text, crisp one-unit strokes and removal of
+the glow give the requested older instrument appearance. The helper now has a
+**−** minimize button and **+** restore button; keyboard focus returns to the
+canvas, and flight/HUD continue while the helper content is collapsed.
+
+Lessons: aerodynamic authority needs air-relative velocity and density, whereas
+taxi steering needs ground motion. Ground support must handle attitude as well
+as position; applying it before impact classification can conceal a crash.
+Changing SVG scale also changes tick spacing, so the regression measures actual
+screen transforms rather than only SVG coordinates.
+
+Verification: `bun run check` passes 79 tests / 4848 expectations, including four
+new physics regressions; all 11 headless maneuvers pass at source 16e3bd2. Fresh
+Mac packaging at f70e10c took 26.7 s. The packaged stationary/HUD/panel test passes
+with 361 sampled full-control frames, no position/attitude drift, 570×465 px HUD
+and 50 px pitch gaps. See [current baseline](baselines/phase-4.md) for maneuver
+acceptance and reproducible commands. Screenshots confirm the restored helper
+and compact header with the HUD still visible.
+
+The “assisted flight model” label remains accurate: this fixes the reported
+behavior but does not port native USNF flight laws or implement individual wheel
+rigid bodies. Next: human handling/readability feedback and physical gamepad
+acceptance; Linux remains explicitly deferred.
 
 ## 2026-09-09: retail engine recordings, movable surfaces and flight HUD
 

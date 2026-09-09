@@ -1,5 +1,44 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: ground support and compact HUD/helper controls
+
+Accepted runtime source **`f70e10c`**, including physics commit `16e3bd2`, on
+Apple M3/macOS arm64, Electron 44.2.0, Bun 1.4.2, real Ukraine terrain and local
+F-14 geometry/audio imports at 2560×1440. Fresh `bun run build` completed in
+**26.7 s**, producing arm64/x64 DMG/ZIP; only arm64 was launched. Subsequent
+documentation edits were present during maneuver recording, but no runtime source
+changed. Imports are the same hashes recorded in the preceding baseline.
+
+- `bun run check`: **79 pass, 0 fail, 4848 expectations**; types/lint/format pass.
+- `bun run harness --output extracted/flight-harness/ground-support-final.json`:
+  **11/11 pass**, source `16e3bd2`. New pressure/support checks cover stationary
+  full controls and residual rates, taxi/takeoff, TAS²/density/wind authority and
+  slope-aligned landing support. The agent's initial lint run found a
+  `prefer-const` violation, corrected before commit; final checks pass.
+- `ground-smoke.ts`: **pass**, evidence `extracted/ground-support-accepted`.
+  Full positive inputs were observed for 180 frames and full negative inputs for
+  181 frames. Position/quaternion remained within 1e-6 of the resting state;
+  angular velocity remained below 1e-8. Actual HUD box **570×465 px**, pitch-rung
+  gap **49.999998 px** per 5° (previous 25 px), no CSS filter, one-unit stroke and
+  Courier font. Collapse/restore preserves visible HUD, canvas focus and advancing
+  simulation. Both screenshots visually reviewed.
+
+- Packaged takeoff, 40 s: **pass**, 60.0142 fps, p95 17.6 ms; 1 takeoffs / 0 landings, final airborne, 149.0223 m/s and 228.0999 m AGL. 1 clamped frame(s), no renderer errors. Evidence: `extracted/ground-support-takeoff`.
+- Packaged approach, 60 s: **pass**, 60.0027 fps, p95 17.6 ms; 0 takeoffs / 1 landings, final grounded, 0.0000 m/s and 0.0000 m AGL. 1 clamped frame(s), no renderer errors. Evidence: `extracted/ground-support-approach`.
+
+Reproduction, after rebuilding the named runtime source:
+
+```sh
+bun tools/flight/ground-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit f70e10c --out extracted/ground-support-accepted
+bun tools/flight/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit f70e10c --aircraft extracted/flight/f14.json --audio extracted/flight/audio/f14.json --scenario takeoff --out extracted/ground-support-takeoff
+bun tools/flight/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit f70e10c --aircraft extracted/flight/f14.json --audio extracted/flight/audio/f14.json --scenario approach --out extracted/ground-support-approach
+```
+
+This establishes the reported stationary behavior and Mac flight regression;
+it does not establish native USNF aerodynamic parity, per-wheel suspension,
+physical controller acceptance or Linux support. Audio decoder/animation suites
+were not repeated because those implementations did not change.
+
 ## 2026-09-09: retail audio, movable surfaces and HUD
 
 Accepted runtime source **`089614f`** on Apple M3/macOS arm64, Electron44.2.0,
