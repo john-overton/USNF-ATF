@@ -178,13 +178,13 @@ try {
     );
     if (!helper) throw new Error('Cannot identify this isolated app GPU helper for tracing');
     const pid = helper[1]!;
-    trace = Bun.spawn(
+    const recording = Bun.spawn(
       [
         'xcrun',
         'xctrace',
         'record',
         '--template',
-        'Metal System Trace',
+        option('--trace-template', 'Metal System Trace'),
         '--attach',
         pid,
         '--time-limit',
@@ -195,9 +195,10 @@ try {
       ],
       { stdout: 'pipe', stderr: 'pipe' },
     );
+    trace = recording;
     traceOutput = Promise.all([
-      new Response(trace.stdout).text(),
-      new Response(trace.stderr).text(),
+      new Response(recording.stdout).text(),
+      new Response(recording.stderr).text(),
     ]).then((parts) => parts.join('\n'));
   }
   const frames = (await evaluate(`new Promise(resolve => {
@@ -238,6 +239,84 @@ try {
       `Terrain acceptance failed: ${JSON.stringify({ movement, after, runtimeErrors })}`,
     );
   }
+  let transitionFlight: unknown;
+  if (args.includes('--transition-flight')) {
+    // Exercise real input across source coverage/altitude thresholds in both directions.
+    // Keep screenshots out of timing runs: capturing them perturbs GPU/frame cadence.
+    const capture = args.includes('--capture-transitions');
+    const stages: unknown[] = [];
+    let captureIndex = 0;
+    for (const code of ['KeyE', 'KeyQ']) {
+      const start = await evaluate('window.__terrainDiagnostics()');
+      await evaluate(
+        `window.dispatchEvent(new KeyboardEvent('keydown', {code:'${code}',bubbles:true}))`,
+      );
+      const sampling = evaluate(`new Promise(resolve => {
+        const samples=[]; const begin=performance.now(); let last=begin;
+        function frame(now) {
+          const d=window.__terrainDiagnostics();
+          samples.push({elapsedMs:now-begin,frameMs:now-last,...d}); last=now;
+          if(now-begin < 4000) requestAnimationFrame(frame); else resolve(samples);
+        } requestAnimationFrame(frame);
+      })`);
+      const captureUntil = Date.now() + 4000;
+      if (capture) {
+        while (Date.now() < captureUntil) {
+          const state = await evaluate('window.__terrainDiagnostics()');
+          if (state.sourceTransitionActive) {
+            const shot = await send('Page.captureScreenshot', { format: 'png' });
+            const stem = `transition-${code}-${String(captureIndex++).padStart(3, '0')}`;
+            await Bun.write(path.join(out, `${stem}.png`), Buffer.from(shot.data, 'base64'));
+            await Bun.write(path.join(out, `${stem}.json`), JSON.stringify(state, null, 2));
+          }
+          await Bun.sleep(100);
+        }
+      }
+      const samples = (await sampling) as any[];
+      await evaluate(
+        `window.dispatchEvent(new KeyboardEvent('keyup', {code:'${code}',bubbles:true}))`,
+      );
+      const end = await poll(async () => {
+        const state = await evaluate('window.__terrainDiagnostics()');
+        if (state.error) throw new Error(state.error);
+        return state.pendingChunks === 0 &&
+          !state.sourceTransitionActive &&
+          state.waterBatchesPending === 0
+          ? state
+          : undefined;
+      }, 'source transition settlement');
+      const intervals = samples.map((sample) => sample.frameMs).sort((a, b) => a - b);
+      stages.push({
+        code,
+        start,
+        end,
+        samples,
+        meanFrameMs: intervals.reduce((a, b) => a + b, 0) / intervals.length,
+        p95FrameMs: intervals[Math.floor(intervals.length * 0.95)],
+        p99FrameMs: intervals[Math.floor(intervals.length * 0.99)],
+      });
+      if (
+        end.sourceLod === start.sourceLod ||
+        !samples.some((sample) => sample.sourceTransitionActive) ||
+        samples.some(
+          (sample) => sample.error || sample.patches === 0 || sample.waterBatchesOmitted > 0,
+        )
+      )
+        throw new Error(
+          `Transition flight did not complete cleanly: ${JSON.stringify({ code, start, end })}`,
+        );
+      const shot = await send('Page.captureScreenshot', { format: 'png' });
+      await Bun.write(
+        path.join(out, `transition-${code}-settled.png`),
+        Buffer.from(shot.data, 'base64'),
+      );
+    }
+    transitionFlight = { capturePerturbsTiming: capture, stages };
+    await Bun.write(
+      path.join(out, 'transition-flight.json'),
+      JSON.stringify(transitionFlight, null, 2) + '\n',
+    );
+  }
   const screenshot = await send('Page.captureScreenshot', { format: 'png' });
   await Bun.write(path.join(out, 'terrain.png'), Buffer.from(screenshot.data, 'base64'));
   const sorted = [...frames].sort((a, b) => a - b);
@@ -252,6 +331,7 @@ try {
     ).trim(),
     runtimeErrors,
     gpuTrace,
+    transitionFlight: transitionFlight ? { report: 'transition-flight.json' } : undefined,
     movementMeters: movement,
     flightMeanFrameMs: flightTimes.reduce((a, b) => a + b, 0) / flightTimes.length,
     flightP95FrameMs: [...flightTimes].sort((a, b) => a - b)[Math.floor(flightTimes.length * 0.95)],

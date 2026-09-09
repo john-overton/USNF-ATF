@@ -77,3 +77,33 @@ Automated runs suppress physical keyboard/pointer input inside their isolated
 page and dispatch synthetic W key events through the normal input handlers.
 This prevents ordinary activity on the shared development Mac from changing
 benchmark poses. It does not change normal application input behavior.
+
+## Source-level transition flight
+
+After rebuilding the renderer, use the real detail region to exercise a complete
+30m → 100m → 30m source transition through normal altitude controls:
+
+```sh
+bun tools/terrain/smoke.ts \
+  --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF \
+  --terrain extracted/terrain/ukraine \
+  --out extracted/terrain-transition-flight \
+  --camera '470475,1293.3447265625,49725,3.141592653589793,-0.2' \
+  --seconds 15 --transition-flight
+```
+
+The route holds E for four seconds, waits for loading/transition settlement,
+then holds Q for four seconds and settles again. `transition-flight.json`
+records per-frame diagnostics and each leg's mean/p95/p99 frame intervals.
+Both legs must change source level, expose an active transition, and keep
+terrain visible without errors or omitted water. These route assertions are
+specific to the supplied camera and real Ukraine detail coverage.
+
+Add `--capture-transitions` for a separate visual inspection run that writes
+mid-transition screenshots with matching diagnostic snapshots. Screenshot
+capture perturbs timing: its report explicitly marks those measurements and
+must not be used as an untraced performance baseline.
+
+`--trace-template <name-or-path>` selects an Instruments template when used
+with `--trace-gpu`; the default remains `Metal System Trace`. Counter selection
+must be verified from the exported trace, rather than inferred from its name.
