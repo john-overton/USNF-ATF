@@ -14,6 +14,7 @@ const session = await openDesktop({
   terrain: option('--terrain', 'extracted/terrain/ukraine'),
   aircraft: option('--aircraft', 'extracted/flight/f14.json'),
   audio: option('--audio', 'extracted/flight/audio/f14.json'),
+  flightProfile: option('--flight-profile', 'extracted/flight/f14-flight.json'),
   out: option('--out', 'extracted/ground-support'),
   query: { mode: 'flight', flightStart: 'runway' },
   interactiveTest: true,
@@ -36,6 +37,10 @@ try {
     return d?.status === 'grounded' && d.simSteps > 10 ? d : undefined;
   }, 'grounded aircraft');
   evidence.initial = initial;
+  assert(
+    initial.flightModelId === 'assisted' && initial.massKg === 9000,
+    'Existing assisted model is not the default',
+  );
   for (const [label, codes] of [
     ['positive', ['ArrowDown', 'ArrowRight', 'KeyE']],
     ['negative', ['ArrowUp', 'ArrowLeft', 'KeyQ']],
@@ -118,6 +123,27 @@ try {
     'Panel toggle paused simulation',
   );
   await session.capture('helper-restored');
+  for (const model of ['retail-envelope', 'assisted']) {
+    await session.evaluate(
+      `(() => {const select=document.getElementById('flight-model-selector');select.value=${JSON.stringify(model)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`,
+    );
+    const switched = await session.poll(async () => {
+      try {
+        const d = await session.evaluate('window.__flightDiagnostics?.()');
+        return d?.flightModelId === model && d.simSteps > 10 ? d : undefined;
+      } catch {
+        return undefined;
+      }
+    }, `switched to ${model}`);
+    assert(
+      model === 'assisted'
+        ? switched.massKg === 9000
+        : switched.massKg > 25000 && !!switched.flightProfileSha256,
+      `${model}: wrong physics mass/provenance`,
+    );
+    evidence[model] = switched;
+    await session.capture(`model-${model}`);
+  }
   assert(!session.errors.length, 'Renderer errors');
 } catch (error) {
   failure = String(error);

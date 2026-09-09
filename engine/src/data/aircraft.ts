@@ -1,9 +1,11 @@
-/** Original phase 4 aircraft contract. SI units; coefficient rows index alpha then Mach. */
+import { parseRetailFlightProfile, type RetailFlightProfile } from './retail-flight';
+/** SI units; optional local PT profile replaces the original clean force tables. */
 export interface AircraftDefinition {
   schemaVersion: 1;
   id: string;
   name: string;
   massKg: number;
+  retail?: RetailFlightProfile;
   wingAreaM2: number;
   gearHeightM: number;
   stallAlphaRad: number;
@@ -77,6 +79,7 @@ export function parseAircraftDefinition(value: unknown): AircraftDefinition {
     id: a.id,
     name: a.name,
     massKg: number(a.massKg, 100, 1000000),
+    ...(a.retail === undefined ? {} : { retail: parseRetailFlightProfile(a.retail) }),
     wingAreaM2: number(a.wingAreaM2, 1, 2000),
     gearHeightM: number(a.gearHeightM, 0.1, 20),
     stallAlphaRad,

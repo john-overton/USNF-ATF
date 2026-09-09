@@ -208,7 +208,75 @@ export function TerrainViewer() {
                   {stats.flight.takeoffs} / {stats.flight.landings}
                 </dd>
               </dl>
-              <p>{stats.flight.aircraftName} · assisted flight model · fictional practice strip.</p>
+              <label>
+                Flight model{' '}
+                <select
+                  id="flight-model-selector"
+                  value={stats.flight.flightModelId}
+                  onChange={(event) => {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('flightModel', event.target.value);
+                    window.location.assign(url.href);
+                  }}
+                >
+                  <option value="assisted">Preserved assisted (default)</option>
+                  <option value="retail-envelope" disabled={!stats.flight.retailProfileAvailable}>
+                    USNF ’97 envelope fit (experimental)
+                  </option>
+                </select>
+              </label>
+              <p>Switching restarts this practice flight.</p>
+              <p>
+                {stats.flight.aircraftName} · {stats.flight.flightModel} · fictional practice strip.
+              </p>
+              <p>
+                Mass {(stats.flight.massKg / 1000).toFixed(2)} t · rated dry/AB thrust{' '}
+                {(stats.flight.militaryThrustN / 1000).toFixed(1)}/
+                {(stats.flight.afterburnerThrustN / 1000).toFixed(1)} kN
+              </p>
+              {stats.flight.flightProfileSha256 && (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const values = new FormData(event.currentTarget);
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('flightFuel', String(Number(values.get('fuel')) / 100));
+                    url.searchParams.set('flightPayload', String(Number(values.get('payload'))));
+                    window.location.assign(url.href);
+                  }}
+                >
+                  <label>
+                    Fuel load % (fixed){' '}
+                    <input
+                      name="fuel"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="5"
+                      defaultValue={
+                        Number(new URLSearchParams(window.location.search).get('flightFuel') ?? 1) *
+                        100
+                      }
+                    />
+                  </label>
+                  <label>
+                    Payload kg{' '}
+                    <input
+                      name="payload"
+                      type="number"
+                      min="0"
+                      max="15000"
+                      step="100"
+                      defaultValue={stats.flight.payloadMassKg}
+                    />
+                  </label>
+                  <button type="submit">Restart with load</button>
+                  <p>
+                    Fixed practice fuel {(stats.flight.fuelMassKg / 1000).toFixed(2)} t · payload{' '}
+                    {(stats.flight.payloadMassKg / 1000).toFixed(2)} t
+                  </p>
+                </form>
+              )}
             </section>
           )}
           {stats && (

@@ -11,6 +11,8 @@ import {
   type Scene,
 } from 'three';
 import type { TheaterManifest } from '../data';
+import type { AircraftDefinition } from '../data/aircraft';
+import { parseRetailFlightProfile, type RetailFlightProfile } from '../data/retail-flight';
 import type { FsRoot, Platform } from '../platform/Platform';
 import { FixedStepClock } from '../sim/FixedStepClock';
 import {
@@ -21,6 +23,10 @@ import {
   type FlightState,
   type FlightTelemetry,
 } from '../sim/flight';
+import {
+  stepFlight as stepAssistedFlight,
+  sampleTelemetry as sampleAssistedTelemetry,
+} from '../sim/flight/assisted-flight';
 import { GroundSampler, type PracticeStrip } from './GroundSampler';
 import { preparePractice } from './practice';
 import { FlightInput, type PilotControls } from './FlightInput';
@@ -57,6 +63,15 @@ export interface FlightDiagnostics {
   runway: PracticeStrip;
   aircraftName: string;
   modelTriangles: number;
+  flightModel: string;
+  flightModelId: 'assisted' | 'retail-envelope';
+  retailProfileAvailable: boolean;
+  massKg: number;
+  fuelMassKg: number;
+  payloadMassKg: number;
+  militaryThrustN: number;
+  afterburnerThrustN: number;
+  flightProfileSha256: string | null;
   cameraMode: string;
   cameraUp: { x: number; y: number; z: number };
   engineRunning: boolean;
@@ -115,25 +130,72 @@ export class FlightLayer {
       const strip = await preparePractice(ground);
       const model = await RetailAircraft.load(platform);
       const audio = await FlightAudio.create(platform);
-      return new FlightLayer(scene, ground, strip, audio, model);
+      let profile: RetailFlightProfile | undefined;
+      if (await platform.fs.exists('appData', 'aircraft/f14-flight.json')) {
+        const text = await platform.fs.readText('appData', 'aircraft/f14-flight.json');
+        if (text.length > 1000000) throw new Error('Flight profile exceeds 1 MB');
+        profile = parseRetailFlightProfile(JSON.parse(text));
+      }
+      return new FlightLayer(scene, ground, strip, audio, model, profile);
     } catch (error) {
       ground.dispose();
       throw error;
     }
   }
+  private readonly useRetail: boolean;
+  private readonly definition: AircraftDefinition;
+  private readonly fuelMassKg: number;
+  private readonly payloadMassKg: number;
   private constructor(
     private scene: Scene,
     readonly ground: GroundSampler,
     readonly strip: PracticeStrip,
     private readonly audio: FlightAudio,
     private readonly model?: RetailAircraft,
+    private readonly profile?: RetailFlightProfile,
   ) {
+    const query = new URLSearchParams(window.location.search);
+    this.useRetail = query.get('flightModel') === 'retail-envelope' && !!profile;
+    const finite = (key: string, fallback: number) => {
+      const value = Number(query.get(key) ?? fallback);
+      return Number.isFinite(value) ? value : fallback;
+    };
+    this.fuelMassKg =
+      this.useRetail && profile
+        ? profile.fuelCapacityKg * Math.max(0, Math.min(1, finite('flightFuel', 1)))
+        : 0;
+    this.payloadMassKg =
+      this.useRetail && profile
+        ? Math.max(
+            0,
+            Math.min(
+              profile.maxTakeoffMassKg - profile.emptyMassKg - this.fuelMassKg,
+              finite('flightPayload', 0),
+            ),
+          )
+        : 0;
+    this.definition =
+      this.useRetail && profile
+        ? {
+            ...PLACEHOLDER_AIRCRAFT,
+            id: 'f14-retail-envelope',
+            name: profile.name,
+            massKg: profile.emptyMassKg + this.fuelMassKg + this.payloadMassKg,
+            // Reference area only: the envelope fit normalizes lift/drag to PT forces.
+            wingAreaM2: 52.5,
+            retail: profile,
+          }
+        : PLACEHOLDER_AIRCRAFT;
     this.environment = { sampleGround: (x: number, z: number) => ground.sample(x, z) };
     this.state = this.initialState();
     this.previous = this.state;
     if (this.approach || this.airborneStart) this.input.throttle = 0.2;
     this.systems = createAircraftSystems(this.input.throttle);
-    this.telemetry = sampleTelemetry(this.state, this.environment);
+    this.telemetry = (this.useRetail ? sampleTelemetry : sampleAssistedTelemetry)(
+      this.state,
+      this.environment,
+      this.definition,
+    );
     const fuselage = new MeshStandardMaterial({ color: 0xe4e8ed, roughness: 0.6 });
     const blue = new MeshStandardMaterial({ color: 0x244d77, roughness: 0.7 });
     const dark = new MeshStandardMaterial({ color: 0x20272c, roughness: 1 });
@@ -242,7 +304,11 @@ export class FlightLayer {
       this.landings = 0;
       this.airborneArmed = this.approach || this.airborneStart;
       if (this.approach || this.airborneStart) this.input.throttle = 0.2;
-      this.telemetry = sampleTelemetry(this.state, this.environment);
+      this.telemetry = (this.useRetail ? sampleTelemetry : sampleAssistedTelemetry)(
+        this.state,
+        this.environment,
+        this.definition,
+      );
       this.waiting = false;
       this.alpha = 0;
       this.clampedFrames = 0;
@@ -256,20 +322,27 @@ export class FlightLayer {
     if (this.waiting || this.ground.error) return;
     const result = this.clock.advance(seconds, (dt) => {
       this.previous = this.state;
+      if (this.useRetail && this.fuelMassKg === 0) this.input.engineRunning = false;
       this.controls = this.input.sample(dt);
       this.systems = stepAircraftSystems(this.systems, this.input, dt);
-      const next = stepFlight(
+      if (this.useRetail && this.profile)
+        this.systems.thrustMultiplier =
+          1 +
+          ((this.systems.thrustMultiplier - 1) / 0.5) *
+            (this.profile.afterburnerThrustN / this.profile.militaryThrustN - 1);
+      const next = (this.useRetail ? stepFlight : stepAssistedFlight)(
         this.state,
         {
           ...this.controls,
           throttle: this.systems.effectiveThrottle,
           thrustMultiplier: this.systems.thrustMultiplier,
           gearDown: this.systems.gearFraction >= 0.99,
+          gearFraction: this.systems.gearFraction,
           flaps: this.systems.flapFraction,
           airbrake: this.systems.airbrakeFraction,
         },
         this.environment,
-        PLACEHOLDER_AIRCRAFT,
+        this.definition,
         dt,
       );
       if (
@@ -400,6 +473,15 @@ export class FlightLayer {
       landings: this.landings,
       runway: { ...this.strip },
       aircraftName: this.model?.data.name ?? 'Peregrine original placeholder (F-14 not installed)',
+      flightModelId: this.useRetail ? 'retail-envelope' : 'assisted',
+      retailProfileAvailable: !!this.profile,
+      flightModel: this.useRetail ? 'USNF ’97 PT envelope fit' : 'Preserved assisted model',
+      massKg: this.definition.massKg,
+      fuelMassKg: this.fuelMassKg,
+      payloadMassKg: this.payloadMassKg,
+      militaryThrustN: this.useRetail ? this.profile!.militaryThrustN : 70000,
+      afterburnerThrustN: this.useRetail ? this.profile!.afterburnerThrustN : 105000,
+      flightProfileSha256: this.useRetail ? this.profile!.source.sha256 : null,
       modelTriangles: this.model?.triangles ?? 0,
       cameraMode: this.input.cameraMode,
       cameraUp: { ...this.pose().up },

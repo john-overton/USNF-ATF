@@ -26,10 +26,15 @@ const session = await openDesktop({
   binary: option('--binary'),
   ...(args.includes('--app') ? { app: option('--app') } : {}),
   terrain: option('--terrain', 'extracted/terrain/ukraine'),
+  ...(args.includes('--flight-profile') ? { flightProfile: option('--flight-profile') } : {}),
   ...(args.includes('--audio') ? { audio: option('--audio') } : {}),
   ...(args.includes('--aircraft') ? { aircraft: option('--aircraft') } : {}),
   out: option('--out', `extracted/flight-smoke-${scenario}`),
-  query: { mode: 'flight', flightStart: scenario === 'approach' ? 'approach' : 'runway' },
+  query: {
+    mode: 'flight',
+    flightStart: scenario === 'approach' ? 'approach' : 'runway',
+    flightModel: args.includes('--flight-model') ? option('--flight-model') : 'assisted',
+  },
   initialization,
 });
 try {
