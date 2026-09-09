@@ -38,7 +38,6 @@
   right: 10px;
 }
 .mfd-screen {
-  overflow: hidden;
   border: 2px solid #050b08;
   border-radius: 9px;
   background: #07130f;
@@ -60,6 +59,9 @@
   color: #d6ff99;
   outline: 1px solid #a8e188;
   outline-offset: 1px;
+}
+.terrain-map-stage {
+  position: relative;
 }
 .terrain-map-image {
   position: relative;
@@ -175,9 +177,15 @@
 .mfd-bottom-buttons {
   bottom: 7px;
 }
+.mfd-waypoint-buttons {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 .mfd-waypoint-control {
   position: absolute;
-  left: 5px;
+  left: -29px;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: 8px;

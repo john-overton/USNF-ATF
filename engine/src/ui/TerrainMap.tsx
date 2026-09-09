@@ -146,111 +146,137 @@ export function TerrainMap({
         {map.error && <p className="terrain-map-error">{map.error}</p>}
         {data && point && viewport && (
           <>
-            <div
-              className="terrain-map-image"
-              style={{ aspectRatio: `${data.width} / ${data.height}` }}
-            >
-              <div className="terrain-map-rotor" style={{ transform: `rotate(${rotation}deg)` }}>
-                <canvas
-                  style={{
-                    width: `${zoom * 100}%`,
-                    height: `${zoom * 100}%`,
-                    left: `${(-viewport.x / data.width) * zoom * 100}%`,
-                    top: `${(-viewport.y / data.height) * zoom * 100}%`,
-                  }}
-                  ref={canvas}
-                  width={data.width}
-                  height={data.height}
-                  aria-label="Regional elevation: blue water; green, yellow, red, brown rising land; white highest five percent"
-                />
-                <svg
-                  viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`}
-                  data-map-zoom={zoom}
-                  data-viewport-x={viewport.x}
-                  data-viewport-y={viewport.y}
-                  data-viewport-width={viewport.width}
-                  data-viewport-height={viewport.height}
-                  role="img"
-                  aria-label={`${markerLabel} and selected waypoint positions`}
-                  data-map-width={data.width}
-                  data-map-height={data.height}
-                  data-world-width={data.extents.width}
-                  data-world-height={data.extents.height}
-                >
-                  {data.waypoints.map((waypoint) => {
-                    const p = worldToMap(data, waypoint.x, waypoint.z);
-                    const selected = waypoint.id === selectedWaypointId;
-                    return (
+            <div className="terrain-map-stage">
+              <div
+                className="terrain-map-image"
+                style={{ aspectRatio: `${data.width} / ${data.height}` }}
+              >
+                <div className="terrain-map-rotor" style={{ transform: `rotate(${rotation}deg)` }}>
+                  <canvas
+                    style={{
+                      width: `${zoom * 100}%`,
+                      height: `${zoom * 100}%`,
+                      left: `${(-viewport.x / data.width) * zoom * 100}%`,
+                      top: `${(-viewport.y / data.height) * zoom * 100}%`,
+                    }}
+                    ref={canvas}
+                    width={data.width}
+                    height={data.height}
+                    aria-label="Regional elevation: blue water; green, yellow, red, brown rising land; white highest five percent"
+                  />
+                  <svg
+                    viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`}
+                    data-map-zoom={zoom}
+                    data-viewport-x={viewport.x}
+                    data-viewport-y={viewport.y}
+                    data-viewport-width={viewport.width}
+                    data-viewport-height={viewport.height}
+                    role="img"
+                    aria-label={`${markerLabel} and selected waypoint positions`}
+                    data-map-width={data.width}
+                    data-map-height={data.height}
+                    data-world-width={data.extents.width}
+                    data-world-height={data.extents.height}
+                  >
+                    {data.waypoints.map((waypoint) => {
+                      const p = worldToMap(data, waypoint.x, waypoint.z);
+                      const selected = waypoint.id === selectedWaypointId;
+                      return (
+                        <g
+                          key={waypoint.id}
+                          transform={`translate(${p.x} ${p.y}) scale(${1 / zoom})`}
+                          data-waypoint-id={waypoint.id}
+                          data-selected={selected}
+                          data-world-x={waypoint.x}
+                          data-world-z={waypoint.z}
+                          className={selected ? 'map-waypoint selected' : 'map-waypoint'}
+                        >
+                          <title>
+                            {waypoint.id}: {waypoint.name}
+                          </title>
+                          <circle r={selected ? 9 : 6} />
+                          <text x="13" y="-10">
+                            {waypoint.id}
+                          </text>
+                        </g>
+                      );
+                    })}
+                    {!outside && (
                       <g
-                        key={waypoint.id}
-                        transform={`translate(${p.x} ${p.y}) scale(${1 / zoom})`}
-                        data-waypoint-id={waypoint.id}
-                        data-selected={selected}
-                        data-world-x={waypoint.x}
-                        data-world-z={waypoint.z}
-                        className={selected ? 'map-waypoint selected' : 'map-waypoint'}
+                        transform={`translate(${point.x} ${point.y}) rotate(${aircraft.headingDegrees}) scale(${1 / zoom})`}
+                        className="map-aircraft"
+                        data-aircraft-marker="true"
+                        data-map-x={point.x}
+                        data-map-y={point.y}
+                        data-heading={aircraft.headingDegrees}
                       >
                         <title>
-                          {waypoint.id}: {waypoint.name}
+                          {markerLabel} heading {Math.round(aircraft.headingDegrees)} degrees
                         </title>
-                        <circle r={selected ? 9 : 6} />
-                        <text x="13" y="-10">
-                          {waypoint.id}
-                        </text>
+                        <path d="M 0 -12 L 8 10 L 0 6 L -8 10 Z" />
                       </g>
-                    );
-                  })}
-                  {!outside && (
-                    <g
-                      transform={`translate(${point.x} ${point.y}) rotate(${aircraft.headingDegrees}) scale(${1 / zoom})`}
-                      className="map-aircraft"
-                      data-aircraft-marker="true"
-                      data-map-x={point.x}
-                      data-map-y={point.y}
-                      data-heading={aircraft.headingDegrees}
-                    >
-                      <title>
-                        {markerLabel} heading {Math.round(aircraft.headingDegrees)} degrees
-                      </title>
-                      <path d="M 0 -12 L 8 10 L 0 6 L -8 10 Z" />
-                    </g>
-                  )}
+                    )}
+                  </svg>
+                </div>
+                <svg
+                  data-map-compass="true"
+                  className="map-compass"
+                  viewBox="0 0 200 200"
+                  aria-label={`Compass, ${orientation}, heading ${Math.round(aircraft.headingDegrees)} degrees`}
+                >
+                  <g transform={`rotate(${rotation} 100 100)`}>
+                    <circle cx="100" cy="100" r="72" />
+                    {Array.from({ length: 36 }, (_, index) => (
+                      <path
+                        key={index}
+                        transform={`rotate(${index * 10} 100 100)`}
+                        d={`M 100 28 v ${index % 9 === 0 ? 8 : index % 3 === 0 ? 5 : 3}`}
+                      />
+                    ))}
+                    {['N', 'E', 'S', 'W'].map((label, index) => {
+                      const angle = (index * Math.PI) / 2;
+                      const x = 100 + Math.sin(angle) * 83;
+                      const y = 100 - Math.cos(angle) * 83;
+                      return (
+                        <text key={label} x={x} y={y} transform={`rotate(${-rotation} ${x} ${y})`}>
+                          {label}
+                        </text>
+                      );
+                    })}
+                  </g>
+                  <path className="map-heading-index" d="M 96 3 L 100 9 L 104 3" />
                 </svg>
+                <span className="map-heading-readout">
+                  {(Math.round(((aircraft.headingDegrees % 360) + 360) % 360) % 360)
+                    .toString()
+                    .padStart(3, '0')}
+                  °
+                </span>
               </div>
-              <svg
-                data-map-compass="true"
-                className="map-compass"
-                viewBox="0 0 200 200"
-                aria-label={`Compass, ${orientation}, heading ${Math.round(aircraft.headingDegrees)} degrees`}
-              >
-                <g transform={`rotate(${rotation} 100 100)`}>
-                  <circle cx="100" cy="100" r="72" />
-                  {Array.from({ length: 36 }, (_, index) => (
-                    <path
-                      key={index}
-                      transform={`rotate(${index * 10} 100 100)`}
-                      d={`M 100 28 v ${index % 9 === 0 ? 8 : index % 3 === 0 ? 5 : 3}`}
-                    />
+              {onTeleport && data && (
+                <div className="mfd-waypoint-buttons" aria-label="Waypoint teleport">
+                  {data.waypoints.map((waypoint, index) => (
+                    <div
+                      className="mfd-waypoint-control"
+                      key={waypoint.id}
+                      style={{ top: `${20 + index * 30}%` }}
+                    >
+                      <button
+                        type="button"
+                        className="mfd-button"
+                        data-teleport-id={waypoint.id}
+                        disabled={teleporting !== null}
+                        aria-label={`Teleport to ${waypoint.id} ${waypoint.name}`}
+                        onClick={() => void teleport(waypoint)}
+                      />
+                      <span className={waypoint.id === selectedWaypointId ? 'mfd-active' : ''}>
+                        {teleporting === waypoint.id ? 'LOAD…' : `GO ${waypoint.id}`}
+                        <small>{waypoint.name}</small>
+                      </span>
+                    </div>
                   ))}
-                  {['N', 'E', 'S', 'W'].map((label, index) => {
-                    const angle = (index * Math.PI) / 2;
-                    const x = 100 + Math.sin(angle) * 83;
-                    const y = 100 - Math.cos(angle) * 83;
-                    return (
-                      <text key={label} x={x} y={y} transform={`rotate(${-rotation} ${x} ${y})`}>
-                        {label}
-                      </text>
-                    );
-                  })}
-                </g>
-                <path className="map-heading-index" d="M 96 3 L 100 9 L 104 3" />
-              </svg>
-              <span className="map-heading-readout">
-                {(Math.round(((aircraft.headingDegrees % 360) + 360) % 360) % 360)
-                  .toString()
-                  .padStart(3, '0')}
-                °
-              </span>
+                </div>
+              )}
             </div>
             <div className="terrain-map-distance">
               <div
@@ -305,30 +331,6 @@ export function TerrainMap({
           }}
         />
       </div>
-      {onTeleport && data && (
-        <div className="mfd-waypoint-buttons" aria-label="Waypoint teleport">
-          {data.waypoints.map((waypoint, index) => (
-            <div
-              className="mfd-waypoint-control"
-              key={waypoint.id}
-              style={{ top: `${26 + index * 22}%` }}
-            >
-              <button
-                type="button"
-                className="mfd-button"
-                data-teleport-id={waypoint.id}
-                disabled={teleporting !== null}
-                aria-label={`Teleport to ${waypoint.id} ${waypoint.name}`}
-                onClick={() => void teleport(waypoint)}
-              />
-              <span className={waypoint.id === selectedWaypointId ? 'mfd-active' : ''}>
-                {teleporting === waypoint.id ? 'LOAD…' : `GO ${waypoint.id}`}
-                <small>{waypoint.name}</small>
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
     </aside>
   );
 }
