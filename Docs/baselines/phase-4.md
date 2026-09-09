@@ -1,5 +1,54 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: shared MFD, orientation and waypoint teleport in all modes
+
+Product source**10c318e**, Mac Apple M3/macOS arm64, Bun1.4.2, Electron44.2.0.
+Mac arm64+x64 DMG/ZIP packaging passes in23.7s; only arm64 launched. Full check
+passes120tests/5,134expectations including type/lint/format. Flight force routines
+and assisted source are unchanged. Teleport adds input/state transitions only.
+
+Both `extracted/waypoint-teleport/report.json` (tool6f55ab5) and
+`extracted/waypoint-teleport-settled/report.json` (tool9923015) pass against10c318e.
+Final bezel polish12fc0ab fixes the GO3legend covering the distance scale.
+Its build passes in27.0s, full120tests/5,134expectations pass again, and
+`extracted/mfd-final/report.json` passes navigation/zoom/720p layout plus explicit
+softkey-label containment above the scale. All-mode behavior remains verified
+at10c318e;12fc0ab changes MFD nesting/label layout only.
+
+The second tool waits90frames plus stable terrain streaming before screenshots;
+initial immediate coast captures included the expected cold terrain transition.
+All tests use actual product buttons/keyboard events and isolated app profiles.
+No renderer errors in any mode.
+
+| Check | Explorer | Assisted | PT envelope fit | Recovered envelope |
+|---|---|---|---|---|
+| Map and all3teleport buttons | Pass | Pass | Pass | Pass |
+| Teleport to strip/mountains/coast | Pass | Pass | Pass | Pass |
+| Controls regain focus | Pass | Pass | Pass | Pass |
+| Compass, north-up and heading-up | Pass | Pass | Pass | Pass |
+| Zoom and post-jump input | Pass | Pass | Pass | Pass |
+|40%fuel, stopped engine, F2view retained | N/A | Pass | Pass | Pass |
+| Selected model retained | N/A | Pass | Pass | Pass |
+
+Initial teleport altitudes: strip1135.8m, mountains2544.3m, coast1082.2m MSL.
+These use the finest containing chunk's maximum plus1000m, not the destination
+pixel alone. Flight snapshots vary slightly because the engine-off aircraft
+continues gliding. Position assertions allow200m for advancing simulation; actual
+states and UI markers are retained in reports. Heading-up checks verify net
+rotation cancels heading and the compass is present. The explorer's W movement
+continues after the teleport controls return focus.
+
+Focused backend tests cover stale/disposed requests, invalid/missing destination
+coverage, preserved fuel/mass/systems, fine-versus-coarse terrain and raised-water
+holes. Optional destination failure leaves current contact state usable. An
+already-sticky normal-contact error still requires terrain reload. Teleport
+starts a new airborne state/time; it is not mission navigation parity or a flight
+performance measurement. No Linux or full-route flight was run.
+
+```sh
+bun tools/flight/teleport-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 10c318e --out extracted/waypoint-teleport-settled
+```
+
 ## 2026-09-09: navigation HUD and zoomable MFD map
 
 Machine: same Apple M3/macOS arm64, Bun1.4.2, Electron44.2.0. Product source

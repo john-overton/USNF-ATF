@@ -1,8 +1,8 @@
 # Development handoff — 2026-09-09
 
-Navigation/map development is implemented and committed locally after the pushed
-ac3a142 checkpoint. Latest product source is **cf238d9** (map/input integration
-2b5d2c9, then waypoint-text placement polish). Mac Apple M3, Bun 1.4.2,
+Navigation, shared MFD and all-mode waypoint teleport are implemented locally
+after the pushedac3a142 checkpoint. Latest product source is **12fc0ab**
+(teleport/MFD integration10c318e, then softkey legend placement polish). Mac Apple M3, Bun 1.4.2,
 Electron 44.2.0. Linux testing remains explicitly deferred.
 
 ## Preserve these decisions
@@ -18,6 +18,24 @@ Electron 44.2.0. Linux testing remains explicitly deferred.
 - Retail conversions remain ignored in extracted/ and installed app data, never
   in bundles. The full manual in Docs/reference is the user-authorized exception.
 
+## Current user-reported flight issue under investigation
+
+User reports flap/velocity changes and takeoff can lift the aircraft while the
+nose looks down or stays fixed, suggesting an attitude/AoA mismatch. A question
+about the selected flight model is pending. Pure repro confirms strong negative
+AoA/climb in recovered-envelope:15s pitch−5.26°,climb+1.29°,AoA−6.55°. Rendering
+copies simulated quaternion correctly. Experimental flap-maxlift is all being
+used as zero-alpha camber; separate those in the hybrid approximation. Agent
+waypoint_teleport is implementing this correction; preserve assisted unchanged. Preserve the preferred assisted
+baseline while establishing the cause. This is separate from completed MFD work.
+
+## Latest map-color request in progress
+
+User wants fixed common elevation grading because regional percentiles make
+flat Ukraine look mountainous. Agentmfd_bezel is implementing fixed0green,
+500yellow,1500red,2500brown,3500white metres, retaining actual water masks. These
+are authored shared bands, not a claimed industry standard. Root owns docs/tests.
+
 ## Completed navigation/map request
 
 - `[ / ]` wrap through 1 practice strip, 2 mountains, 3 coastline. Repeats and
@@ -26,10 +44,19 @@ Electron 44.2.0. Linux testing remains explicitly deferred.
   bearing and heading-tape diamond/edge steering chevron. Within 100 m it says
   ARRIVED; no automatic sequencing or autopilot. Text sits above the heading tape
   so the chase aircraft does not obscure it.
-- Top-right north-up map stays visible with the helper minimized. It has an
-  aircraft heading marker, numbered destinations, MFD-style border, −/+ zoom
-  (1×–16×) and a visible NM distance scale. Zoom follows the aircraft and clamps
-  at theater edges; buttons return keyboard focus to flight.
+- Shared top-right MFD in explorer and every flight backend. Plain bezel keys
+  have adjacent screen labels, compass, N-UP/HDG-UP orientation, −/+zoom1×–16×
+  and NM scale. Heading-up centers ownship before rotating terrain and markers;
+  north-up keeps the clamped viewport. Actual outside coverage is hatched.
+- Three GO softkeys teleport to the destinations in all modes. Finite/bounds
+  and actual destination terrain are checked first. Explorer moves its camera;
+  flight starts level at150–250m/s, facing into coverage, at least1000m above
+  the finest containing chunk maximum/raised water. Fuel/payload/model/system
+  commands/chase mode remain; state time/interpolation restart. Unpowered stays
+  unpowered. Newer requests/reload/disposal supersede pending work. R returns
+  to the existing preset and selected reset fuel. Bezel controls restore focus.
+- Softkey labels now align within the map image so GO3 cannot cover the NM scale.
+  Non-Ukraine datasets omit the fictional Ukraine strip.
 - Regional height colors: blue actual polygon water, green → yellow → red →
   brown land, white at the regional valid-land 95th percentile. Dry holes and
   below-sea-level dry land remain land. Missing terrain is dark, not zero height.
@@ -47,16 +74,19 @@ Details and lessons: [phase-4-navigation.md](phase-4-navigation.md),
 
 ## Evidence and reproduction
 
-`bun run check` at2b5d2c9: **117 pass / 5,101 expectations**, type/lint/format
-pass. Sourcecf238d9 only moves the waypoint label; focused HUD/navigation checks
-pass5tests/81expectations. Independent code review found no blocking defects.
-The exact packaged navigation runs and visual checks are in the phase4 baseline;
-latest package is rebuilt fromcf238d9 in23.2s, not the old8b6a2d4 fuel package.
-`extracted/flight-navigation-settled/report.json` passes with toolc31fe2a, no
-renderer errors; settled1440p and the earlier720p/16×views were visually reviewed.
+`bun run check` at10c318e: **120pass / 5,134expectations**, type/lint/format
+pass. Mac arm64+x64 packaging23.7s, onlyarm64launched. All-mode native acceptance
+passes: `extracted/waypoint-teleport-settled/report.json`, product10c318e,
+tool9923015. Explorer plus assisted/PT-fit/recovered modes each teleport to all3
+waypoints and pass compass/orientation/focus checks; engineoff,40%fuel,model and
+F2state remain. No renderer errors. Earlier120test/check and source10c evidence
+remain distinct from the final label-position polish12fc0ab; see baseline for
+its exact build and visual acceptance.12fc0ab fullcheck again120/5,134; Macbuild27.0s;
+`extracted/mfd-final/report.json` passes including label/scale separation at720p.
 
 ```sh
-bun tools/flight/navigation-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit cf238d9 --out extracted/flight-navigation-settled
+bun tools/flight/teleport-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 12fc0ab --out extracted/waypoint-teleport-current
+bun tools/flight/navigation-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 12fc0ab --out extracted/mfd-final
 ```
 
 Earlier completed fuel evidence remains correctly scoped to runtime8b6a2d4 and

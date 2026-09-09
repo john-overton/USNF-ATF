@@ -19,10 +19,27 @@ and hides the steering cue because bearing at the destination is undefined.
 Selection is manual, not automatic sequencing or an autopilot. Reset returns to
 waypoint 1. Key repeat is ignored; typing in a form never changes the waypoint.
 
-The map remains visible with the practice helper minimized. It is north-up,
-with an aircraft heading marker and numbered destinations. Its MFD-style border
-contains +/− zoom controls and a nautical-mile distance scale. Zoom follows the
-aircraft within the theater; map controls return keyboard focus to flight.
+The map is available in the terrain explorer and every practice-flight model,
+including with the practice helper minimized. Its bezel has plain buttons with
+adjacent on-screen function labels, a compass, +/− zoom and a nautical-mile scale.
+N-UP keeps north at the top. HDG follows the aircraft's heading (the free camera's
+heading in explorer); terrain, waypoints and compass rotate together. Zoom follows
+the current position within the theater. Buttons return focus to movement controls.
+
+Use the three waypoint teleport buttons to jump to the strip, mountains or coast.
+The destination's terrain must load successfully before the pose changes. Explorer
+moves the free camera; practice flight establishes a level airborne pose at150–250m/s,
+facing inward toward the theater center. Height is at least1,000m above the finest
+containing chunk's maximum elevation (and any raised water surface), not the coarse
+map pixel. It is a flight-test jump, not an airfield landing or an authentic mission
+mechanic. Fuel, payload, selected flight model, engine/system commands and chase view
+are retained; the new airborne state restarts simulation time/interpolation. An
+engine-off or empty aircraft remains unpowered. R still returns to the original
+practice start and its chosen reset fuel.
+
+An invalid, failed or superseded teleport leaves the current pose intact. Reloading
+the viewer cancels pending results. Other theater maps do not invent a Ukraine
+practice-strip waypoint; only destinations available in that dataset are offered.
 
 ## Terrain and color interpretation
 

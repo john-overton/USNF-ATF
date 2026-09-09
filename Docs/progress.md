@@ -13,8 +13,40 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, diagnostics | Packaged coast/detail ~60 fps at 1440p; 0↔1 and 1↔2 fades plus 24km fast lateral flights pass. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, zoomable regional map, F2/F3 chase, practice starts and 11-case harness | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: shared MFD map, orientation modes and all-mode teleport
+
+The terrain explorer now shares the map with all three practice-flight models.
+Waypoint buttons load destination terrain before moving the free camera or
+establishing a safe airborne flight state. The jump preserves model, fuel,
+payload, engine/system commands and chase view; a stopped engine stays stopped.
+Height clears the finest containing chunk's maximum by1,000m, with raised water
+also considered. The new airborne state runs at150–250m/s facing into the theater;
+it restarts state time/interpolation, not fuel or system settings.
+
+The user's cockpit-display reference led to plain bezel buttons with adjacent
+screen labels for teleport, range and N-UP/HDG-UP. A compass and heading readout
+orient the view. North-up uses the existing clamped viewport; heading-up centers
+the aircraft/camera before rotating the full raster and markers together. This
+avoids rotating an edge-positioned marker out of view. Uncovered rotated corners
+show a hatch instead of invented terrain. Teleport, orientation and zoom buttons
+return focus to movement controls. Other theaters do not get a fictional Ukraine
+strip simply because its numeric coordinates happen to fit their extents.
+
+Implementation74f2456/6f55ab5, MFDa6cc129/10c318e. Focused teleport tests include
+finest-vs-coarse heights, dry water holes, failed loads, overlapping requests,
+disposal and fuel/system retention. Independent integration review found no
+blocking defects. Full check at10c318e:120tests/5,134expectations, type/lint/format
+pass. Exact packaged acceptance is recorded in[baseline](baselines/phase-4.md).
+
+Lessons: optional teleport loads must not poison normal contact state; stale
+async results need cancellation at both viewer and flight-layer boundaries;
+heading-up requires terrain and marker transforms to share their pivot. A prior
+normal-contact error remains sticky and requires reloading terrain; teleport
+is not a repair mechanism for an already failed theater. Existing flight force
+routines and fuel rates are unchanged. Linux remains deferred.
 
 ## 2026-09-09: practice navigation and MFD terrain map
 

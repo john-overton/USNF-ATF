@@ -86,8 +86,11 @@ remains available. [F-14 setup](Docs/phase-4-f14.md) keeps retail assets outside
 - **ArrowDown** pulls up, **ArrowUp** pushes down; left/right arrows bank.
 - **Q/E** controls rudder; **R** resets the practice start.
 - **[ / ]** select the previous/next waypoint: practice strip, mountains, coastline.
-- The top-right map has **−/+** zoom (1×–16×), a distance scale in nautical miles,
-  aircraft heading and regional elevation colors; it stays visible when the helper is minimized.
+- The top-right MFD map is available in the explorer and every flight model. Bezel
+  buttons provide **−/+** zoom (1×–16×), **N-UP / HDG** orientation and **waypoint
+  teleport**. It includes a compass, nautical-mile scale and regional elevation colors.
+  Teleport preserves fuel/model settings and places flight safely airborne above the
+  destination; the map stays visible when the helper is minimized.
 - Standard gamepads use the left stick for pitch/roll, right-stick X for rudder,
   triggers for throttle and B for brakes.
 

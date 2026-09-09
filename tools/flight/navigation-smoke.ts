@@ -76,6 +76,14 @@ try {
   assert(evidence.map.markers.length === 3, 'Missing map destinations');
   assert(evidence.map.markers.some((m: any) => m.id === '1' && m.selected === 'true'), 'Map selection disagrees with HUD');
   assert(evidence.map.colors.length > 5, 'Elevation map lacks terrain colors');
+  evidence.softkeys = await session.evaluate(`(() => {
+    const image=document.querySelector('.terrain-map-image').getBoundingClientRect();
+    const scale=document.querySelector('.terrain-map-distance').getBoundingClientRect();
+    return Array.from(document.querySelectorAll('.mfd-waypoint-control > span'),e=>{
+      const r=e.getBoundingClientRect();return {text:e.textContent,inside:r.top>=image.top&&r.bottom<=image.bottom,aboveScale:r.bottom<=scale.top};
+    });
+  })()`);
+  assert(evidence.softkeys.length===3 && evidence.softkeys.every((s:any)=>s.inside&&s.aboveScale),'MFD softkey legends obscure distance scale');
   await session.poll(async () => {
     const d = await session.evaluate('window.__terrainDiagnostics?.()');
     return d?.loadedChunks > 0 && d.pendingChunks === 0 && !d.transitionActive ? true : undefined;

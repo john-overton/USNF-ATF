@@ -133,3 +133,17 @@ live aircraft movement, 1×–16× zoom and its NM scale, focus recovery after z
 and map/HUD separation at 1280×720. Screenshots also cover 2560×1440 and16×zoom.
 It does not fly the entire inter-waypoint route or claim native USNF navigation
 parity. The product map loads the locally installed heightmap and water polygons.
+
+## All-mode map and waypoint teleport
+
+```sh
+bun tools/flight/teleport-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --out extracted/waypoint-teleport
+```
+
+Runs explorer, assisted, PT-fit and recovered-envelope modes serially. It uses
+the actual three teleport buttons, checks camera/aircraft location and selection,
+verifies that flight keeps stopped engines,40%fuel, its model and F2view, then
+checks zoom focus, compass and north/heading-up mode switching. Explorer movement
+must continue after the jump. Mountain/coast screenshots and per-mode diagnostics
+are retained. Teleport supplies a new airborne state; this is not a full route
+flight or a physical gamepad test.
