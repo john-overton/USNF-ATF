@@ -13,8 +13,26 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics | Polished packaged coast/detail ~60 fps at 1440p; current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness, indexed exact water queries | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness, indexed exact water queries | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: repeatable aircraft-port helper and worksheet
+
+Added `tools/flight/port-aircraft.ts` with reviewed F14/A4E/X31 recipes. One
+command converts geometry/rig/textures, PT flight data and audio, validates the
+bundle with runtime parsers and checks its scale/aircraft identity. Dated outputs
+and a provenance/measurement report remain ignored under extracted; installation
+is optional. Reports leave visual/runtime acceptance pending and do not claim
+native parity. Unsupported aircraft still require decoder/runtime/rig work.
+
+The [full guide](aircraft-porting.md) covers independent source choices, probe
+versus fuselage length, pose-dependent wingspan, origins/axes, per-aircraft PT
+facts, native-parity limits, surface clipping/mixing, hook/gear/nozzle placement,
+audio, selector integration and acceptance gates. A reusable worksheet captures
+new-aircraft evidence, unknowns and handoff. Exact verification is recorded in
+the phase 4 baseline. This remains a development tool, not the phase 5 in-app
+importer. Next: run `bun tools/flight/port-aircraft.ts --aircraft x31 --dry-run`,
+review the recipe, then use the helper and worksheet for the next aircraft.
 
 ## 2026-09-09: A-4E / X-31 surface rigs, Skyhawk hook and X-31 scale
 

@@ -1,5 +1,53 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: aircraft port helper conversion acceptance
+
+Helper/guide source **d56b3b7**, Apple M3 arm64, macOS 26.6.2 (25G83),
+Bun 1.4.2, Python 3.14.6. Ran in the shared checkout with unrelated environment
+work present; each report records the complete working-tree status. This scope
+validates the conversion orchestrator and existing parsers, not a new renderer
+build or flight-model acceptance. No new dependencies or runtime changes.
+
+```sh
+bun tools/flight/port-aircraft.ts --aircraft x31 --dry-run
+bun tools/flight/port-aircraft.ts --aircraft f14
+bun tools/flight/port-aircraft.ts --aircraft a4e
+bun tools/flight/port-aircraft.ts --aircraft x31 --install extracted/aircraft-ports/install-check
+bun tools/flight/port-aircraft.ts --aircraft x31 --python /usr/bin/false
+bun test tools/flight/port-aircraft.test.ts
+git diff --check
+```
+
+All three real-media bundles passed model, PT identity, audio and reference-scale
+validation; X31 also installed successfully into the ignored scratch app-data
+root. No media skips. The deliberate `/usr/bin/false` converter command exits
+nonzero as expected and leaves no `.pending-*` staging directories. Synthetic
+helper tests: **3 pass, 0 fail, 16 assertions**. Diff whitespace check passes.
+An earlier development run failed hashing an ArrayBuffer; the helper now hashes
+a Uint8Array, and all three final conversions passed with that fix.
+
+| Aircraft | Triangles | Measured span m | Measured length m |
+|---|---:|---:|---:|
+| F14 | 364 | 21.828571 | 19.100000 |
+| A4E | 482 | 8.146667 | 12.220000 |
+| X31 | 398 | 7.260000 | 14.988387 |
+
+These are exported geometry bounds, not independently validated real-aircraft
+dimensions. F14 retains its existing authored length calibration and source pose.
+Reports include source/output SHA-256 values, commands, tool versions, scale,
+moving groups, PT summaries and explicit pending visual/runtime acceptance:
+
+- `extracted/aircraft-ports/f14/2026-09-09T21-57-36-253Z-de09c7f3/port-report.json`
+- `extracted/aircraft-ports/a4e/2026-09-09T21-57-36-626Z-c35e4dcc/port-report.json`
+- `extracted/aircraft-ports/x31/2026-09-09T21-57-37-091Z-a93d42ee/port-report.json`
+
+Independent read-only review found no blocking defects. Full Bun/Python suites,
+Electron launch, maneuver/surface acceptance and installer packaging were not
+rerun for this tool/documentation change; prior runtime evidence below retains
+its original scope. Linux remains deferred; Windows launch remains phase 9.
+Next: use the linked [port guide](../aircraft-porting.md) and worksheet for a new
+aircraft, extending its decoder/rig/catalog before adding a reviewed recipe.
+
 ## 2026-09-09: fixed-wing surfaces, A-4 hook and X-31 presentation scale
 
 Product source **976d43e** (following initial rig commit **1f5beb0**), isolated
