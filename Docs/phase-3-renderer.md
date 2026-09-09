@@ -281,3 +281,14 @@ regressions cover incomplete coverage, candidate debounce, bidirectional fade
 completion, parent triangle normals, bounded full-tile fallback, and both
 numerically reproduced parent/child height defects. These tests do not compile
 GPU shaders or establish screenshot/performance acceptance.
+
+
+Packaged validation correction: the first `7442ac7` transition run counted draws
+and completed source changes but rendered no land. The real screenshot exposed
+a shader compile defect invisible to TypeScript and geometry tests: Three.js
+0.185 declares `vColor` as `vec4`, while the custom tint injection assigned a
+`vec3`. Assigning `vColor.rgb` preserves its alpha and fixes the type mismatch.
+No frame timings from that failed-land run are accepted as terrain performance.
+The smoke harness must capture browser console errors as well as uncaught
+exceptions; draw-call/triangle counters alone do not prove a successful shader.
+Fresh packaged screenshot and timing evidence is required after this correction.

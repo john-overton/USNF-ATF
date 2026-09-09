@@ -370,7 +370,7 @@ export function startTerrainViewer(
             );
             shader.vertexShader = shader.vertexShader.replace(
               '#include <color_vertex>',
-              '#include <color_vertex>\nvColor=mix(color,coarseColor,terrainMorph);',
+              '#include <color_vertex>\nvColor.rgb=mix(color,coarseColor,terrainMorph);',
             );
             shader.fragmentShader =
               'uniform float sourceFade;\nuniform bool sourceOutgoing;\n' + shader.fragmentShader;
