@@ -1,4 +1,83 @@
-/** Original synthesized sounds; no recorded or retail samples. */
+import type { Platform } from '../platform/Platform';
+
+type ClipRole = 'jet' | 'burner' | 'start' | 'stop';
+export interface FlightClip {
+  source: string;
+  sha256: string;
+  sampleRate: number;
+  pcm: number[];
+}
+export type FlightSamples = Record<ClipRole, FlightClip>;
+export function parseFlightSamples(value: unknown): FlightSamples {
+  const data = value as { schemaVersion?: number; clips?: Record<string, unknown> };
+  if (data?.schemaVersion !== 1 || !data.clips)
+    throw new Error('Invalid flight audio manifest');
+  const result = {} as FlightSamples;
+  for (const role of ['jet', 'burner', 'start', 'stop'] as const) {
+    const c = data.clips[role] as FlightClip & { encoding?: string };
+    if (
+      !c ||
+      typeof c.source !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(c.sha256) ||
+      c.encoding !== 'unsigned8-mono' ||
+      ![5512, 8000, 11025].includes(c.sampleRate) ||
+      !Array.isArray(c.pcm) ||
+      c.pcm.length < 2 ||
+      c.pcm.length > 1000000 ||
+      !c.pcm.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)
+    )
+      throw new Error(`Invalid flight audio ${role}`);
+    result[role] = c;
+  }
+  return result;
+}
+/** Remove DC and crossfade the tail into the head without a wrap discontinuity.
+ * The returned loop starts after the crossfade head; one-shots keep their full duration. */
+export function flightPcm(clip: FlightClip, loop: boolean): Float32Array {
+  const pcm = Float32Array.from(clip.pcm, (x) => (x - 128) / 128);
+  const mean = pcm.reduce((a, b) => a + b, 0) / pcm.length;
+  for (let i = 0; i < pcm.length; i++) pcm[i] = pcm[i]! - mean;
+  const fade = Math.min(
+    Math.floor(clip.sampleRate * (loop ? 0.04 : 0.006)),
+    Math.floor(pcm.length / 4),
+  );
+  if (loop && fade > 1) {
+    for (let i = 0; i < fade; i++) {
+      const mix = i / (fade - 1);
+      pcm[pcm.length - fade + i] = pcm[pcm.length - fade + i]! * (1 - mix) + pcm[i]! * mix;
+    }
+    return pcm.slice(fade - 1);
+  }
+  for (let i = 0; i < fade; i++) {
+    pcm[i] = pcm[i]! * (i / fade);
+    pcm[pcm.length - 1 - i] = pcm[pcm.length - 1 - i]! * (i / fade);
+  }
+  pcm[0] = 0;
+  pcm[pcm.length - 1] = 0;
+  return pcm;
+}
+/** Web Audio rejects source rates below 8 kHz; resample the 5K clips explicitly. */
+export function resampleFlightPcm(pcm: Float32Array, from: number, to: number): Float32Array {
+  if (from === to) return pcm;
+  const out = new Float32Array(Math.max(2, Math.round((pcm.length * to) / from)));
+  for (let i = 0; i < out.length; i++) {
+    const at = (i * (pcm.length - 1)) / (out.length - 1);
+    const lo = Math.floor(at);
+    out[i] = pcm[lo]! + (pcm[Math.min(pcm.length - 1, lo + 1)]! - pcm[lo]!) * (at - lo);
+  }
+  return out;
+}
+export function engineAudioEvent(
+  previous: FlightAudioState | undefined,
+  state: FlightAudioState,
+): 'start' | 'stop' | undefined {
+  return previous && previous.engineRunning !== state.engineRunning
+    ? state.engineRunning
+      ? 'start'
+      : 'stop'
+    : undefined;
+}
+/** Local PT-selected retail samples when installed, filtered noise fallback otherwise. */
 export interface FlightAudioState {
   engineRunning: boolean;
   spool: number;
@@ -37,7 +116,27 @@ export class FlightAudio {
   private burner?: GainNode;
   private actuator?: GainNode;
   private impact?: GainNode;
-  private tone?: OscillatorNode;
+  private buffers: Partial<Record<ClipRole, AudioBuffer>> = {};
+  private transition?: AudioBufferSourceNode;
+  private transitionGain?: GainNode;
+  private transitionEvents = { start: 0, stop: 0 };
+  private lastTransition: 'start' | 'stop' | undefined;
+  static async create(platform: Platform): Promise<FlightAudio> {
+    let samples: FlightSamples | undefined;
+    let error: string | undefined;
+    try {
+      if (await platform.fs.exists('appData', 'audio/f14.json')) {
+        const text = await platform.fs.readText('appData', 'audio/f14.json');
+        if (text.length > 16000000) throw new Error('Flight audio manifest too large');
+        samples = parseFlightSamples(JSON.parse(text));
+      }
+    } catch (e) {
+      error = String(e);
+    }
+    const audio = new FlightAudio(samples);
+    audio.error = error;
+    return audio;
+  }
   private sources: (AudioBufferSourceNode | OscillatorNode)[] = [];
   private previous?: FlightAudioState;
   private disposed = false;
@@ -75,7 +174,7 @@ export class FlightAudio {
         Boolean(target.closest('input,textarea,select,button,[contenteditable="true"]')))
     );
   }
-  constructor() {
+  constructor(private readonly samples?: FlightSamples) {
     // Creating the context only inside a real gesture avoids autoplay warnings.
     window.addEventListener('pointerdown', this.gesture);
     window.addEventListener('keydown', this.gesture);
@@ -121,18 +220,83 @@ export class FlightAudio {
     this.burner = voice('lowpass', 240);
     this.actuator = voice('bandpass', 1100, 2);
     this.impact = voice('lowpass', 180);
-    const tone = context.createOscillator();
-    tone.type = 'sine';
-    tone.frequency.value = 65;
-    const toneLevel = context.createGain();
-    toneLevel.gain.value = 0.12;
-    tone.connect(toneLevel).connect(this.jet);
-    this.tone = tone;
-    this.sources = [noise, tone];
+    // No tonal oscillator: the former low sine added an artificial buzz.
+    this.sources = [noise];
     noise.start();
-    tone.start();
-    this.error = undefined;
+    if (this.samples) {
+      for (const role of ['jet', 'burner', 'start', 'stop'] as const) {
+        const clip = this.samples[role];
+        const pcm = resampleFlightPcm(
+          flightPcm(clip, role === 'jet' || role === 'burner'),
+          clip.sampleRate,
+          context.sampleRate,
+        );
+        const buffer = context.createBuffer(1, pcm.length, context.sampleRate);
+        buffer.getChannelData(0).set(pcm);
+        this.buffers[role] = buffer;
+      }
+      // Replace synthetic engine voices; wind/contact/actuators remain original.
+      this.jet.disconnect();
+      this.burner.disconnect();
+      for (const role of ['jet', 'burner'] as const) {
+        const source = context.createBufferSource();
+        source.buffer = this.buffers[role]!;
+        source.loop = true;
+        const filter = context.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 4000;
+        filter.Q.value = 0.5;
+        const gain = context.createGain();
+        gain.gain.value = 0;
+        source.connect(filter).connect(gain).connect(master);
+        this[role] = gain;
+        this.sources.push(source);
+        source.start();
+      }
+    }
   }
+  private playTransition(role: 'start' | 'stop'): void {
+    const context = this.context;
+    if (!context || !this.master) return;
+    const time = context.currentTime;
+    // A repeated toggle fades its predecessor rather than stacking motors/clicks.
+    if (this.transition && this.transitionGain) {
+      this.transitionGain.gain.cancelScheduledValues(time);
+      this.transitionGain.gain.setTargetAtTime(0, time, 0.02);
+      this.transition.stop(time + 0.15);
+    }
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    let buffer = this.buffers[role];
+    if (!buffer) {
+      buffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
+      const pcm = buffer.getChannelData(0);
+      let smooth = 0;
+      for (let i = 0; i < pcm.length; i++) {
+        smooth = smooth * 0.94 + (Math.random() * 2 - 1) * 0.06;
+        const t = i / pcm.length;
+        pcm[i] = smooth * Math.sin(Math.PI * t) * (role === 'start' ? t : 1 - t);
+      }
+    }
+    source.buffer = buffer;
+    const filter = context.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 2600;
+    source.connect(filter).connect(gain).connect(this.master);
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(0.5, time + 0.015);
+    source.onended = () => {
+      source.disconnect();
+      filter.disconnect();
+      gain.disconnect();
+    };
+    this.transition = source;
+    this.transitionGain = gain;
+    this.transitionEvents[role]++;
+    this.lastTransition = role;
+    source.start();
+  }
+
   update(state: FlightAudioState, dt = 1 / 60): void {
     if (this.disposed) return;
     this.levels = flightAudioLevels(state);
@@ -147,7 +311,9 @@ export class FlightAudio {
     ramp(this.jet, this.levels.jet);
     ramp(this.wind, this.levels.wind);
     ramp(this.burner, this.levels.burner);
-    this.tone?.frequency.setTargetAtTime(this.levels.frequency, time, 0.12);
+    const event = engineAudioEvent(previous, state);
+    if (event && state.status !== 'waiting-terrain' && state.status !== 'crashed')
+      this.playTransition(event);
     const motion = previous
       ? (Math.abs(unit(state.gear) - unit(previous.gear)) +
           Math.abs(unit(state.hook) - unit(previous.hook))) /
@@ -172,12 +338,27 @@ export class FlightAudio {
     contextState: AudioContextState | 'locked';
     error: string | undefined;
     levels: ReturnType<typeof flightAudioLevels>;
+    source: 'retail-pt-samples' | 'original-filtered-noise';
+    clips: Partial<Record<ClipRole, { source: string; sha256: string }>>;
+    transitionEvents: { start: number; stop: number };
+    lastTransition: 'start' | 'stop' | undefined;
   } {
     return {
       muted: this.muted,
       contextState: this.context?.state ?? 'locked',
       error: this.error,
       levels: { ...this.levels },
+      source: this.samples ? 'retail-pt-samples' : 'original-filtered-noise',
+      clips: this.samples
+        ? Object.fromEntries(
+            Object.entries(this.samples).map(([k, c]) => [
+              k,
+              { source: c.source, sha256: c.sha256 },
+            ]),
+          )
+        : {},
+      transitionEvents: { ...this.transitionEvents },
+      lastTransition: this.lastTransition,
     };
   }
   dispose(): void {
@@ -187,6 +368,7 @@ export class FlightAudio {
     window.removeEventListener('keydown', this.gesture);
     window.removeEventListener('keydown', this.key);
     this.master?.disconnect();
+    this.transition?.stop();
     for (const source of this.sources) {
       source.stop();
       source.disconnect();
