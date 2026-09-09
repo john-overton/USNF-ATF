@@ -2,7 +2,7 @@
 
 Companion to `usnf-atf-plan.md` (the brief). The brief says what and why. This document says in what order, what "done" means for each phase, and which decisions are already made. When the two disagree, this one wins for sequencing.
 
-Status updated 2026-09-08: phase 0 toolkit remains partial. Phase 1 code fixes and macOS packaging are verified; Linux testing is deferred by user decision. Phase 2 pipeline and phase 3 terrain explorer are implemented, with the real Ukraine dataset and packaged Mac 1440p coast/detail runs verified; Native bandwidth measurement and transition refinement are active; Linux testing is deferred. Phases 4–10 remain planned. See [progress.md](progress.md) and per-phase baselines for measured acceptance. Written 2026-09-08 after inventorying the retail media in `/gameassets`.
+Status updated 2026-09-08: phase 0 toolkit remains partial. Phase 1 code fixes and macOS packaging are verified; Linux testing is deferred by user decision. Phase 2 pipeline and phase 3 terrain explorer are implemented, with the real Ukraine dataset and packaged Mac 1440p coast/detail runs verified; Native GPU external-memory bandwidth is captured and source transitions are polished/verified on Mac. The measurements do not isolate physical DRAM traffic; live in-app counters and fine-edge refinement remain open. Linux testing is deferred. Phases 4–10 remain planned. See [progress.md](progress.md) and per-phase baselines for measured acceptance. Written 2026-09-08 after inventorying the retail media in `/gameassets`.
 
 ---
 

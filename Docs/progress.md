@@ -12,8 +12,56 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 0: retail toolkit | Containers, images/fonts and data readers; partial SH | F-14 export and integrated deliverable remain open; unchanged this development pass |
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
-| 3: terrain renderer | Streaming, quadtree patches with height morph, floating origin, free camera, water cache/holes, diagnostics | Packaged real coast and 30m mountain-detail runs ~60 fps at 1440p on Mac. Real DRAM counters and transition polish active; Linux deferred |
+| 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, diagnostics | Packaged coast/detail ~60 fps at 1440p; 0↔1 and 1↔2 fades plus 24km fast lateral flights pass. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
 | 4–10 | Plans and importer contracts only | Flight model, gameplay, in-app retail import and release work not implemented |
+
+## 2026-09-08: verified Mac source transitions and native memory profiling
+
+Packaged source `12851d8`, including renderer fixes `05d0ecd`, `7442ac7` and
+`3f7a6b2`. Local commits only; no push. See the updated
+[phase 3 baseline](baselines/phase-3.md) for exact measurements and artifacts,
+and [GPU notes](gpu-trace-notes.md) for the native measurement's scope/units.
+
+- Source changes now wait for complete coverage and 400 ms stable selection,
+  then fade for 800 ms using complementary opaque pixel masks. Both hierarchies
+  remain bounded by the existing geometry budget. Mesh selection runs each frame.
+- Independent review reproduced and fixed a 5.31 m split-threshold jump and an
+  8.96 m clipped-theater-edge jump. Parent height, normals and clamped tint now
+  interpolate consistently; four new regressions cover the fixes/state lifecycle.
+- Fresh 1440p packaged warm runs: **60.036 fps** detail and **60.014 fps** coast.
+  Altitude 30↔100 m and 100↔300 m source transitions pass. Fast Shift flight
+  travels ~24.1 km out/back, crosses detail coverage and floating-origin grids,
+  and completes both fades without errors or omitted water.
+- Six-second moving/settling legs have p95 ≤17.6 ms. Outward legs include real
+  49–67 ms maximum stalls; the average is not a claim of hitch-free streaming.
+  Fast-flight geometry cache peaks at 31,639,104 bytes, within 96 MiB.
+- Mid-fade and settled screenshots were inspected independently. Expected
+  silhouette/lake-edge stipple disappears after the fade. Thin dashed patch
+  edges and blocky 100 m shorelines persist and remain documented refinement work.
+- Native Instruments Performance Limiters configuration captures hardware GPU
+  read/write/external-memory bandwidth. The tool preserves the difference from
+  the absent legacy `DRAM Bandwidth` counter, GPU upload estimates, and live
+  in-app counters. Measurements are GPU-wide sampled intervals, not exclusive
+  physical-DRAM traffic attributable to the app. Final numbers are in GPU notes.
+- `bun run check`: **41 pass / 4580 expectations**, strict types/lint/format pass.
+  GPU Python tooling: **5 pass**. Explicit smoke-tool TypeScript check passes.
+  Mac arm64/x64 DMG/ZIP build passes in **26.7 s**; only arm64 was launched.
+  Pipeline/retail sources are unchanged, so earlier Python results are historical.
+
+Lessons from failed validation are retained: a shader vec3/vec4 mismatch made
+land disappear while triangle counters looked healthy; smoke now fails browser
+console errors. A descent check ran before debounce, and diagnostic `frameMs`
+overwrote raw samples; the harness now waits for completed fades and records
+`rafFrameMs`. Two early sampling runs timed out; isolated background/focus
+controls made subsequent runs complete, without proving occlusion as the sole
+cause. Instruments can exit 0 with an unsupported counter profile; inspect
+actual exported samples and native units rather than trusting the exit status.
+
+**Next work:** keep Linux tabled per user decision. Remaining Mac refinement is
+fine patch/shoreline edges, isolated streaming stalls and longer thermal runs;
+a live native on-screen memory counter and agreed regression margin remain
+separate acceptance work. Phase 4 entry (terrain renders) is met on this Mac;
+no aircraft, gameplay, retail import or completed Linux gate is implied.
 
 ## 2026-09-08: Linux testing tabled; Mac terrain follow-up
 
