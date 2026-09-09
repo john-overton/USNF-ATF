@@ -133,3 +133,16 @@ test('systems thrust augmentation changes acceleration and retracted gear reject
   expect(gearUp.state.status).toBe('crashed');
   expect(gearUp.telemetry.reason).toBe('Gear-up terrain impact');
 });
+
+test('speed brakes dissipate energy and deployed flaps add assisted lift and drag', () => {
+  const state = createFlightState({ position: { x: 0, y: 2000, z: 0 }, airspeed: 150 });
+  const clean = stepFlight(state, NEUTRAL_CONTROLS, flat);
+  const brakes = stepFlight(state, { ...NEUTRAL_CONTROLS, airbrake: 1 }, flat);
+  const flaps = stepFlight(state, { ...NEUTRAL_CONTROLS, flaps: 1 }, flat);
+  expect(brakes.telemetry.specificEnergy).toBeLessThan(clean.telemetry.specificEnergy);
+  expect(brakes.telemetry.airspeed).toBeLessThan(clean.telemetry.airspeed);
+  expect(flaps.state.velocity.y).toBeGreaterThan(clean.state.velocity.y);
+  expect(flaps.telemetry.loadFactor).toBeGreaterThan(clean.telemetry.loadFactor);
+  expect(flaps.state.velocity.z).toBeGreaterThan(clean.state.velocity.z);
+  expect(() => stepFlight(state, { ...NEUTRAL_CONTROLS, airbrake: NaN }, flat)).toThrow();
+});

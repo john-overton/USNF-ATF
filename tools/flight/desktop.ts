@@ -8,6 +8,7 @@ export interface DesktopOptions {
   app?: string;
   terrain: string;
   aircraft?: string;
+  audio?: string;
   interactiveTest?: boolean;
   out: string;
   query?: Record<string, string>;
@@ -24,6 +25,10 @@ export async function openDesktop(options: DesktopOptions) {
   if (options.aircraft) {
     await mkdir(path.join(profile, 'data/aircraft'), { recursive: true });
     await cp(path.resolve(options.aircraft), path.join(profile, 'data/aircraft/f14.json'));
+  }
+  if (options.audio) {
+    await mkdir(path.join(profile, 'data/audio'), { recursive: true });
+    await cp(path.resolve(options.audio), path.join(profile, 'data/audio/f14.json'));
   }
   const command = [path.resolve(options.binary)];
   if (options.app) command.push(path.resolve(options.app));

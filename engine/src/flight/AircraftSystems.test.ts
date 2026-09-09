@@ -9,6 +9,8 @@ function commands(): AircraftCommands & { resetRequested: boolean } {
     afterburner: false,
     gearDown: true,
     hookDown: false,
+    flapsDown: false,
+    airbrakeDown: false,
     cameraMode: 'world-up',
     resetRequested: false,
   };
@@ -117,4 +119,22 @@ describe('fixed-step aircraft systems', () => {
     expect(() => stepAircraftSystems(initial, input, Number.NaN)).toThrow();
     expect(() => stepAircraftSystems(initial, input, 1)).toThrow();
   });
+});
+
+test('F and B latch flaps and speed brakes; actuator travel is continuous and reversible', () => {
+  const input = commands();
+  press(input, 'KeyF');
+  press(input, 'KeyB');
+  press(input, 'KeyB', true);
+  expect(input.flapsDown).toBe(true);
+  expect(input.airbrakeDown).toBe(true);
+  let state = createAircraftSystems();
+  for (let i = 0; i < 60; i++) state = stepAircraftSystems(state, input, 1 / 120);
+  expect(state.flapFraction).toBeCloseTo(0.25, 10);
+  expect(state.airbrakeFraction).toBeCloseTo(0.5, 10);
+  press(input, 'KeyF');
+  press(input, 'KeyB');
+  for (let i = 0; i < 60; i++) state = stepAircraftSystems(state, input, 1 / 120);
+  expect(state.flapFraction).toBeCloseTo(0, 10);
+  expect(state.airbrakeFraction).toBeCloseTo(0, 10);
 });

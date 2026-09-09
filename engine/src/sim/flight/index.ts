@@ -28,6 +28,8 @@ export interface FlightControls {
   /** Original systems adapter; omitted preserves the baseline aircraft. */
   thrustMultiplier?: number;
   gearDown?: boolean;
+  flaps?: number;
+  airbrake?: number;
 }
 export type FlightStatus = 'airborne' | 'grounded' | 'crashed' | 'waiting-terrain';
 export interface FlightState {
@@ -177,6 +179,7 @@ export function sampleTelemetry(
   state: FlightState,
   env: FlightEnvironment,
   def: AircraftDefinition = PLACEHOLDER_AIRCRAFT,
+  controls: Pick<FlightControls, 'flaps'> = {},
 ): FlightTelemetry {
   const a = aerodynamics(state, env, def),
     ground = env.sampleGround(state.position.x, state.position.z);
@@ -184,7 +187,13 @@ export function sampleTelemetry(
     airspeed: a.speed,
     alphaRad: a.alpha,
     mach: a.mach,
-    loadFactor: (a.qArea * a.cl) / (def.massKg * G),
+    loadFactor:
+      (a.qArea *
+        (a.cl +
+          clamp(controls.flaps ?? 0, 0, 1) *
+            0.2 *
+            Math.max(0, 1 - Math.abs(a.alpha) / def.stallAlphaRad))) /
+      (def.massKg * G),
     specificEnergy: 0.5 * dot(state.velocity, state.velocity) + G * state.position.y,
     stalled: a.speed > 5 && Math.abs(a.alpha) > def.stallAlphaRad,
     groundClearance: ground ? state.position.y - ground.height - def.gearHeightM : undefined,
@@ -210,7 +219,7 @@ export function stepFlight(
     throw new Error('Finite flight controls required');
   const finish = (s: FlightState, reason?: string) => ({
     state: s,
-    telemetry: { ...sampleTelemetry(s, env, def), ...(reason ? { reason } : {}) },
+    telemetry: { ...sampleTelemetry(s, env, def, controls), ...(reason ? { reason } : {}) },
   });
   if (state.status === 'crashed') return finish(state);
   const ground = env.sampleGround(state.position.x, state.position.z);
@@ -280,11 +289,18 @@ export function stepFlight(
       state.position.y,
       a.mach,
     );
+  const flap = clamp(controls.flaps ?? 0, 0, 1);
+  const airbrake = clamp(controls.airbrake ?? 0, 0, 1);
+  if (!Number.isFinite(flap) || !Number.isFinite(airbrake))
+    throw new Error('Invalid aerodynamic device controls');
+  // Original assisted-device coefficients; retail force law/scaling remains unported.
+  const deviceDrag = flap * 0.035 + airbrake * 0.12;
+  const flapLift = flap * 0.2 * Math.max(0, 1 - Math.abs(a.alpha) / def.stallAlphaRad);
   // Sideforce is damping perpendicular to airflow, so it cannot manufacture energy.
   const side = unit(add(a.right, scale(a.direction, -dot(a.right, a.direction))));
   const force = add(
-    add(scale(a.forward, thrust), scale(a.direction, -a.qArea * a.cd)),
-    add(scale(a.liftDirection, a.qArea * a.cl), scale(side, -a.qArea * a.beta * 0.7)),
+    add(scale(a.forward, thrust), scale(a.direction, -a.qArea * (a.cd + deviceDrag))),
+    add(scale(a.liftDirection, a.qArea * (a.cl + flapLift)), scale(side, -a.qArea * a.beta * 0.7)),
   );
   let acceleration = add(scale(force, 1 / def.massKg), { x: 0, y: -G, z: 0 });
   if (onGround) {

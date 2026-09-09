@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getPlatform } from '../platform';
+import { FlightHud } from '../flight/FlightHud';
 import type { FsRoot } from '../platform/Platform';
 import { startTerrainViewer, type TerrainDiagnostics } from '../terrain/viewer';
 
@@ -56,6 +57,13 @@ export function TerrainViewer() {
         tabIndex={0}
         aria-label="Terrain free camera. WASD move, Q E altitude, drag to look."
       />
+      {stats?.flight && (
+        <FlightHud
+          flight={stats.flight}
+          flapFraction={stats.flight.systems.flapFraction}
+          airbrakeFraction={stats.flight.systems.airbrakeFraction}
+        />
+      )}
       <main className="terrain-panel">
         <h1>{flightMode ? 'Practice flight' : 'Terrain explorer'}</h1>
         <form
@@ -101,7 +109,7 @@ export function TerrainViewer() {
         {!error && stats?.status === 'loading' && <p>Loading terrain chunks…</p>}
         <p>
           {flightMode
-            ? 'Arrows pitch/roll · Q/E rudder · 1–5 throttle 0/25/50/75/100% · 6 afterburner · W/S fine throttle · T engine · G gear · H hook · F2 locked chase · F3 horizon-up · B brake · M mute · R reset.'
+            ? 'Arrows pitch/roll · Q/E rudder · 1–5 throttle 0/25/50/75/100% · 6 afterburner · W/S fine throttle · T engine · G gear · H hook · F flaps · B speed/wheel brakes · F2 locked chase · F3 horizon-up · M mute · R reset.'
             : 'WASD move · Q/E altitude · drag to look · arrows turn · Shift accelerates. Click the terrain to focus controls.'}
         </p>
         {flightMode && !stats?.flight && !error && !stats?.error && (
@@ -139,6 +147,11 @@ export function TerrainViewer() {
                 {stats.flight.hookDown ? 'DOWN' : 'UP'}{' '}
                 {(stats.flight.systems.hookFraction * 100).toFixed(0)}%
               </dd>
+              <dt>Flaps / speed brake</dt>
+              <dd>
+                {(stats.flight.systems.flapFraction * 100).toFixed(0)}% /{' '}
+                {(stats.flight.systems.airbrakeFraction * 100).toFixed(0)}%
+              </dd>
               <dt>View</dt>
               <dd>
                 {stats.flight.cameraMode === 'attitude'
@@ -152,6 +165,13 @@ export function TerrainViewer() {
                   : stats.flight.audio.contextState === 'running'
                     ? 'On (M to mute)'
                     : 'Press a flight key to enable'}
+              </dd>
+              <dt>Sound assets</dt>
+              <dd>
+                {stats.flight.audio.source === 'retail-pt-samples'
+                  ? 'USNF ’97 F-14 samples'
+                  : 'Original fallback'}
+                {stats.flight.audio.error ? ` · ${stats.flight.audio.error}` : ''}
               </dd>
               <dt>Load</dt>
               <dd>{stats.flight.loadFactor.toFixed(2)} g</dd>

@@ -11,6 +11,7 @@ import {
   SRGBColorSpace,
   DoubleSide,
   NearestFilter,
+  Vector3,
 } from 'three';
 import type { Platform } from '../platform/Platform';
 
@@ -20,6 +21,8 @@ export interface AircraftPart {
   colors: number[];
   uvs?: number[];
   pivot?: number[];
+  rotationAxis?: number[];
+  parent?: string;
   texture?: { width: number; height: number; rgba: number[] };
 }
 export interface RetailAircraftData extends AircraftPart {
@@ -69,6 +72,14 @@ export function parseRetailAircraft(value: unknown): RetailAircraftData {
         part.pivot.some((n) => !Number.isFinite(n) || Math.abs(n) > 100))
     )
       throw new Error('Invalid aircraft pivot');
+    if (
+      part.rotationAxis &&
+      (!Array.isArray(part.rotationAxis) ||
+        part.rotationAxis.length !== 3 ||
+        part.rotationAxis.some((n) => !Number.isFinite(n)) ||
+        Math.hypot(...part.rotationAxis) < 0.001)
+    )
+      throw new Error('Invalid aircraft rotation axis');
   }
   if (vertices < 3 || vertices > 300000) throw new Error('Invalid aircraft vertex count');
   for (const part of [data, ...(data.parts ?? [])]) {
@@ -86,6 +97,18 @@ export function parseRetailAircraft(value: unknown): RetailAircraftData {
       rgba.some((n) => !Number.isInteger(n) || n < 0 || n > 255)
     )
       throw new Error('Invalid aircraft texture');
+  }
+  const parts = new Map([data, ...(data.parts ?? [])].map((part) => [part.name, part]));
+  if (parts.size !== 1 + (data.parts?.length ?? 0)) throw new Error('Duplicate aircraft part');
+  for (const part of parts.values()) {
+    const visited = new Set([part.name]);
+    let parent = part.parent;
+    while (parent !== undefined) {
+      if (typeof parent !== 'string' || !parts.has(parent) || visited.has(parent))
+        throw new Error('Invalid aircraft hierarchy');
+      visited.add(parent);
+      parent = parts.get(parent)!.parent;
+    }
   }
   return data;
 }
@@ -150,12 +173,32 @@ export class RetailAircraft {
       this.group.add(group);
       this.parts.set(part.name, group);
     }
+    this.group.updateMatrixWorld(true);
+    for (const part of data.parts ?? []) {
+      if (part.parent) this.parts.get(part.parent)!.attach(this.parts.get(part.name)!);
+    }
   }
   static async load(platform: Platform): Promise<RetailAircraft | undefined> {
     if (!(await platform.fs.exists('appData', 'aircraft/f14.json'))) return undefined;
     const text = await platform.fs.readText('appData', 'aircraft/f14.json');
     if (text.length > 64 * 1024 * 1024) throw new Error('Aircraft import exceeds 64 MiB');
     return new RetailAircraft(parseRetailAircraft(JSON.parse(text)));
+  }
+  setSurfaceAngle(name: string, radians: number): void {
+    const data = this.data.parts?.find((part) => part.name === name);
+    const group = this.parts.get(name);
+    if (!data?.rotationAxis || !group) return;
+    group.setRotationFromAxisAngle(new Vector3().fromArray(data.rotationAxis).normalize(), radians);
+  }
+  surfaceDiagnostics(): Record<string, number> {
+    return Object.fromEntries(
+      (this.data.parts ?? [])
+        .filter((p) => p.rotationAxis)
+        .map((p) => [
+          p.name,
+          2 * Math.acos(Math.min(1, Math.abs(this.parts.get(p.name)!.quaternion.w))),
+        ]),
+    );
   }
   setAfterburner(lit: boolean): void {
     for (const [name, group] of this.parts) {

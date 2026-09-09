@@ -28,6 +28,7 @@ import { flightCamera } from './FlightCamera';
 import { createAircraftSystems, stepAircraftSystems } from './AircraftSystems';
 import { FlightAudio } from './FlightAudio';
 import { RetailAircraft } from './RetailAircraft';
+import { surfaceAngle } from './ControlSurfaces';
 
 export interface FlightDiagnostics {
   state: FlightState;
@@ -62,6 +63,8 @@ export interface FlightDiagnostics {
   afterburner: boolean;
   gearDown: boolean;
   hookDown: boolean;
+  flapsDown: boolean;
+  airbrakeDown: boolean;
   systems: ReturnType<typeof createAircraftSystems>;
   audio: ReturnType<FlightAudio['diagnostics']>;
   animation: Record<string, number>;
@@ -83,7 +86,7 @@ export class FlightLayer {
   private readonly input = new FlightInput();
   private readonly aircraft = new Group();
   private readonly deck = new Group();
-  private readonly audio = new FlightAudio();
+
   private systems = createAircraftSystems();
   private readonly gearParts: Group[] = [];
   private readonly hook = new Group();
@@ -111,7 +114,8 @@ export class FlightLayer {
     try {
       const strip = await preparePractice(ground);
       const model = await RetailAircraft.load(platform);
-      return new FlightLayer(scene, ground, strip, model);
+      const audio = await FlightAudio.create(platform);
+      return new FlightLayer(scene, ground, strip, audio, model);
     } catch (error) {
       ground.dispose();
       throw error;
@@ -121,6 +125,7 @@ export class FlightLayer {
     private scene: Scene,
     readonly ground: GroundSampler,
     readonly strip: PracticeStrip,
+    private readonly audio: FlightAudio,
     private readonly model?: RetailAircraft,
   ) {
     this.environment = { sampleGround: (x: number, z: number) => ground.sample(x, z) };
@@ -260,6 +265,8 @@ export class FlightLayer {
           throttle: this.systems.effectiveThrottle,
           thrustMultiplier: this.systems.thrustMultiplier,
           gearDown: this.systems.gearFraction >= 0.99,
+          flaps: this.systems.flapFraction,
+          airbrake: this.systems.airbrakeFraction,
         },
         this.environment,
         PLACEHOLDER_AIRCRAFT,
@@ -332,6 +339,17 @@ export class FlightLayer {
       if (name.startsWith('wing-left')) part.rotation.y = this.wingSweep();
       if (name.startsWith('wing-right')) part.rotation.y = -this.wingSweep();
     }
+    for (const part of this.model?.data.parts ?? []) {
+      if (part.rotationAxis)
+        this.model?.setSurfaceAngle(
+          part.name,
+          surfaceAngle(part.name, {
+            ...this.controls,
+            flap: this.systems.flapFraction,
+            airbrake: this.systems.airbrakeFraction,
+          }),
+        );
+    }
     this.model?.setAfterburner(this.input.engineRunning && this.systems.afterburnerFraction > 0.1);
     this.hook.rotation.x = (this.systems.hookFraction * Math.PI) / 4;
     for (const burner of this.burners) {
@@ -343,7 +361,7 @@ export class FlightLayer {
   private wingSweep(): number {
     // Original visual schedule, held extended for landing. Not recovered retail animation.
     return (
-      (1 - this.systems.gearFraction) *
+      (1 - Math.max(this.systems.gearFraction, this.systems.flapFraction)) *
       Math.max(0, Math.min(1, (this.telemetry.airspeed - 160) / 180)) *
       0.7
     );
@@ -389,6 +407,8 @@ export class FlightLayer {
       afterburner: this.input.afterburner,
       gearDown: this.input.gearDown,
       hookDown: this.input.hookDown,
+      flapsDown: this.input.flapsDown,
+      airbrakeDown: this.input.airbrakeDown,
       systems: { ...this.systems },
       audio: this.audio.diagnostics(),
       animation: {
@@ -396,6 +416,7 @@ export class FlightLayer {
         hook: this.systems.hookFraction,
         afterburner: this.systems.afterburnerFraction,
         wingSweepRad: this.wingSweep(),
+        ...(this.model?.surfaceDiagnostics() ?? {}),
         gearRotation: this.gearParts[0]?.rotation.z ?? 0,
         gearVisible: Number(this.gearParts[0]?.visible),
         hookRotation: this.hook.rotation.x,

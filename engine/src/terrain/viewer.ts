@@ -142,6 +142,7 @@ export function startTerrainViewer(
     last = performance.now(),
     lastSelect = -Infinity,
     lastStats = last,
+    lastFlightUi = last,
     uploadedAtStats = 0;
   const frameTimes: number[] = [];
   const d: TerrainDiagnostics = {
@@ -523,6 +524,10 @@ export function startTerrainViewer(
       d.uploadBytesPerSecond = (d.uploadBytesTotal - uploadedAtStats) / ((now - lastStats) / 1000);
       uploadedAtStats = d.uploadBytesTotal;
       lastStats = now;
+      if (!flight) update(diagnostics());
+    }
+    if (flight && now - lastFlightUi >= 1000 / 30) {
+      lastFlightUi = now;
       update(diagnostics());
     }
     raf = requestAnimationFrame(frame);

@@ -10,8 +10,7 @@ export interface FlightClip {
 export type FlightSamples = Record<ClipRole, FlightClip>;
 export function parseFlightSamples(value: unknown): FlightSamples {
   const data = value as { schemaVersion?: number; clips?: Record<string, unknown> };
-  if (data?.schemaVersion !== 1 || !data.clips)
-    throw new Error('Invalid flight audio manifest');
+  if (data?.schemaVersion !== 1 || !data.clips) throw new Error('Invalid flight audio manifest');
   const result = {} as FlightSamples;
   for (const role of ['jet', 'burner', 'start', 'stop'] as const) {
     const c = data.clips[role] as FlightClip & { encoding?: string };

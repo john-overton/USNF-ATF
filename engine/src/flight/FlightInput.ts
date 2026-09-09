@@ -5,6 +5,8 @@ export interface AircraftCommands {
   afterburner: boolean;
   gearDown: boolean;
   hookDown: boolean;
+  flapsDown: boolean;
+  airbrakeDown: boolean;
   cameraMode: ChaseCameraMode;
 }
 /** Discrete actions are edge-triggered; browser key repeat must not toggle systems. */
@@ -22,6 +24,8 @@ export function applyPilotAction(
   if (event.code === 'KeyT') state.engineRunning = !state.engineRunning;
   if (event.code === 'KeyG') state.gearDown = !state.gearDown;
   if (event.code === 'KeyH') state.hookDown = !state.hookDown;
+  if (event.code === 'KeyF') state.flapsDown = !state.flapsDown;
+  if (event.code === 'KeyB') state.airbrakeDown = !state.airbrakeDown;
   if (event.code === 'F2') state.cameraMode = 'attitude';
   if (event.code === 'F3') state.cameraMode = 'world-up';
   if (event.code === 'KeyR') state.resetRequested = true;
@@ -52,6 +56,7 @@ const PILOT_KEYS = new Set([
   'KeyT',
   'KeyG',
   'KeyH',
+  'KeyF',
   'F2',
   'F3',
   'Digit1',
@@ -87,6 +92,8 @@ export class FlightInput {
   afterburner = false;
   gearDown = true;
   hookDown = false;
+  flapsDown = false;
+  airbrakeDown = false;
   cameraMode: ChaseCameraMode = 'world-up';
   resetRequested = false;
   gamepadConnected = false;
@@ -156,7 +163,7 @@ export class FlightInput {
         ),
       ),
       throttle: this.throttle,
-      brake: this.keys.has('KeyB') || Boolean(pad?.buttons[1]?.pressed),
+      brake: this.airbrakeDown || Boolean(pad?.buttons[1]?.pressed),
     };
   }
   reset(): void {
@@ -165,6 +172,8 @@ export class FlightInput {
     this.afterburner = false;
     this.gearDown = true;
     this.hookDown = false;
+    this.flapsDown = false;
+    this.airbrakeDown = false;
     this.cameraMode = 'world-up';
     this.resetRequested = false;
     this.keys.clear();

@@ -6,6 +6,8 @@ export interface AircraftSystemsState {
   /** 0 retracted, 1 extended. Original animation timings, not retail data. */
   gearFraction: number;
   hookFraction: number;
+  flapFraction: number;
+  airbrakeFraction: number;
   afterburnerFraction: number;
   effectiveThrottle: number;
   thrustMultiplier: number;
@@ -15,6 +17,8 @@ export function createAircraftSystems(throttle = 0): AircraftSystemsState {
     engineSpool: 1,
     gearFraction: 1,
     hookFraction: 0,
+    flapFraction: 0,
+    airbrakeFraction: 0,
     afterburnerFraction: 0,
     effectiveThrottle: Math.max(0, Math.min(1, throttle)),
     thrustMultiplier: 1,
@@ -39,6 +43,8 @@ export function stepAircraftSystems(
     engineSpool,
     gearFraction: approach(state.gearFraction, Number(commands.gearDown), dt / 3),
     hookFraction: approach(state.hookFraction, Number(commands.hookDown), dt / 1.5),
+    flapFraction: approach(state.flapFraction, Number(commands.flapsDown), dt / 2),
+    airbrakeFraction: approach(state.airbrakeFraction, Number(commands.airbrakeDown), dt),
     afterburnerFraction,
     effectiveThrottle: commands.engineRunning ? throttle * engineSpool : 0,
     // Original assisted approximation; retail thrust curves remain separate importer work.
