@@ -426,7 +426,7 @@ test('imported envelope ceiling extrapolation stays finite and never switches to
   expect(sample(30000).loadFactor).toBeLessThan(sample(12000).loadFactor);
 });
 
-test('recovered envelope mode applies native flap minimum-speed rule without changing the fitted mode', () => {
+function recoveredAircraft() {
   const def = retailAircraft();
   const nativeRows = [
     { g: 1, min: 200, max: 1300 },
@@ -454,6 +454,12 @@ test('recovered envelope mode applies native flap minimum-speed rule without cha
       altitudeM: p.altitudeFt * 0.3048,
     })),
   }));
+  def.retail!.rawFields.flapsLift = { value: 51 };
+  return def;
+}
+
+test('recovered envelope mode applies native flap minimum-speed rule without changing the fitted mode', () => {
+  const def = recoveredAircraft();
   const state = createFlightState({
     position: { x: 0, y: 1000, z: 0 },
     pitchRad: def.stallAlphaRad,
@@ -469,27 +475,84 @@ test('recovered envelope mode applies native flap minimum-speed rule without cha
   expect(sampleTelemetry(state, flat, def, { flaps: 1 })).toEqual(fitted);
 });
 
-test('experimental high-camber flap trim can command the full unstalled negative-alpha branch', () => {
-  const def = retailAircraft();
-  // Synthetic high camber, comparable to the recovered flap minimum-speed rule.
-  def.retail!.rawFields.flapsLift = { value: 200 };
-  def.retail!.envelopes = def.retail!.envelopes.filter((row) => row.g === 1);
-  const controls = { ...NEUTRAL_CONTROLS, flaps: 1 };
-  let state = createFlightState({ position: { x: 0, y: 1000, z: 0 }, pitchRad: -0.12 });
-  state.velocity = { x: 0, y: 0, z: -150 };
-  // Former -0.08 floor commanded nose UP despite excessive flap lift here.
-  expect(stepFlight(state, controls, flat, def).state.angularVelocity.x).toBeLessThan(0);
-  const trimmedAlpha = ((60 / 150) ** 2 - 200 / 256) * def.stallAlphaRad;
-  state.attitude = attitudeFromEuler(trimmedAlpha, 0, 0);
-  let maximumAltitudeError = 0;
-  for (let i = 0; i < 1200; i++) {
-    state = stepFlight(state, controls, flat, def).state;
-    maximumAltitudeError = Math.max(maximumAltitudeError, Math.abs(state.position.y - 1000));
+test('experimental flap maximum lift does not become excessive zero-alpha camber', () => {
+  const def = recoveredAircraft();
+  const state = createFlightState({ position: { x: 0, y: 1000, z: 0 }, airspeed: 150 });
+  const qArea = 0.5 * 1.225 * Math.exp(-1000 / 8500) * 150 ** 2 * def.wingAreaM2;
+  for (const native of [false, true]) {
+    def.nativeEnvelope = native;
+    for (const flaps of [0, 0.5, 1]) {
+      const load = sampleTelemetry(state, flat, def, { flaps }).loadFactor;
+      expect((load * def.massKg * 9.80665) / qArea).toBeCloseTo(flaps * (51 / 256), 10);
+      for (const join of [-def.stallAlphaRad, 0, def.stallAlphaRad]) {
+        const at = (alpha: number) => {
+          const posed = { ...state, attitude: attitudeFromEuler(alpha, 0, 0) };
+          return sampleTelemetry(posed, flat, def, { flaps }).loadFactor;
+        };
+        expect(Math.abs(at(join + 1e-8) - at(join - 1e-8))).toBeLessThan(1e-5);
+      }
+    }
   }
-  const telemetry = sampleTelemetry(state, flat, def, controls);
-  expect(state.status).toBe('airborne');
-  expect(maximumAltitudeError).toBeLessThan(30);
-  expect(telemetry.alphaRad).toBeLessThan(-0.08);
-  expect(telemetry.loadFactor).toBeGreaterThan(0.8);
-  expect(telemetry.loadFactor).toBeLessThan(1.2);
+});
+
+test('experimental flap neutral trim balances the force polar on either side of zero alpha', () => {
+  const def = recoveredAircraft();
+  let positiveCases = 0,
+    negativeCases = 0;
+  for (const native of [false, true]) {
+    def.nativeEnvelope = native;
+    for (const speed of [90, 150, 300])
+      for (const flaps of [0, 0.5, 1]) {
+        const state = createFlightState({ position: { x: 0, y: 1000, z: 0 }, airspeed: speed });
+        // Independently find the neutral augmentation's 1g lift condition from
+        // telemetry, without repeating the implementation's piecewise solution.
+        let low = -def.stallAlphaRad,
+          high = def.stallAlphaRad;
+        for (let i = 0; i < 60; i++) {
+          const alpha = (low + high) / 2;
+          state.attitude = attitudeFromEuler(alpha, 0, 0);
+          const load = sampleTelemetry(state, flat, def, { flaps }).loadFactor;
+          if (load * Math.cos(alpha) < 1) low = alpha;
+          else high = alpha;
+        }
+        const alpha = (low + high) / 2;
+        state.attitude = attitudeFromEuler(alpha, 0, 0);
+        if (alpha >= 0) positiveCases++;
+        else negativeCases++;
+        const next = stepFlight(state, { ...NEUTRAL_CONTROLS, flaps }, flat, def);
+        expect(Math.abs(next.state.angularVelocity.x)).toBeLessThan(1e-10);
+      }
+  }
+  expect(positiveCases).toBeGreaterThan(0);
+  expect(negativeCases).toBeGreaterThan(0);
+});
+
+test('experimental flaps permit rotated takeoff without a low-speed neutral nose-down launch', () => {
+  for (const native of [false, true]) {
+    const def = recoveredAircraft();
+    def.nativeEnvelope = native;
+    for (const rotate of [false, true]) {
+      let state = createFlightState({
+        position: { x: 0, y: def.gearHeightM, z: 0 },
+        airspeed: 70,
+      });
+      let lifted = false;
+      for (let i = 0; i < 360; i++) {
+        const next = stepFlight(
+          state,
+          { ...NEUTRAL_CONTROLS, pitch: rotate ? 0.3 : 0, flaps: 1, gearDown: true },
+          flat,
+          def,
+        );
+        state = next.state;
+        if (state.position.y > def.gearHeightM + 0.1) {
+          lifted = true;
+          expect(flightEuler(state.attitude).pitchRad).toBeGreaterThan(0);
+          expect(next.telemetry.alphaRad).toBeGreaterThan(0);
+          break;
+        }
+      }
+      expect(lifted).toBe(rotate);
+    }
+  }
 });

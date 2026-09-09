@@ -262,6 +262,9 @@ function aerodynamics(state: FlightState, env: FlightEnvironment, def: AircraftD
     right = rotate(state.attitude, { x: 1, y: 0, z: 0 });
   const direction = unit(air),
     liftDirection = unit(add(up, scale(direction, -dot(up, direction))));
+  const flapLiftMax =
+    fit?.nativeFlapLiftMax ??
+    (fit ? (retailDeviceFactor(def, 'flapsLift') ?? 0.2 / fit.clMax) * fit.clMax : 0.2);
   return {
     speed,
     alpha,
@@ -276,20 +279,24 @@ function aerodynamics(state: FlightState, env: FlightEnvironment, def: AircraftD
     direction,
     liftDirection,
     fit,
-    flapLiftMax:
-      fit?.nativeFlapLiftMax ??
-      (fit ? (retailDeviceFactor(def, 'flapsLift') ?? 0.2 / fit.clMax) * fit.clMax : 0.2),
+    flapLiftMax,
+    // Authored mapping: the PT 8.8 value supplies modest zero-alpha camber;
+    // the envelope's maximum-lift increase is reached at positive stall alpha.
+    // A recovered stall-speed bound does not establish native zero-alpha lift.
+    flapCamber: Math.min(flapLiftMax, retailDeviceFactor(def, 'flapsLift') ?? 0.2),
   };
 }
-/** Original camber approximation: flaps still increase lift at the clean stall
- * angle, then lose effectiveness in separated flow. Native force law unported. */
+/** Original flap polar: separate zero-alpha camber from maximum-lift gain,
+ * then fade in separated flow. The native force law remains unported. */
 function flapLiftCoefficient(
   alpha: number,
   flap: number,
   stallAlpha: number,
   maximum = 0.2,
+  camber = maximum,
 ): number {
-  return flap * maximum * clamp((stallAlpha + 0.32 - Math.abs(alpha)) / 0.32, 0, 1);
+  const attached = camber + (maximum - camber) * clamp(alpha / stallAlpha, 0, 1);
+  return flap * attached * clamp((stallAlpha + 0.32 - Math.abs(alpha)) / 0.32, 0, 1);
 }
 export function sampleTelemetry(
   state: FlightState,
@@ -311,6 +318,7 @@ export function sampleTelemetry(
             clamp(controls.flaps ?? 0, 0, 1),
             def.stallAlphaRad,
             a.flapLiftMax,
+            a.flapCamber,
           ))) /
       (def.massKg * G),
     specificEnergy: 0.5 * dot(state.velocity, state.velocity) + G * state.position.y,
@@ -362,11 +370,13 @@ export function stepFlight(
   );
   let trimAlpha = 0;
   if (a.fit) {
-    // The original fitted polar is linear throughout the unstalled negative
-    // and positive branch. Recovered flap camber can require substantially
-    // less than -0.08rad at speed; solve that branch without a fixed search floor.
+    // Solve the same piecewise linear polar used by forces: camber offsets
+    // both branches; the extra maximum lift changes only the positive slope.
+    const requiredCleanLift = wantedCL - flap * a.flapCamber;
+    const liftAtStall =
+      a.fit.clMax + (requiredCleanLift > 0 ? flap * (a.flapLiftMax - a.flapCamber) : 0);
     trimAlpha = clamp(
-      ((wantedCL - flap * a.flapLiftMax) * def.stallAlphaRad) / a.fit.clMax,
+      (requiredCleanLift * def.stallAlphaRad) / liftAtStall,
       -def.stallAlphaRad,
       def.stallAlphaRad,
     );
@@ -376,7 +386,7 @@ export function stepFlight(
       trimAlpha = minimumAlpha + ((def.stallAlphaRad - minimumAlpha) * i) / 80;
       if (
         liftCoefficient(trimAlpha, a.mach, def) +
-          flapLiftCoefficient(trimAlpha, flap, def.stallAlphaRad, a.flapLiftMax) >=
+          flapLiftCoefficient(trimAlpha, flap, def.stallAlphaRad, a.flapLiftMax, a.flapCamber) >=
         wantedCL
       )
         break;
@@ -469,7 +479,13 @@ export function stepFlight(
           state.position.y,
           a.mach,
         ));
-  const flapLift = flapLiftCoefficient(a.alpha, flap, def.stallAlphaRad, a.flapLiftMax);
+  const flapLift = flapLiftCoefficient(
+    a.alpha,
+    flap,
+    def.stallAlphaRad,
+    a.flapLiftMax,
+    a.flapCamber,
+  );
   // Original increments, not direct conversions of the native PT drag fields.
   // The clean drag table already includes induced drag. Add only the extra
   // lift-squared contribution from flap camber, never a negative drag credit.
