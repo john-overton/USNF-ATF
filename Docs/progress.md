@@ -25,8 +25,11 @@ texture-size limit explicitly. A single 6144 WMS request returned HTTP 400; the
 four-request geographic mosaic resolves that service limit. Tile-grid tests cover
 north/south orientation, exact seams and partial final tiles. Existing smoothed
 water and DEM chunks are preserved. The earlier upscaled allocation experiment
-remains historical evidence, not proof of the newly fetched imagery. Final source
-commit, installation and fresh packaged results are recorded in phase 3 baseline.
+remains historical evidence, not proof of the newly fetched imagery. Product commit **9658fd8** is built and installed with the real 6142×6144 atlas
+(~91.39 m/pixel, 82.2 MB compressed). All 832 chunks pass the probe; 135 Bun and
+16 Python tests pass. Six actual-texture flight jumps average 59.84–60.18 fps at
+1440p, final 720p 60.10 fps, with zero pending/omitted water or runtime errors.
+Exact commands, installation and fresh packaged results are in the phase 3 baseline.
 
 
 ## 2026-09-09: texture resolution performance experiment

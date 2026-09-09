@@ -1,5 +1,68 @@
 # Phase 3 baseline: packaged terrain on Apple M3
 
+## 2026-09-09: installed higher-detail imagery
+
+Source tested: **9658fd8**, Apple M3 arm64/macOS 26.6.2, Bun 1.4.2,
+Node 22.14.0, Python 3.14.6, Three.js 0.185.1, Electron 44.2.0.
+This documentation-only follow-up records results from that committed product.
+
+Fetched a real 6144×6144 geographic EOX Sentinel-2 2024 mosaic as four
+3072×3072 requests after the single larger request returned HTTP 400. Reprojection
+produces 6142×6144 RGBA, 91.3922×91.3862 m/pixel, exactly four times the old atlas's
+pixel count. Compressed atlas: 82,195,217 bytes; SHA-256
+`1ca5a4961d16c56f7504989b27b4391a359997aa93384b402b0074027bb7c5a0`.
+Mosaic source SHA-256 `b391d4f6e456eb037676ab6fceadb1357db17006471fb31e3746e7b61fb9ad48`.
+Request URLs, per-tile checksums/bounds and source attribution are recorded in
+`extracted/terrain-source/imagery/eox-2024-mosaic-ad1ddf0b44e8cbf0.json`.
+The EOX attribution/license remain attached and displayed in the app.
+
+```sh
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline imagery extracted/terrain/ukraine-4x/manifest.json --cache extracted/terrain-source/imagery --size 6144
+bun run check
+PYTHONPATH=terrain-pipeline .venv/bin/python -m unittest discover -s terrain-pipeline/tests
+bun run build
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline probe extracted/terrain/ukraine-4x/manifest.json
+bun tools/terrain/install.ts --terrain extracted/terrain/ukraine-4x --data-root "$HOME/Library/Application Support/usnf-atf/data" --replace
+bun tools/terrain/waypoint-performance.ts --terrain extracted/terrain/ukraine-4x --flight --retail --720p --assert-recovery --out extracted/terrain-4x-accepted
+```
+
+Bun: 135 tests / 22,099 expectations, typecheck/lint/format pass. Python: 16 tests,
+no failures or skips; existing rasterio/Affine warnings only. New synthetic tests
+cover geographic tile orientation/coverage and the expanded runtime dimension cap.
+Dataset probe passes all 832 chunks; max shared-edge error remains 0.02106996 m.
+Direct manifest comparisons confirm all chunk metadata and water polygons are
+identical to the earlier polished dataset. The installer verifies all checksums and
+inflated lengths before replacing the app-data theater. Installed path:
+`~/Library/Application Support/usnf-atf/data/terrains/ukraine`.
+Original lower-detail dataset remains in `extracted/terrain/ukraine-polished`.
+No imagery or retail bytes are committed or packaged.
+
+Mac arm64/x64 packaging passed in 28.3 seconds; only arm64 is launch-tested.
+Linux remains deferred. This actual-source run supersedes the allocation-only
+experiment for rendering acceptance; startup download/decode timing remains outside
+the waypoint harness's measurement window. The runtime keeps the complete atlas
+resident: ~144 MiB CPU pixels plus ~192 MiB calculated GPU mip allocation.
+
+Actual-texture flight results: six jumps averaged 59.84/59.84/60.18/60.10/60.14/
+60.15 fps at 1440p. Final two-second windows were 59.97–60.02 fps; first mountain/
+coast peak frames were 49.1/49.9 ms, repeat mountain 33.3 ms and other repeats
+17.8 ms. Final 720p averaged 60.10 fps. Every stage ended ready, with zero pending
+or omitted water batches and no runtime errors. The initial post-ready sample
+included a 66.3 ms frame; this is not a promise of stall-free startup. The final
+720p flight screenshot was inspected: imagery loads and registration remains
+continuous; close ground still looks soft at this regional texture scale.
+
+Coastal explorer command:
+```sh
+bun tools/terrain/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --terrain extracted/terrain/ukraine-4x --out extracted/terrain-4x-coast --camera '219144.16245100333,1800,267020.80352811713,-1.5707963267948966,-0.35' --seconds 10
+```
+Observed 60.034 mean fps / 17.6 ms p95 at 1440p, no runtime errors. Inspected
+`terrain.png`: imagery is present, no dashed ocean artifacts or broad missing
+panels; raster-scale coastline steps remain visible as previously documented.
+`git diff --check` and staged-file inspection pass. Source/assets are separated:
+only code, synthetic tests and documentation are committed.
+
+
 ## 2026-09-09: four-times-texture-pixels allocation experiment
 
 Same Apple M3, toolchain and corrected packaged binary as the waypoint entry below.

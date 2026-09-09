@@ -1,5 +1,15 @@
 # Phase 2 baseline: real Ukraine terrain
 
+## 2026-09-09: real four-times-pixel atlas installed
+
+Source **9658fd8**. See [phase 3 installed imagery](phase-3.md#2026-09-09-installed-higher-detail-imagery)
+for exact commands, source/checksums and packaged results. Four bounded WMS tiles
+produce 6142×6144 projected imagery (~91.39 m/pixel), 82,195,217 compressed bytes.
+All 832 DEM chunks and smoothed water polygons are unchanged. Pipeline tests:
+16 pass, no skips; real dataset probe and verified app-data installation pass.
+Mac M3/Python 3.14.6; Linux remains deferred. Source imagery remains ignored.
+
+
 ## 2026-09-09: imagery and bounded coastline follow-up
 
 Same Apple M3/macOS 26.6.2, Python 3.14.6 environment and uncommitted source scope

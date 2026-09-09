@@ -29,7 +29,7 @@ is another, coarser cartographic option. The pipeline also accepts a local
 georeferenced RGB raster with explicit attribution and license.
 
 The default atlas is at most 3072 pixels on its longer edge, capped at 6144.
-Ukraine's generated atlas is 3071×3072, approximately 183m per pixel: about 140
+Ukraine's initial atlas was 3071×3072, approximately 183m per pixel: about 140
 pixels across a 25.5km source tile, close to the requested 100×100 starting point.
 Smaller quadtree panels use the matching portion of the same atlas. This is broad
 regional paint, not low-altitude aerial photography. Bilinear magnification,
@@ -135,6 +135,9 @@ budgets without blocking flight input on the expensive polygon work.
 The 4× texture follow-up uses `--size 6144` and a separate theater copy at
 `extracted/terrain/ukraine-4x`. It fetches four new 3072×3072 source tiles;
 this is real additional imagery detail, unlike the earlier allocation experiment.
+The installed atlas is 6142×6144 at 91.39 m/pixel, 82,195,217 compressed bytes.
+It replaces the app-data theater; the earlier 3071×3072 copy is preserved under
+`extracted/terrain/ukraine-polished`.
 The default CLI size stays 3072 for smaller builds. Runtime and producer limits
 now allow 6144 per axis and 152 MiB compressed; the renderer explicitly rejects
 an atlas exceeding the current GPU's maximum texture size. The installed theater
