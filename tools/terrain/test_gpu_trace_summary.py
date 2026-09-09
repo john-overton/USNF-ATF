@@ -34,6 +34,14 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(counter['minimum'], 2)
         self.assertEqual(counter['maximum'], 6)
 
+    def test_external_memory_counter_is_not_silently_renamed_dram(self):
+        result = self.summarize('GPU Bandwidth')
+        self.assertFalse(result['dramBandwidthAvailable'])
+        self.assertTrue(result['externalMemoryBandwidthAvailable'])
+        counter = result['externalMemoryCounters'][0]
+        self.assertEqual(counter['name'], 'GPU Bandwidth')
+        self.assertEqual(counter['sampledDurationToSpanRatio'], 1)
+
     def test_absent_dram_is_unavailable_not_zero(self):
         result = self.summarize('Unrelated Counter')
         self.assertFalse(result['dramBandwidthAvailable'])

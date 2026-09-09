@@ -56,9 +56,14 @@ def summarize(path):
         total = entry.pop('weightedTotal')
         entry['durationWeightedMean'] = total/entry['sampledSeconds'] if entry['sampledSeconds'] else None
         result.append(entry)
+    for entry in result:
+        span = entry['endSeconds'] - entry['startSeconds']
+        entry['sampledDurationToSpanRatio'] = entry['sampledSeconds'] / span if span else None
     dram = [c for c in result if c['name'] in ('DRAM Bandwidth', 'DRAMBW')]
+    memory = [c for c in result if c['name'] in ('GPU Bandwidth', 'GPU Read Bandwidth', 'GPU Write Bandwidth')]
     return dict(source=str(path), scope='GPU counters; process-exclusive attribution is not established',
                 dramBandwidthAvailable=bool(dram), dramCounters=dram,
+                externalMemoryBandwidthAvailable=bool(memory), externalMemoryCounters=memory,
                 counters=result, note='Absent counters are unavailable, never zero. Units remain in exampleLabel; inspect the Apple counter definition. Sampling duration can differ from wall time.')
 
 

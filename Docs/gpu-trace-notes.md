@@ -57,3 +57,53 @@ Apple documents GPU counters as hardware metrics including memory bandwidth:
 Apple also distinguishes the live Instruments timeline from detailed Metal
 Debugger analysis, where profiling can serialize passes:
 [Optimize Metal apps and games with GPU counters](https://developer.apple.com/videos/play/wwdc2020/10603/).
+
+## 2026-09-08 follow-up: working native memory counter configuration
+
+The generated Performance Limiters template now captures real hardware **GPU
+Read Bandwidth**, **GPU Write Bandwidth**, and **GPU Bandwidth** on this M3.
+These are distinct from the absent legacy counter named `DRAM Bandwidth`.
+Apple describes the read/write counters as GPU accesses to system memory:
+[Analyzing Apple GPU performance using a visual timeline](https://developer.apple.com/documentation/xcode/analyzing-apple-gpu-performance-using-a-visual-timeline/).
+The installed counter metadata more cautiously describes memory external to the
+GPU, potentially device memory. Preserve that qualification: this does not
+isolate traffic reaching physical DRAM behind every system cache, or attribute
+traffic exclusively to this process.
+
+Reproducible local template generation (no Xcode template modification):
+
+```sh
+python3 tools/terrain/gpu-trace-template.py --output extracted/gpu-method/terrain-performance-limiters.tracetemplate
+bun tools/terrain/smoke.ts --terrain extracted/terrain/ukraine --out extracted/terrain-smoke-memory --seconds 15 --trace-gpu --trace-template extracted/gpu-method/terrain-performance-limiters.tracetemplate --camera '219144.16245100333,1800,267020.80352811713,-1.5707963267948966,-0.35'
+```
+
+The generator selects profile **13** in both archived `counterprofile` and
+`counterprofileinternal` settings. This is a tooling-version-specific archive
+setting, verified on Xcode Instruments **16.0 (17F42)**. The trace summary must
+say **Counter Set: Performance Limiters**, Shader Timeline Disabled, Induced
+GPU Performance State Default. The template generator fails if the expected
+archive layout changes and refuses to overwrite an existing file. Do not ship
+Apple's template bytes in the repository.
+
+Method exploration found profile 1 and profile 3 are unsupported here. Both
+recordings still returned exit 0, with a **Selected counter profile is not
+supported on target device** warning. Exit status alone cannot verify native
+counter capture. Profile 13 records without that warning and yielded 86 named
+counters in the exploratory trace. GUI scripting was unavailable due to macOS
+assistive-access restrictions; no privacy/security settings were changed.
+
+The summary now reports external-memory counters separately from legacy DRAM
+counters, including the summed sample duration divided by the timestamp span.
+This ratio is not guaranteed union coverage when intervals overlap. Means remain
+weighted by sampled interval duration; unobserved gaps are not zero traffic.
+Exported labels say **GB/s** although Apple's static metadata uses the unit label
+`GiB / Second`; report the native exported unit without silently converting.
+The three summary tests and two template tests pass:
+
+```sh
+python3 -m unittest discover -s tools/terrain -p 'test_gpu_trace_*.py'
+```
+
+Exploratory all-process trace `extracted/gpu-method/profile13.trace` is method
+evidence only, not a terrain baseline. Final packaged workload measurements
+follow separately. Raw diagnostics remain ignored.
