@@ -13,8 +13,26 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, diagnostics | Packaged coast/detail ~60 fps at 1440p; 0↔1 and 1↔2 fades plus 24km fast lateral flights pass. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, F2/F3 chase, practice starts and 11-case harness | Packaged flight and systems/animation checks on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, F2/F3 chase, practice starts and 11-case harness | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: resumed fuel acceptance passes; navigation handoff recorded
+
+The previously interrupted fuel test now completes in the packaged Mac app:
+`fuel-smoke.ts`, runtime **8b6a2d4**, test-tool source **ac3a142**, evidence
+`extracted/flight-fuel-resume`. Preserved assisted and recovered-envelope modes
+both pass live slider, military/AB consumption, engine-off zero burn, empty
+tank/thrust cutoff, refill and manual restart. Observed rates are 0.9071847400
+and 4.5359237000 kg/s; experimental mass tracks fuel loss while assisted handling
+mass remains 9,000 kg. No renderer errors. Screenshots show the expected fuel/
+engine states and a clear orange automated-test label. No product fix was needed.
+
+The user asked to record the next development pass in [handoff.md](handoff.md):
+HUD waypoint switching with [ / ], destinations for the practice strip, Ukraine
+mountains and coast, plus a top-right location map using regional height colors
+and the actual water mask. These requests are documented, not implemented here.
+The broader final aero/approach retest remains separate from this fuel acceptance;
+Linux remains deferred. See the baseline for exact scope and reproduction.
 
 ## 2026-09-09 checkpoint: commit/push before continuing acceptance
 

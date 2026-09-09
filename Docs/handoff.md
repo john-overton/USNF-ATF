@@ -1,7 +1,7 @@
 # Development handoff — 2026-09-09
 
-The user requested a commit, push and compaction checkpoint. Stop here; resume
-with acceptance before more changes. Mac Apple M3, Bun1.4.2/Electron44.2.0.
+The checkpoint was committed/pushed as ac3a142. The user then resumed fuel
+acceptance, which now passes. Ready for compaction and the navigation/map pass. Mac Apple M3, Bun1.4.2/Electron44.2.0.
 Linux testing is explicitly deferred. All agents have finished their owned work.
 
 ## User requirements to preserve
@@ -31,15 +31,21 @@ pass at8b6a2d4 (`extracted/flight-harness/fuel-era-{retail,recovered}.json`).
 240native envelope cases,3,200power/fuel/slew cases and18clock cases match actual
 local x86 execution. See Docs/formats/native-flight-code.md and native-power.md.
 
-**Pending:** packaged fuel acceptance was interrupted by the user closing the
-window. Report `extracted/flight-fuel-accepted/report.json` contains CDP timeout.
-Assisted live slider/military/AB/off checks completed; empty/refill/restart and
-experimental fuel/mass did not. Chained aero/approach never started. Do not claim
-this run passed. Earlier4a76cc5 selector, native aero, takeoff and landing passed,
-but precede final fuel/trim corrections. Automated windows now get an orange
-label and clear title, to distinguish them from the user's own app; validate it.
+**Fuel acceptance completed:** `extracted/flight-fuel-resume/report.json` passes
+for preserved assisted and recovered-envelope modes against product source
+8b6a2d4, using the test tools at ac3a142. Both measured 0.9071847400 kg/s military,
+4.5359237000 kg/s AB and zero engine-off burn. Live adjustment, empty-tank thrust
+cutoff, refill without auto-start and manual T restart all pass. Experimental
+mass decreases exactly with consumed fuel; assisted mass stays 9,000 kg. No
+renderer errors. Empty/refilled screenshots and the orange automated-test banner
+were visually checked. This supersedes the interrupted fuel run only; retain its
+old report as history. No product code changes or rebuild were needed.
 
-## Resume acceptance
+The separate final aero/approach runs listed below remain unrun at8b6a2d4; earlier
+4a76cc5 acceptance and fixed-reference headless evidence remain correctly scoped.
+They were not part of this resumed fuel-only request.
+
+## Reproduce fuel acceptance / remaining broader checks
 
 The local PT profile is installed and available at extracted/flight/f14-flight.json.
 It contains native integer envelopes and rates. Rebuild only if product source
@@ -54,6 +60,29 @@ bun tools/flight/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/Mac
 Run GPU sessions serially. Inspect screenshots and actual diagnostics. If the
 slider fails, it uses React range input through viewer.setFuelFraction, not a
 writable debug-state hook. The fuel tool dispatches the actual range input event.
+
+## Next user-requested development: navigation HUD and terrain map
+
+Recorded for the next pass, not implemented in this fuel-acceptance task:
+
+- Add selected-waypoint guidance to the HUD. Use **[** for previous and **]**
+  for next waypoint, preserving the existing flight controls and form-focus guards.
+- Waypoint 1: the current practice landing strip.
+- Waypoint 2: a mountain destination inside the available Ukraine theater.
+- Waypoint 3: a coastline destination inside the available Ukraine theater.
+  Choose the mountain/coast coordinates from the installed dataset; verify they
+  are reachable and covered before hard-coding destinations. No exact coordinates
+  have been selected yet.
+- Add a top-down map in the **top-right corner** so users can see their aircraft's
+  location. Aircraft heading and the selected waypoint would help orient it.
+- User suggested rendering from the existing regional heightmap: **blue for
+  water**, **green for lower land**, progressing through **brown at maximum
+  elevation**, scaled using the available region's elevation range. This is a
+  requested visual direction, with rendering details still to decide.
+- Reuse the actual water mask/classification; elevation alone must not turn dry
+  low ground into water. Use the theater's coordinate transform consistently for
+  aircraft, waypoint, terrain and water positions. Keep the map useful while the
+  helper panel is minimized and avoid covering essential HUD guidance.
 
 ## Next native work
 

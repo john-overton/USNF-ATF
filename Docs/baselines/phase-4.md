@@ -1,5 +1,38 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: completed packaged fuel acceptance
+
+Resumed run on the same Apple M3/macOS arm64, Electron44.2.0, Bun1.4.2, 2560×1440
+package: **runtime8b6a2d4**, test-tool source **ac3a142**. No product changes or
+rebuild. `extracted/flight-fuel-resume/report.json` reports **pass** in both tested
+modes, with no renderer errors.
+
+| Check | Preserved assisted | Recovered-envelope |
+|---|---|---|
+| Military measured burn | 0.9071847400 kg/s | 0.9071847400 kg/s |
+| Afterburner measured burn | 4.5359237000 kg/s | 4.5359237000 kg/s |
+| Engine-off burn | 0 | 0 |
+| Live 50% fuel adjustment | Pass; no flight restart | Pass; no flight restart |
+| Tank exhaustion | Zero fuel, engine off, effective thrust throttle0 | Same |
+| Refill to40% | Engine remains off until T | Same |
+| Manual restart | Engine and consumption resume | Same |
+| Handling mass | Fixed9,000kg throughout | Fuel loss equals aircraft mass loss |
+
+Experimental mass at half fuel was21,760.8672kg, at empty18,190.8684kg and after
+40% refill21,046.8674kg. Assertions compare mass loss to consumed fuel within
+1e-6kg and measured burn rates within0.001kg/s. Empty/refilled screenshots were
+reviewed; the automated-test banner is clearly visible.
+
+```sh
+bun tools/flight/fuel-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 8b6a2d4 --out extracted/flight-fuel-resume
+```
+
+This resolves the interrupted fuel acceptance described below. The intermediate
+PT-fit selector mode was not separately run by this two-mode test; its fuel path
+is shared with the tested experimental mode. The outstanding final aero/approach
+retests were not run as part of this fuel-only request. Prior unit/native-oracle
+results remain historical, not newly rerun. Linux remains deferred.
+
 ## 2026-09-09 checkpoint: fuel slider and native-rate consumption
 
 Latest packaged runtime **`8b6a2d4`** includes live fuel, mass updates and the
