@@ -425,3 +425,46 @@ test('imported envelope ceiling extrapolation stays finite and never switches to
   expect(Number.isFinite(sample(30000).loadFactor)).toBe(true);
   expect(sample(30000).loadFactor).toBeLessThan(sample(12000).loadFactor);
 });
+
+test('recovered envelope mode applies native flap minimum-speed rule without changing the fitted mode', () => {
+  const def = retailAircraft();
+  const nativeRows = [
+    { g: 1, min: 200, max: 1300 },
+    { g: 3, min: 360, max: 1150 },
+  ].map(({ g, min, max }) => ({
+    g,
+    count: 4,
+    maxSpeedIndex: 2,
+    stallLiftIndex: 0,
+    points: [
+      { speedFps: min, altitudeFt: 0 },
+      { speedFps: min, altitudeFt: 40000 },
+      { speedFps: max, altitudeFt: 40000 },
+      { speedFps: max, altitudeFt: 0 },
+    ],
+  }));
+  def.retail!.native = {
+    structuralSpeedFps: { seaLevel: 1300, at36000Ft: 2000 },
+    envelopes: nativeRows,
+  };
+  def.retail!.envelopes = nativeRows.map((row) => ({
+    g: row.g,
+    points: row.points.map((p) => ({
+      speedMps: p.speedFps * 0.3048,
+      altitudeM: p.altitudeFt * 0.3048,
+    })),
+  }));
+  const state = createFlightState({
+    position: { x: 0, y: 1000, z: 0 },
+    pitchRad: def.stallAlphaRad,
+  });
+  state.velocity = { x: 0, y: 0, z: -65 };
+  const fitted = sampleTelemetry(state, flat, def, { flaps: 1 });
+  def.nativeEnvelope = true;
+  const clean = sampleTelemetry(state, flat, def),
+    flapped = sampleTelemetry(state, flat, def, { flaps: 1 });
+  expect(flapped.loadFactor / clean.loadFactor).toBeCloseTo(1 / 0.75 ** 2, 10);
+  expect(flapped.loadFactor).toBeGreaterThan(fitted.loadFactor);
+  def.nativeEnvelope = false;
+  expect(sampleTelemetry(state, flat, def, { flaps: 1 })).toEqual(fitted);
+});

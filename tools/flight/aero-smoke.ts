@@ -27,7 +27,7 @@ try {
       query: {
         mode: 'flight',
         flightStart: 'airborne',
-        flightModel: 'retail-envelope',
+        flightModel: option('--flight-model', 'retail-envelope'),
         flightFuel: variant === 'lightAB' ? '0.25' : '1',
       },
       interactiveTest: true,

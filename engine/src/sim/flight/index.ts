@@ -1,5 +1,6 @@
 import rawAircraft from '../../data/placeholder-aircraft.json';
 import { fitEnvelopeAero } from './retail-envelope';
+import { recoveredEnvelopeBounds } from './native-envelope-adapter';
 import { parseAircraftDefinition, type AircraftDefinition } from '../../data/aircraft';
 export type { AircraftDefinition } from '../../data/aircraft';
 
@@ -192,9 +193,26 @@ function retailAeroFit(def: AircraftDefinition, altitudeM: number) {
       wingAreaM2: def.wingAreaM2,
       altitudeM: height,
       thrustAtSpeed: () => profile.afterburnerThrustN * retailThrustLapse(height),
+      ...(def.nativeEnvelope
+        ? {
+            boundsAt: (g: number, altitude: number) =>
+              recoveredEnvelopeBounds(profile, g, altitude),
+          }
+        : {}),
     });
   // A valid triangular envelope can have a zero-width lower tip as well.
-  return fitAt(fitAltitude) ?? fitAt(clamp(fitAltitude, minimum + epsilon, maximum - epsilon));
+  const fit = fitAt(fitAltitude) ?? fitAt(clamp(fitAltitude, minimum + epsilon, maximum - epsilon));
+  const flapped = def.nativeEnvelope
+    ? recoveredEnvelopeBounds(profile, 1, fitAltitude, true)
+    : undefined;
+  return fit
+    ? {
+        ...fit,
+        nativeFlapLiftMax: flapped
+          ? fit.clMax * ((fit.minSpeedMps / flapped.minSpeedMps) ** 2 - 1)
+          : undefined,
+      }
+    : undefined;
 }
 function liftCoefficient(
   alpha: number,
@@ -258,7 +276,9 @@ function aerodynamics(state: FlightState, env: FlightEnvironment, def: AircraftD
     direction,
     liftDirection,
     fit,
-    flapLiftMax: fit ? (retailDeviceFactor(def, 'flapsLift') ?? 0.2 / fit.clMax) * fit.clMax : 0.2,
+    flapLiftMax:
+      fit?.nativeFlapLiftMax ??
+      (fit ? (retailDeviceFactor(def, 'flapsLift') ?? 0.2 / fit.clMax) * fit.clMax : 0.2),
   };
 }
 /** Original camber approximation: flaps still increase lift at the clean stall

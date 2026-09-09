@@ -223,6 +223,12 @@ export function TerrainViewer() {
                   <option value="retail-envelope" disabled={!stats.flight.retailProfileAvailable}>
                     USNF ’97 envelope fit (experimental)
                   </option>
+                  <option
+                    value="recovered-envelope"
+                    disabled={!stats.flight.nativeEnvelopeAvailable}
+                  >
+                    Recovered USNF envelope (experimental)
+                  </option>
                 </select>
               </label>
               <p>Switching restarts this practice flight.</p>

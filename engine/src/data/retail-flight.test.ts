@@ -109,3 +109,41 @@ test('retail profile metadata rejects excessive depth, size, non-JSON values and
   ])
     expect(() => parseRetailFlightProfile({ ...fixture(), rawFields })).toThrow();
 });
+
+test('native routine inputs preserve exact integers and agree with SI envelope vertices', () => {
+  const base = fixture();
+  const points = base.envelopes[0]!.points.map((p) => ({
+    speedFps: p.speedMps,
+    altitudeFt: p.altitudeM,
+  }));
+  base.envelopes[0]!.points = points.map((p) => ({
+    speedMps: p.speedFps * 0.3048,
+    altitudeM: p.altitudeFt * 0.3048,
+  }));
+  const profile = {
+    ...base,
+    native: {
+      structuralSpeedFps: { seaLevel: 400, at36000Ft: 600 },
+      envelopes: [{ g: 1, count: 4, maxSpeedIndex: 3, stallLiftIndex: 0, points }],
+    },
+  };
+  expect(parseRetailFlightProfile(profile).native).toEqual(profile.native);
+  for (const mutate of [
+    (p: typeof profile) => {
+      p.native.envelopes[0]!.maxSpeedIndex = 4;
+    },
+    (p: typeof profile) => {
+      p.native.envelopes[0]!.count = 3;
+    },
+    (p: typeof profile) => {
+      p.native.envelopes[0]!.points[0]!.speedFps += 1;
+    },
+    (p: typeof profile) => {
+      p.native.structuralSpeedFps.seaLevel = 1.5;
+    },
+  ]) {
+    const invalid = structuredClone(profile);
+    mutate(invalid);
+    expect(() => parseRetailFlightProfile(invalid)).toThrow();
+  }
+});

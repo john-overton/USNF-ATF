@@ -123,7 +123,7 @@ try {
     'Panel toggle paused simulation',
   );
   await session.capture('helper-restored');
-  for (const model of ['retail-envelope', 'assisted']) {
+  for (const model of ['retail-envelope', 'recovered-envelope', 'assisted']) {
     await session.evaluate(
       `(() => {const select=document.getElementById('flight-model-selector');select.value=${JSON.stringify(model)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`,
     );

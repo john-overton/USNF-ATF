@@ -25,10 +25,12 @@ const option = (name: string, fallback: string): string => {
   return args[at + 1]!;
 };
 for (let i = 0; i < args.length; i += 2)
-  assert(['--profile', '--output'].includes(args[i]!), `Unknown ${args[i]}`);
+  assert(['--profile', '--output', '--model'].includes(args[i]!), `Unknown ${args[i]}`);
 const profilePath = resolve(option('--profile', 'extracted/flight/f14-flight.json'));
 const output = resolve(option('--output', 'extracted/flight-harness/retail-flight.json'));
 const profile = parseRetailFlightProfile(JSON.parse(await readFile(profilePath, 'utf8')));
+const model = option('--model', 'retail-envelope');
+assert(['retail-envelope', 'recovered-envelope'].includes(model), 'Unknown model');
 const fullMass = profile.emptyMassKg + profile.fuelCapacityKg;
 const definition = (massKg = fullMass): AircraftDefinition => ({
   ...structuredClone(PLACEHOLDER_AIRCRAFT),
@@ -36,6 +38,7 @@ const definition = (massKg = fullMass): AircraftDefinition => ({
   wingAreaM2: 52.5,
   name: profile.name,
   retail: profile,
+  nativeEnvelope: model === 'recovered-envelope',
   massKg,
 });
 const environment = {
@@ -205,6 +208,7 @@ await writeFile(
       workingTreeStatus,
       endingSourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
       profilePath,
+      model,
       profileSource: profile.source,
       referenceMassKg: fullMass,
       timestepSeconds: dt,

@@ -10,6 +10,16 @@ export interface RetailFlightProfile {
   afterburnerThrustN: number;
   envelopes: { g: number; points: { speedMps: number; altitudeM: number }[] }[];
   rawFields: Record<string, unknown>;
+  native?: {
+    structuralSpeedFps: { seaLevel: number; at36000Ft: number };
+    envelopes: {
+      g: number;
+      count: number;
+      maxSpeedIndex: number;
+      stallLiftIndex: number;
+      points: { speedFps: number; altitudeFt: number }[];
+    }[];
+  };
 }
 
 export function parseRetailFlightProfile(value: unknown): RetailFlightProfile {
@@ -68,6 +78,53 @@ export function parseRetailFlightProfile(value: unknown): RetailFlightProfile {
   if (emptyMassKg + fuelCapacityKg > maxTakeoffMassKg)
     throw new Error('PT fuel exceeds takeoff mass');
   const militaryThrustN = number(p.militaryThrustN, 1, 10000000);
+  let native: RetailFlightProfile['native'];
+  if (p.native !== undefined) {
+    const n = object(p.native),
+      limits = object(n.structuralSpeedFps);
+    const integer = (v: unknown, min: number, max: number) => {
+      const result = number(v, min, max);
+      if (!Number.isInteger(result)) throw new Error('Native PT values must be integers');
+      return result;
+    };
+    if (!Array.isArray(n.envelopes) || n.envelopes.length !== envelopes.length)
+      throw new Error('Native PT envelope count mismatch');
+    native = {
+      structuralSpeedFps: {
+        seaLevel: integer(limits.seaLevel, 1, 32767),
+        at36000Ft: integer(limits.at36000Ft, 1, 32767),
+      },
+      envelopes: n.envelopes.map((v: unknown, i: number) => {
+        const e = object(v),
+          si = envelopes[i]!;
+        const count = integer(e.count, 3, 20);
+        if (
+          e.g !== si.g ||
+          !Array.isArray(e.points) ||
+          e.points.length !== count ||
+          count !== si.points.length
+        )
+          throw new Error('Native PT polygon mismatch');
+        return {
+          g: si.g,
+          count,
+          maxSpeedIndex: integer(e.maxSpeedIndex, 0, count - 1),
+          stallLiftIndex: integer(e.stallLiftIndex, 0, count - 1),
+          points: e.points.map((v: unknown, j: number) => {
+            const point = object(v);
+            const speedFps = integer(point.speedFps, 0, 32767),
+              altitudeFt = integer(point.altitudeFt, -32768, 1000000);
+            if (
+              Math.abs(speedFps * 0.3048 - si.points[j]!.speedMps) > 1e-6 ||
+              Math.abs(altitudeFt * 0.3048 - si.points[j]!.altitudeM) > 1e-6
+            )
+              throw new Error('Native and SI PT vertices differ');
+            return { speedFps, altitudeFt };
+          }),
+        };
+      }),
+    };
+  }
   return {
     schemaVersion: 1,
     source: { game: 'usnf97', file: source.file, sha256: source.sha256 },
@@ -79,6 +136,7 @@ export function parseRetailFlightProfile(value: unknown): RetailFlightProfile {
     afterburnerThrustN: number(p.afterburnerThrustN, militaryThrustN, 10000000),
     envelopes,
     rawFields: copyRawFields(object(p.rawFields)),
+    ...(native ? { native } : {}),
   };
 }
 

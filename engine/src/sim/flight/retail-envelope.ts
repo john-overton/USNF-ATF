@@ -68,12 +68,16 @@ export function fitEnvelopeAero(
     wingAreaM2: number;
     altitudeM: number;
     thrustAtSpeed: (speedMps: number) => number;
+    /** Optional separately recovered native integer boundary query. */
+    boundsAt?: (g: number, altitudeM: number) => EnvelopeBounds | undefined;
   },
 ): EnvelopePolar | undefined {
   const { massKg, wingAreaM2, altitudeM, thrustAtSpeed } = input;
   if (![massKg, wingAreaM2, altitudeM].every(Number.isFinite) || massKg <= 0 || wingAreaM2 <= 0)
     throw new Error('Envelope fit requires finite altitude and positive mass/wing area');
-  const bounds = envelopeBounds(profile, 1, altitudeM);
+  const boundsAt =
+    input.boundsAt ?? ((g: number, height: number) => envelopeBounds(profile, g, height));
+  const bounds = boundsAt(1, altitudeM);
   if (!bounds) return undefined;
   const rho = 1.225 * Math.exp(-Math.max(0, altitudeM) / 8500);
   const qArea = (speed: number) => 0.5 * rho * speed ** 2 * wingAreaM2;
@@ -94,7 +98,7 @@ export function fitEnvelopeAero(
   let inducedDragK = Math.min(0.04, (0.5 * level.cd) / level.cl ** 2);
   let cd0 = level.cd - inducedDragK * level.cl ** 2;
   for (const candidate of candidates) {
-    const range = envelopeBounds(profile, candidate.g, altitudeM);
+    const range = boundsAt(candidate.g, altitudeM);
     if (!range) continue;
     const point = fitPoint(range.maxSpeedMps, candidate.g);
     const denominator = point.cl ** 2 - level.cl ** 2;

@@ -64,7 +64,8 @@ export interface FlightDiagnostics {
   aircraftName: string;
   modelTriangles: number;
   flightModel: string;
-  flightModelId: 'assisted' | 'retail-envelope';
+  flightModelId: 'assisted' | 'retail-envelope' | 'recovered-envelope';
+  nativeEnvelopeAvailable: boolean;
   retailProfileAvailable: boolean;
   massKg: number;
   fuelMassKg: number;
@@ -143,6 +144,7 @@ export class FlightLayer {
     }
   }
   private readonly useRetail: boolean;
+  private readonly useNativeEnvelope: boolean;
   private readonly definition: AircraftDefinition;
   private readonly fuelMassKg: number;
   private readonly payloadMassKg: number;
@@ -155,7 +157,9 @@ export class FlightLayer {
     private readonly profile?: RetailFlightProfile,
   ) {
     const query = new URLSearchParams(window.location.search);
-    this.useRetail = query.get('flightModel') === 'retail-envelope' && !!profile;
+    this.useNativeEnvelope = query.get('flightModel') === 'recovered-envelope' && !!profile?.native;
+    this.useRetail =
+      (query.get('flightModel') === 'retail-envelope' || this.useNativeEnvelope) && !!profile;
     const finite = (key: string, fallback: number) => {
       const value = Number(query.get(key) ?? fallback);
       return Number.isFinite(value) ? value : fallback;
@@ -184,6 +188,7 @@ export class FlightLayer {
             // Reference area only: the envelope fit normalizes lift/drag to PT forces.
             wingAreaM2: 52.5,
             retail: profile,
+            nativeEnvelope: this.useNativeEnvelope,
           }
         : PLACEHOLDER_AIRCRAFT;
     this.environment = { sampleGround: (x: number, z: number) => ground.sample(x, z) };
@@ -473,9 +478,18 @@ export class FlightLayer {
       landings: this.landings,
       runway: { ...this.strip },
       aircraftName: this.model?.data.name ?? 'Peregrine original placeholder (F-14 not installed)',
-      flightModelId: this.useRetail ? 'retail-envelope' : 'assisted',
+      flightModelId: this.useNativeEnvelope
+        ? 'recovered-envelope'
+        : this.useRetail
+          ? 'retail-envelope'
+          : 'assisted',
+      nativeEnvelopeAvailable: !!this.profile?.native,
       retailProfileAvailable: !!this.profile,
-      flightModel: this.useRetail ? 'USNF ’97 PT envelope fit' : 'Preserved assisted model',
+      flightModel: this.useNativeEnvelope
+        ? 'Recovered USNF envelope · hybrid forces'
+        : this.useRetail
+          ? 'USNF ’97 PT envelope fit'
+          : 'Preserved assisted model',
       massKg: this.definition.massKg,
       fuelMassKg: this.fuelMassKg,
       payloadMassKg: this.payloadMassKg,

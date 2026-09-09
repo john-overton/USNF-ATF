@@ -6,6 +6,8 @@ export interface AircraftDefinition {
   name: string;
   massKg: number;
   retail?: RetailFlightProfile;
+  /** Experimental recovered envelope helpers; remaining integrator is original. */
+  nativeEnvelope?: boolean;
   wingAreaM2: number;
   gearHeightM: number;
   stallAlphaRad: number;
@@ -80,6 +82,7 @@ export function parseAircraftDefinition(value: unknown): AircraftDefinition {
     name: a.name,
     massKg: number(a.massKg, 100, 1000000),
     ...(a.retail === undefined ? {} : { retail: parseRetailFlightProfile(a.retail) }),
+    ...(a.nativeEnvelope === true ? { nativeEnvelope: true } : {}),
     wingAreaM2: number(a.wingAreaM2, 1, 2000),
     gearHeightM: number(a.gearHeightM, 0.1, 20),
     stallAlphaRad,
