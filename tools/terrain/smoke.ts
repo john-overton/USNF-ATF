@@ -141,6 +141,7 @@ try {
       return d?.status === 'ready' &&
         d?.loadedChunks > 0 &&
         d?.pendingChunks === 0 &&
+        (d?.waterBatchesPending ?? 0) === 0 &&
         d?.triangles > 0
         ? d
         : undefined;
@@ -164,7 +165,12 @@ try {
     code: 'KeyW',
     windowsVirtualKeyCode: 87,
   });
-  await Bun.sleep(1500);
+  const flightTimes = (await evaluate(`new Promise(resolve => {
+    const times=[]; const start=performance.now(); let last=start;
+    function frame(now) { times.push(now-last);last=now;
+      if(now-start < 1500) requestAnimationFrame(frame); else resolve(times); }
+    requestAnimationFrame(frame);
+  })`)) as number[];
   await send('Input.dispatchKeyEvent', {
     type: 'keyUp',
     key: 'w',
@@ -178,6 +184,7 @@ try {
     after.error ||
     after.width !== 2560 ||
     after.height !== 1440 ||
+    (after.waterBatchesOmitted ?? 0) > 0 ||
     runtimeErrors.length
   ) {
     throw new Error(
@@ -198,6 +205,8 @@ try {
     ).trim(),
     runtimeErrors,
     movementMeters: movement,
+    flightMeanFrameMs: flightTimes.reduce((a, b) => a + b, 0) / flightTimes.length,
+    flightP95FrameMs: [...flightTimes].sort((a, b) => a - b)[Math.floor(flightTimes.length * 0.95)],
     workingTreeStatus: (
       await new Response(Bun.spawn(['git', 'status', '--short'], { stdout: 'pipe' }).stdout).text()
     ).trim(),

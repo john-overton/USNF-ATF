@@ -41,3 +41,26 @@ still have been built from older source. Rebuild for acceptance evidence.
 A synthetic theater can be generated with the documented `terrain-pipeline`
 fixture command. Synthetic results verify integration; real-theater acceptance
 must use the real source build and clearly identify that provenance.
+
+Use `--camera 'x,y,z,yaw,pitch'` to reproduce a viewpoint (local meters and
+radians). Query values are validated and camera positions clamp to the theater.
+The report includes moving-frame mean/p95, water cache size and omitted batches;
+the smoke fails when selected water was omitted by its budget.
+
+## Install a validated theater
+
+The desktop app shows its app-data root in the terrain panel. On this Mac the
+packaged app uses `~/Library/Application Support/usnf-atf/data`:
+
+```sh
+bun tools/terrain/install.ts \
+  --terrain extracted/terrain/ukraine \
+  --data-root "$HOME/Library/Application Support/usnf-atf/data"
+```
+
+The installer validates the runtime manifest, hash, inflated size and samples
+of every chunk before staging. It installs only the manifest and its referenced
+chunks under `terrains/<id>`. Existing targets require `--replace`; replacement
+stages a complete verified copy before swapping directories, and restores the
+previous theater if the swap fails. Unrelated data is preserved. Terrain here
+means generated public elevation data, not the future retail-game importer.
