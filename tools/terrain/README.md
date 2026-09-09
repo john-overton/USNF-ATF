@@ -64,3 +64,16 @@ chunks under `terrains/<id>`. Existing targets require `--replace`; replacement
 stages a complete verified copy before swapping directories, and restores the
 previous theater if the swap fails. Unrelated data is preserved. Terrain here
 means generated public elevation data, not the future retail-game importer.
+
+`--trace-gpu` optionally records a native Metal System Trace on macOS using
+installed Xcode. It attaches only to the launched app's descendant GPU helper,
+uses `--no-prompt`, and records the trace exit/log in the report. Tracing changes
+the workload; keep these results separate from untraced performance baselines.
+The default template may record no DRAM bandwidth counter. Missing samples
+mean unavailable, not zero bandwidth, and device counters may include other GPU
+activity. Raw traces stay under `extracted/` because they contain local metadata.
+
+Automated runs suppress physical keyboard/pointer input inside their isolated
+page and dispatch synthetic W key events through the normal input handlers.
+This prevents ordinary activity on the shared development Mac from changing
+benchmark poses. It does not change normal application input behavior.

@@ -2,7 +2,7 @@
 
 Companion to `usnf-atf-plan.md` (the brief). The brief says what and why. This document says in what order, what "done" means for each phase, and which decisions are already made. When the two disagree, this one wins for sequencing.
 
-Status reviewed 2026-09-08: phase 0 toolkit implemented in part; SH export and deliverable integration remain open. Phase 1 scaffold verified on macOS, Linux exit gate pending. Phases 2–10 are planned. See [progress.md](progress.md) for current evidence and the engineering log. Written 2026-09-08 after inventorying the retail media in `/gameassets`.
+Status updated 2026-09-08: phase 0 toolkit remains partial. Phase 1 code fixes and macOS packaging are verified; Linux exit gate is pending. Phase 2 pipeline and phase 3 terrain explorer are implemented, with real-theater validation in progress. Phases 4–10 remain planned. See [progress.md](progress.md) and per-phase baselines for measured acceptance. Written 2026-09-08 after inventorying the retail media in `/gameassets`.
 
 ---
 

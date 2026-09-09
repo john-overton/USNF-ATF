@@ -30,6 +30,7 @@ async function collect(stream: ReadableStream<Uint8Array>): Promise<void> {
 }
 const drains = [collect(proc.stdout), collect(proc.stderr)];
 let socket: WebSocket | undefined;
+let trace: ReturnType<typeof Bun.spawn> | undefined;
 const runtimeErrors: unknown[] = [];
 const pending = new Map<
   number,
@@ -108,6 +109,12 @@ try {
   });
   await send('Runtime.enable');
   await send('Page.enable');
+  // A shared desktop can deliver physical pointer drags during automation.
+  // Suppress pointer camera input for this isolated smoke only, before app listeners exist.
+  await send('Page.addScriptToEvaluateOnNewDocument', {
+    source:
+      "window.addEventListener('pointermove', e => e.stopImmediatePropagation(), true); window.addEventListener('pointerdown', e => e.stopImmediatePropagation(), true); ['keydown','keyup'].forEach(type => window.addEventListener(type, e => { if(e.isTrusted) {e.preventDefault();e.stopImmediatePropagation();} },true));",
+  });
   await send('Emulation.setDeviceMetricsOverride', {
     width: 2560,
     height: 1440,
@@ -149,34 +156,74 @@ try {
     'terrain chunks',
     60_000,
   );
-  await evaluate('document.getElementById("terrain-canvas").focus()');
+  await evaluate(
+    'const canvas=document.getElementById("terrain-canvas"); canvas.style.pointerEvents="none"; canvas.focus();',
+  );
   // Allow shader warmup and initial streaming to settle before measuring cadence.
   await Bun.sleep(1000);
+  let traceOutput: Promise<string> | undefined;
+  if (args.includes('--trace-gpu')) {
+    const listing = await new Response(
+      Bun.spawn(['ps', '-axo', 'pid=,ppid=,args='], { stdout: 'pipe' }).stdout,
+    ).text();
+    const rows = listing
+      .split('\n')
+      .map((line) => line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/))
+      .filter(Boolean);
+    const family = new Set([proc.pid]);
+    for (let pass = 0; pass < 8; pass++)
+      for (const row of rows) if (family.has(Number(row![2]))) family.add(Number(row![1]));
+    const helper = rows.find(
+      (row) => family.has(Number(row![1])) && row![3]!.includes('--type=gpu-process'),
+    );
+    if (!helper) throw new Error('Cannot identify this isolated app GPU helper for tracing');
+    const pid = helper[1]!;
+    trace = Bun.spawn(
+      [
+        'xcrun',
+        'xctrace',
+        'record',
+        '--template',
+        'Metal System Trace',
+        '--attach',
+        pid,
+        '--time-limit',
+        `${seconds}s`,
+        '--no-prompt',
+        '--output',
+        path.join(out, 'gpu.trace'),
+      ],
+      { stdout: 'pipe', stderr: 'pipe' },
+    );
+    traceOutput = Promise.all([
+      new Response(trace.stdout).text(),
+      new Response(trace.stderr).text(),
+    ]).then((parts) => parts.join('\n'));
+  }
   const frames = (await evaluate(`new Promise(resolve => {
     const times = []; const start = performance.now(); let previous = start;
     function frame(now) { times.push(now-previous); previous = now;
       if(now-start < ${seconds * 1000}) requestAnimationFrame(frame); else resolve(times); }
     requestAnimationFrame(frame);
   })`)) as number[];
+  let gpuTrace: { exitCode: number; log: string } | undefined;
+  if (trace) {
+    gpuTrace = { exitCode: await trace.exited, log: await traceOutput! };
+    await Bun.write(path.join(out, 'gpu-trace.log'), gpuTrace.log);
+  }
   const before = await evaluate('window.__terrainDiagnostics()');
-  await send('Input.dispatchKeyEvent', {
-    type: 'keyDown',
-    key: 'w',
-    code: 'KeyW',
-    windowsVirtualKeyCode: 87,
-  });
+  await evaluate(
+    "window.dispatchEvent(new KeyboardEvent('keydown', {key:'w',code:'KeyW',bubbles:true}))",
+  );
   const flightTimes = (await evaluate(`new Promise(resolve => {
     const times=[]; const start=performance.now(); let last=start;
     function frame(now) { times.push(now-last);last=now;
       if(now-start < 1500) requestAnimationFrame(frame); else resolve(times); }
     requestAnimationFrame(frame);
   })`)) as number[];
-  await send('Input.dispatchKeyEvent', {
-    type: 'keyUp',
-    key: 'w',
-    code: 'KeyW',
-    windowsVirtualKeyCode: 87,
-  });
+  await evaluate(
+    "window.dispatchEvent(new KeyboardEvent('keyup', {key:'w',code:'KeyW',bubbles:true}))",
+  );
   const after = await evaluate('window.__terrainDiagnostics()');
   const movement = Math.hypot(after.camera.x - before.camera.x, after.camera.z - before.camera.z);
   if (
@@ -204,6 +251,7 @@ try {
       await new Response(Bun.spawn(['git', 'rev-parse', 'HEAD'], { stdout: 'pipe' }).stdout).text()
     ).trim(),
     runtimeErrors,
+    gpuTrace,
     movementMeters: movement,
     flightMeanFrameMs: flightTimes.reduce((a, b) => a + b, 0) / flightTimes.length,
     flightP95FrameMs: [...flightTimes].sort((a, b) => a - b)[Math.floor(flightTimes.length * 0.95)],
@@ -224,6 +272,10 @@ try {
   await Bun.write(path.join(out, 'report.json'), JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report, null, 2));
 } finally {
+  if (trace && trace.exitCode === null) {
+    trace.kill();
+    await trace.exited;
+  }
   socket?.close();
   proc.kill();
   await proc.exited;

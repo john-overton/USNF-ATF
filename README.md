@@ -2,7 +2,7 @@
 
 A non-commercial fan remake of Jane's US Navy Fighters '97 (and, later, ATF Gold), built with TypeScript, Three.js, React, and Electron. The goal is retail aircraft and missions over real-elevation terrain, using assets imported from your own copy.
 
-**Current status (2026-09-08):** the app runs a spinning cube and WebGL2 diagnostic screen. The macOS scaffold works; Python tools decode retail containers, images, fonts, and aircraft data. SH model export is partial. Terrain, flight gameplay, and the in-app importer are not implemented. Phase 0 remains open, and phase 1 still needs Linux verification.
+**Current status (2026-09-08):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, water, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Linux acceptance remains pending. Flight gameplay and the in-app retail importer are not implemented. Python retail research tools remain available; SH model export is partial.
 
 Start with [progress and review findings](Docs/progress.md), the [build plan](Docs/build-plan.md) (phase order and exit criteria), and the [design brief](Docs/usnf-atf-plan.md). Contributor and agent instructions are in [AGENTS.md](AGENTS.md).
 
@@ -41,18 +41,42 @@ The browser target (`bun run dev`) is for development. Its writes use memory/loc
 
 `--probe` exits 0 when the renderer string passes the software-fallback heuristic, 2 when the renderer string looks like a software fallback (SwiftShader, llvmpipe, softpipe, "Software"), 3 when no result arrived. Pass `--unpackaged` to `bun run probe` to skip a packaged app that exists.
 
-Probe commands reuse existing builds, which may be stale. To check current source without rebuilding installers:
+Probe commands reuse existing builds, which may be stale. `bun run probe --fresh` rebuilds and checks current unpackaged source without rebuilding installers.
+
+## Generate and fly terrain
+
+The terrain dataset is generated locally and installed separately from the app:
 
 ```sh
-bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
-bun run probe --unpackaged
+python3 -m venv .venv
+.venv/bin/python -m pip install -r terrain-pipeline/requirements.txt
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline fetch --config theaters/ukraine.json --output extracted/terrain-source/ukraine
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline build --config theaters/ukraine.json --source extracted/terrain-source/ukraine --output extracted/terrain/ukraine
+bun tools/terrain/install.ts --terrain extracted/terrain/ukraine --data-root "$HOME/Library/Application Support/usnf-atf/data"
+bun run dev:electron
 ```
+
+The last data-root path is this Mac's default; the app displays its actual root.
+The terrain panel defaults to `terrains/ukraine/manifest.json`. Click the terrain:
+WASD moves, Q/E changes altitude, drag or arrow keys turn, Shift accelerates.
+The camera is free flight without terrain collision. The Ukraine box is a
+provisional development area; retail mission geography is not yet aligned.
+
+For a quick offline fixture, replace fetch/build with
+`PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline fixture --output extracted/terrain/synthetic`.
+Fixtures are explicitly labeled synthetic; install only the dataset you intend
+to view. Existing installed theaters require the installer's `--replace` option.
+
+See the [pipeline guide](Docs/phase-2-pipeline.md), [renderer guide](Docs/phase-3-renderer.md),
+and [packaged smoke/installation tools](tools/terrain/README.md) for full commands
+and limits. Terrain outputs and source rasters remain ignored under `extracted/`.
 
 ## Validation and retail tools
 
 ```sh
 bun run check
 python3 -m unittest discover -s tools/retail/tests
+PYTHONPATH=terrain-pipeline .venv/bin/python -m unittest discover -s terrain-pipeline/tests
 PYTHONPATH=tools/retail python3 -m retail stats gameassets/usnf97
 ```
 
@@ -64,7 +88,9 @@ Python tests run separately from `bun run check`; media-dependent tests skip whe
 engine/       TypeScript engine + Vite app (sim, render, terrain, data, ui, platform)
 shell/        Electron main process, preload bridge, packaging (electron-builder)
 importer/     import source contracts and stub (decoder port planned for phase 5)
-tools/        format tools and headless probes (Python, phase 0)
+terrain-pipeline/ Python offline DEM/water-mask fetch, chunk build and probe
+theaters/     theater configuration (generated data stays outside git)
+tools/        retail format tools, terrain installer and desktop smoke
 Docs/         plans, progress log, review findings, format notes, per-phase baselines
 build/        packaged apps, per platform (ignored)
 ```
