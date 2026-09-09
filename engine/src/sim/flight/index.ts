@@ -354,23 +354,33 @@ export function stepFlight(
     throw new Error('Invalid aerodynamic device controls');
   const onGround =
     state.position.y <= ground.height + def.gearHeightM + 0.02 && state.velocity.y <= 0.1;
-  // Solve the unstalled positive lift branch for a neutral augmented 1g target.
+  // Solve the unstalled lift branch for a neutral augmented 1g target.
   const wantedCL = clamp(
     (def.massKg * G) / (Math.max(1, a.qArea) * Math.max(0.4, Math.abs(a.up.y))),
     0,
     a.fit ? a.fit.clMax + flap * a.flapLiftMax : 1.3,
   );
   let trimAlpha = 0;
-  for (let i = 0; i <= 80; i++) {
-    // Cambered flaps can produce the target lift at lower (even negative) alpha.
-    const minimumAlpha = -0.08 * flap;
-    trimAlpha = minimumAlpha + ((def.stallAlphaRad - minimumAlpha) * i) / 80;
-    if (
-      liftCoefficient(trimAlpha, a.mach, def, a.fit?.clMax) +
-        flapLiftCoefficient(trimAlpha, flap, def.stallAlphaRad, a.flapLiftMax) >=
-      wantedCL
-    )
-      break;
+  if (a.fit) {
+    // The original fitted polar is linear throughout the unstalled negative
+    // and positive branch. Recovered flap camber can require substantially
+    // less than -0.08rad at speed; solve that branch without a fixed search floor.
+    trimAlpha = clamp(
+      ((wantedCL - flap * a.flapLiftMax) * def.stallAlphaRad) / a.fit.clMax,
+      -def.stallAlphaRad,
+      def.stallAlphaRad,
+    );
+  } else {
+    for (let i = 0; i <= 80; i++) {
+      const minimumAlpha = -0.08 * flap;
+      trimAlpha = minimumAlpha + ((def.stallAlphaRad - minimumAlpha) * i) / 80;
+      if (
+        liftCoefficient(trimAlpha, a.mach, def) +
+          flapLiftCoefficient(trimAlpha, flap, def.stallAlphaRad, a.flapLiftMax) >=
+        wantedCL
+      )
+        break;
+    }
   }
   // Preserve the existing high-speed rate limits, but remove invented control
   // authority at rest. q uses true air velocity (including wind) and density.

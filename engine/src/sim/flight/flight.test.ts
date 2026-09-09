@@ -468,3 +468,28 @@ test('recovered envelope mode applies native flap minimum-speed rule without cha
   def.nativeEnvelope = false;
   expect(sampleTelemetry(state, flat, def, { flaps: 1 })).toEqual(fitted);
 });
+
+test('experimental high-camber flap trim can command the full unstalled negative-alpha branch', () => {
+  const def = retailAircraft();
+  // Synthetic high camber, comparable to the recovered flap minimum-speed rule.
+  def.retail!.rawFields.flapsLift = { value: 200 };
+  def.retail!.envelopes = def.retail!.envelopes.filter((row) => row.g === 1);
+  const controls = { ...NEUTRAL_CONTROLS, flaps: 1 };
+  let state = createFlightState({ position: { x: 0, y: 1000, z: 0 }, pitchRad: -0.12 });
+  state.velocity = { x: 0, y: 0, z: -150 };
+  // Former -0.08 floor commanded nose UP despite excessive flap lift here.
+  expect(stepFlight(state, controls, flat, def).state.angularVelocity.x).toBeLessThan(0);
+  const trimmedAlpha = ((60 / 150) ** 2 - 200 / 256) * def.stallAlphaRad;
+  state.attitude = attitudeFromEuler(trimmedAlpha, 0, 0);
+  let maximumAltitudeError = 0;
+  for (let i = 0; i < 1200; i++) {
+    state = stepFlight(state, controls, flat, def).state;
+    maximumAltitudeError = Math.max(maximumAltitudeError, Math.abs(state.position.y - 1000));
+  }
+  const telemetry = sampleTelemetry(state, flat, def, controls);
+  expect(state.status).toBe('airborne');
+  expect(maximumAltitudeError).toBeLessThan(30);
+  expect(telemetry.alphaRad).toBeLessThan(-0.08);
+  expect(telemetry.loadFactor).toBeGreaterThan(0.8);
+  expect(telemetry.loadFactor).toBeLessThan(1.2);
+});
