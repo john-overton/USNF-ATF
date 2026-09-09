@@ -7,6 +7,8 @@ export interface DesktopOptions {
   binary: string;
   app?: string;
   terrain: string;
+  aircraft?: string;
+  interactiveTest?: boolean;
   out: string;
   query?: Record<string, string>;
   initialization?: string;
@@ -19,6 +21,10 @@ export async function openDesktop(options: DesktopOptions) {
   await cp(path.resolve(options.terrain), path.join(profile, 'data/terrains/ukraine'), {
     recursive: true,
   });
+  if (options.aircraft) {
+    await mkdir(path.join(profile, 'data/aircraft'), { recursive: true });
+    await cp(path.resolve(options.aircraft), path.join(profile, 'data/aircraft/f14.json'));
+  }
   const command = [path.resolve(options.binary)];
   if (options.app) command.push(path.resolve(options.app));
   command.push(
@@ -144,8 +150,8 @@ export async function openDesktop(options: DesktopOptions) {
     await send('Page.enable');
     await send('Page.addScriptToEvaluateOnNewDocument', {
       source: `
-        ['pointermove','pointerdown'].forEach(type=>window.addEventListener(type,e=>e.stopImmediatePropagation(),true));
-        ['keydown','keyup'].forEach(type=>window.addEventListener(type,e=>{if(e.isTrusted){e.preventDefault();e.stopImmediatePropagation();}},true));
+        if (!${Boolean(options.interactiveTest)}) ['pointermove','pointerdown'].forEach(type=>window.addEventListener(type,e=>e.stopImmediatePropagation(),true));
+        if (!${Boolean(options.interactiveTest)}) ['keydown','keyup'].forEach(type=>window.addEventListener(type,e=>{if(e.isTrusted){e.preventDefault();e.stopImmediatePropagation();}},true));
         ${options.initialization ?? ''}
       `,
     });
@@ -166,7 +172,7 @@ export async function openDesktop(options: DesktopOptions) {
     }))
       url.searchParams.set(key, value);
     await send('Page.navigate', { url: url.href });
-    return { evaluate, poll, capture, close, errors, out };
+    return { evaluate, poll, capture, close, errors, out, send };
   } catch (error) {
     await close();
     throw error;

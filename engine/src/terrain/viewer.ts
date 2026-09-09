@@ -470,7 +470,9 @@ export function startTerrainViewer(
     d.origin = floatingOrigin(world);
     camera.position.set(world.x - d.origin.x, world.y, world.z - d.origin.z);
     if (flight) {
-      const target = flight.pose().look;
+      const pose = flight.pose();
+      const target = pose.look;
+      camera.up.copy(pose.up);
       camera.lookAt(target.x - d.origin.x, target.y, target.z - d.origin.z);
       flight.render(d.origin);
       yaw = camera.rotation.y;

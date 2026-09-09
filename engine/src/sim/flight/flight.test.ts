@@ -112,3 +112,24 @@ test('a nearly vertical touchdown cannot be accepted as safe gear contact', () =
   const initial = createFlightState({ position: { x: 0, y: 2.19, z: 0 }, pitchRad: 1.4 });
   expect(stepFlight(initial, NEUTRAL_CONTROLS, flat).state.status).toBe('crashed');
 });
+
+test('systems thrust augmentation changes acceleration and retracted gear rejects touchdown', () => {
+  const env = {
+    sampleGround: () => ({ height: 0, normal: { x: 0, y: 1, z: 0 }, kind: 'land' as const }),
+  };
+  const state = createFlightState({ position: { x: 0, y: 1000, z: 0 }, airspeed: 150 });
+  const dry = stepFlight(state, { ...NEUTRAL_CONTROLS, throttle: 1 }, env);
+  const burner = stepFlight(
+    state,
+    { ...NEUTRAL_CONTROLS, throttle: 1, thrustMultiplier: 1.5 },
+    env,
+  );
+  expect(burner.state.velocity.z).toBeLessThan(dry.state.velocity.z);
+  const contact = createFlightState({
+    position: { x: 0, y: PLACEHOLDER_AIRCRAFT.gearHeightM, z: 0 },
+  });
+  expect(stepFlight(contact, NEUTRAL_CONTROLS, env).state.status).toBe('grounded');
+  const gearUp = stepFlight(contact, { ...NEUTRAL_CONTROLS, gearDown: false }, env);
+  expect(gearUp.state.status).toBe('crashed');
+  expect(gearUp.telemetry.reason).toBe('Gear-up terrain impact');
+});

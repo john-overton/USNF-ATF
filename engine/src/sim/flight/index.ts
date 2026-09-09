@@ -25,6 +25,9 @@ export interface FlightControls {
   yaw: number;
   throttle: number;
   brake: boolean;
+  /** Original systems adapter; omitted preserves the baseline aircraft. */
+  thrustMultiplier?: number;
+  gearDown?: boolean;
 }
 export type FlightStatus = 'airborne' | 'grounded' | 'crashed' | 'waiting-terrain';
 export interface FlightState {
@@ -260,7 +263,15 @@ export function stepFlight(
           }),
         )
       : { ...state.attitude };
+  if (
+    controls.thrustMultiplier !== undefined &&
+    (!Number.isFinite(controls.thrustMultiplier) ||
+      controls.thrustMultiplier < 0 ||
+      controls.thrustMultiplier > 2)
+  )
+    throw new Error('Invalid thrust multiplier');
   const thrust =
+    (controls.thrustMultiplier ?? 1) *
     clamp(controls.throttle, 0, 1) *
     lookupTable(
       def.engine.altitudeM,
@@ -304,6 +315,7 @@ export function stepFlight(
       Math.asin(clamp(dot(rotate(attitude, { x: 0, y: 0, z: -1 }), n), -1, 1)),
     );
     if (
+      controls.gearDown === false ||
       nextGround.kind === 'water' ||
       sink > def.landing.maxSinkMps ||
       bankAngle > def.landing.maxBankRad ||
@@ -313,7 +325,12 @@ export function stepFlight(
     ) {
       status = 'crashed';
       velocity = { x: 0, y: 0, z: 0 };
-      reason = nextGround.kind === 'water' ? 'Water impact' : 'Hard or unsafe terrain impact';
+      reason =
+        controls.gearDown === false
+          ? 'Gear-up terrain impact'
+          : nextGround.kind === 'water'
+            ? 'Water impact'
+            : 'Hard or unsafe terrain impact';
     } else {
       status = 'grounded';
       velocity = add(velocity, scale(n, -Math.min(0, dot(velocity, n))));

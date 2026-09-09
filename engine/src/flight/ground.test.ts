@@ -161,6 +161,7 @@ test('discarded asynchronous flight layer cannot replace accepted diagnostics', 
   });
   const oldPlatform = {
     fs: {
+      exists: () => Promise.resolve(false),
       readBytes: async () => {
         await pending;
         return coarse.bytes;
@@ -168,7 +169,7 @@ test('discarded asynchronous flight layer cannot replace accepted diagnostics', 
     },
   } as unknown as Platform;
   const newPlatform = {
-    fs: { readBytes: () => Promise.resolve(coarse.bytes) },
+    fs: { exists: () => Promise.resolve(false), readBytes: () => Promise.resolve(coarse.bytes) },
   } as unknown as Platform;
   let accepted: FlightLayer | undefined;
   try {

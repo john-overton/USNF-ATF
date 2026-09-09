@@ -101,7 +101,7 @@ export function TerrainViewer() {
         {!error && stats?.status === 'loading' && <p>Loading terrain chunks…</p>}
         <p>
           {flightMode
-            ? 'Arrows pitch/roll · Q/E rudder · W/S throttle · B brake · R reset. Standard gamepad supported.'
+            ? 'Arrows pitch/roll · Q/E rudder · 1–5 throttle 0/25/50/75/100% · 6 afterburner · W/S fine throttle · T engine · G gear · H hook · F2 locked chase · F3 horizon-up · B brake · M mute · R reset.'
             : 'WASD move · Q/E altitude · drag to look · arrows turn · Shift accelerates. Click the terrain to focus controls.'}
         </p>
         {flightMode && !stats?.flight && !error && !stats?.error && (
@@ -122,10 +122,39 @@ export function TerrainViewer() {
                 {stats.flight.position.y.toFixed(0)} / {stats.flight.altitudeAGL?.toFixed(1) ?? '…'}{' '}
                 m
               </dd>
-              <dt>Throttle / load</dt>
+              <dt>Throttle</dt>
               <dd>
-                {(stats.flight.throttle * 100).toFixed(0)}% / {stats.flight.loadFactor.toFixed(2)} g
+                {(stats.flight.throttle * 100).toFixed(0)}%
+                {stats.flight.afterburner ? ' · AFT' : ''}
               </dd>
+              <dt>Engine / spool</dt>
+              <dd>
+                {stats.flight.engineRunning ? 'ON' : 'OFF'} /{' '}
+                {(stats.flight.systems.engineSpool * 100).toFixed(0)}%
+              </dd>
+              <dt>Gear / hook</dt>
+              <dd>
+                {stats.flight.gearDown ? 'DOWN' : 'UP'}{' '}
+                {(stats.flight.systems.gearFraction * 100).toFixed(0)}% /{' '}
+                {stats.flight.hookDown ? 'DOWN' : 'UP'}{' '}
+                {(stats.flight.systems.hookFraction * 100).toFixed(0)}%
+              </dd>
+              <dt>View</dt>
+              <dd>
+                {stats.flight.cameraMode === 'attitude'
+                  ? 'F2 · attitude locked'
+                  : 'F3 · horizon up'}
+              </dd>
+              <dt>Sound</dt>
+              <dd>
+                {stats.flight.audio.muted
+                  ? 'Muted (M)'
+                  : stats.flight.audio.contextState === 'running'
+                    ? 'On (M to mute)'
+                    : 'Press a flight key to enable'}
+              </dd>
+              <dt>Load</dt>
+              <dd>{stats.flight.loadFactor.toFixed(2)} g</dd>
               <dt>Angle of attack</dt>
               <dd>{((stats.flight.alphaRad * 180) / Math.PI).toFixed(1)}°</dd>
               <dt>Sim / steps</dt>
@@ -137,7 +166,7 @@ export function TerrainViewer() {
                 {stats.flight.takeoffs} / {stats.flight.landings}
               </dd>
             </dl>
-            <p>Original placeholder aircraft · fictional practice strip.</p>
+            <p>{stats.flight.aircraftName} · assisted flight model · fictional practice strip.</p>
           </section>
         )}
         {stats && (
@@ -201,6 +230,8 @@ export function TerrainViewer() {
           <a href="?mode=flight">Practice runway</a>
           {' · '}
           <a href="?mode=flight&flightStart=approach">Final approach</a>
+          {' · '}
+          <a href="?mode=flight&flightStart=airborne">Airborne practice</a>
           {' · '}
           <a href="?">Terrain explorer</a>
           {' · '}

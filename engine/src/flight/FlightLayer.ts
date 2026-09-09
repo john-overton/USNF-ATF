@@ -24,6 +24,10 @@ import {
 import { GroundSampler, type PracticeStrip } from './GroundSampler';
 import { preparePractice } from './practice';
 import { FlightInput, type PilotControls } from './FlightInput';
+import { flightCamera } from './FlightCamera';
+import { createAircraftSystems, stepAircraftSystems } from './AircraftSystems';
+import { FlightAudio } from './FlightAudio';
+import { RetailAircraft } from './RetailAircraft';
 
 export interface FlightDiagnostics {
   state: FlightState;
@@ -50,6 +54,17 @@ export interface FlightDiagnostics {
   takeoffs: number;
   landings: number;
   runway: PracticeStrip;
+  aircraftName: string;
+  modelTriangles: number;
+  cameraMode: string;
+  cameraUp: { x: number; y: number; z: number };
+  engineRunning: boolean;
+  afterburner: boolean;
+  gearDown: boolean;
+  hookDown: boolean;
+  systems: ReturnType<typeof createAircraftSystems>;
+  audio: ReturnType<FlightAudio['diagnostics']>;
+  animation: Record<string, number>;
 }
 declare global {
   interface Window {
@@ -62,10 +77,17 @@ export class FlightLayer {
   private controls: PilotControls = { pitch: 0, roll: 0, yaw: 0, throttle: 0, brake: false };
   private readonly approach =
     new URLSearchParams(window.location.search).get('flightStart') === 'approach';
+  private readonly airborneStart =
+    new URLSearchParams(window.location.search).get('flightStart') === 'airborne';
   private readonly clock = new FixedStepClock();
   private readonly input = new FlightInput();
   private readonly aircraft = new Group();
   private readonly deck = new Group();
+  private readonly audio = new FlightAudio();
+  private systems = createAircraftSystems();
+  private readonly gearParts: Group[] = [];
+  private readonly hook = new Group();
+  private readonly burners: Mesh[] = [];
   private state: FlightState;
   private previous: FlightState;
   private telemetry: FlightTelemetry;
@@ -74,7 +96,7 @@ export class FlightLayer {
   private takeoffs = 0;
   private landings = 0;
   private waiting = false;
-  private airborneArmed = this.approach;
+  private airborneArmed = this.approach || this.airborneStart;
   private readonly environment;
   private readonly snapshot = (): FlightDiagnostics => this.diagnostics();
 
@@ -88,7 +110,8 @@ export class FlightLayer {
     const ground = new GroundSampler(manifest, platform, root, folder);
     try {
       const strip = await preparePractice(ground);
-      return new FlightLayer(scene, ground, strip);
+      const model = await RetailAircraft.load(platform);
+      return new FlightLayer(scene, ground, strip, model);
     } catch (error) {
       ground.dispose();
       throw error;
@@ -98,39 +121,73 @@ export class FlightLayer {
     private scene: Scene,
     readonly ground: GroundSampler,
     readonly strip: PracticeStrip,
+    private readonly model?: RetailAircraft,
   ) {
     this.environment = { sampleGround: (x: number, z: number) => ground.sample(x, z) };
     this.state = this.initialState();
     this.previous = this.state;
-    if (this.approach) this.input.throttle = 0.2;
+    if (this.approach || this.airborneStart) this.input.throttle = 0.2;
+    this.systems = createAircraftSystems(this.input.throttle);
     this.telemetry = sampleTelemetry(this.state, this.environment);
     const fuselage = new MeshStandardMaterial({ color: 0xe4e8ed, roughness: 0.6 });
     const blue = new MeshStandardMaterial({ color: 0x244d77, roughness: 0.7 });
     const dark = new MeshStandardMaterial({ color: 0x20272c, roughness: 1 });
-    const body = new Mesh(new CylinderGeometry(0.8, 0.6, 9, 12), fuselage);
-    body.rotation.x = Math.PI / 2;
-    this.aircraft.add(body);
-    const nose = new Mesh(new ConeGeometry(0.8, 2, 12), blue);
-    nose.rotation.x = -Math.PI / 2;
-    nose.position.z = -5.5;
-    this.aircraft.add(nose);
-    const wing = new Mesh(new BoxGeometry(12, 0.2, 2.4), blue);
-    wing.position.z = 0.3;
-    this.aircraft.add(wing);
-    const tail = new Mesh(new BoxGeometry(4.3, 0.18, 1.3), blue);
-    tail.position.z = 3.5;
-    this.aircraft.add(tail);
-    const fin = new Mesh(new BoxGeometry(0.16, 2, 1.8), blue);
-    fin.position.set(0, 1, 3.3);
-    this.aircraft.add(fin);
+    if (!model) {
+      const body = new Mesh(new CylinderGeometry(0.8, 0.6, 9, 12), fuselage);
+      body.rotation.x = Math.PI / 2;
+      this.aircraft.add(body);
+      const nose = new Mesh(new ConeGeometry(0.8, 2, 12), blue);
+      nose.rotation.x = -Math.PI / 2;
+      nose.position.z = -5.5;
+      this.aircraft.add(nose);
+      const wing = new Mesh(new BoxGeometry(12, 0.2, 2.4), blue);
+      wing.position.z = 0.3;
+      this.aircraft.add(wing);
+      const tail = new Mesh(new BoxGeometry(4.3, 0.18, 1.3), blue);
+      tail.position.z = 3.5;
+      this.aircraft.add(tail);
+      const fin = new Mesh(new BoxGeometry(0.16, 2, 1.8), blue);
+      fin.position.set(0, 1, 3.3);
+      this.aircraft.add(fin);
+    } else this.aircraft.add(model.group);
     for (const [x, z] of [
       [-1.7, 1.2],
       [1.7, 1.2],
-      [0, -3],
+      [0, model ? -5 : -3],
     ]) {
-      const gear = new Mesh(new BoxGeometry(0.35, 1.5, 0.6), dark);
-      gear.position.set(x!, -1.4, z);
-      this.aircraft.add(gear);
+      const pivot = new Group();
+      pivot.position.set(x!, -0.65, z);
+      const strut = new Mesh(new BoxGeometry(0.15, 1.25, 0.15), fuselage);
+      strut.position.y = -0.6;
+      const wheel = new Mesh(new CylinderGeometry(0.3, 0.3, 0.3, 12), dark);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.y = -1.25;
+      pivot.add(strut, wheel);
+      this.gearParts.push(pivot);
+      this.aircraft.add(pivot);
+    }
+    // Original moving hook and burner effects supplement imported geometry when needed.
+    const hookArm = new Mesh(new BoxGeometry(0.12, 0.12, 2.4), dark);
+    hookArm.position.z = 1.2;
+    this.hook.position.set(0, -0.6, model ? 6 : 3);
+    this.hook.add(hookArm);
+    this.aircraft.add(this.hook);
+    for (const x of [-1.2, 1.2]) {
+      const flame = new Mesh(
+        new ConeGeometry(0.55, 4, 12),
+        new MeshStandardMaterial({
+          color: 0xffaa44,
+          emissive: 0xff6600,
+          emissiveIntensity: 2,
+          transparent: true,
+          opacity: 0.8,
+          depthWrite: false,
+        }),
+      );
+      flame.rotation.x = Math.PI / 2;
+      flame.position.set(x, -0.2, model ? 10 : 6);
+      this.burners.push(flame);
+      this.aircraft.add(flame);
     }
     const runway = new Mesh(new BoxGeometry(strip.width, 0.1, strip.length), dark);
     runway.position.y = -0.05;
@@ -147,6 +204,11 @@ export class FlightLayer {
     window.__flightDiagnostics = this.snapshot;
   }
   private initialState(): FlightState {
+    if (this.airborneStart)
+      return createFlightState({
+        position: { x: this.strip.x, y: 3000, z: this.strip.z },
+        airspeed: 150,
+      });
     if (this.approach)
       return createFlightState({
         position: { x: this.strip.x, y: 240, z: this.strip.z + 2800 },
@@ -170,10 +232,11 @@ export class FlightLayer {
       this.previous = this.state;
       this.clock.reset();
       this.input.reset();
+      this.systems = createAircraftSystems(this.approach || this.airborneStart ? 0.2 : 0);
       this.takeoffs = 0;
       this.landings = 0;
-      this.airborneArmed = this.approach;
-      if (this.approach) this.input.throttle = 0.2;
+      this.airborneArmed = this.approach || this.airborneStart;
+      if (this.approach || this.airborneStart) this.input.throttle = 0.2;
       this.telemetry = sampleTelemetry(this.state, this.environment);
       this.waiting = false;
       this.alpha = 0;
@@ -189,9 +252,15 @@ export class FlightLayer {
     const result = this.clock.advance(seconds, (dt) => {
       this.previous = this.state;
       this.controls = this.input.sample(dt);
+      this.systems = stepAircraftSystems(this.systems, this.input, dt);
       const next = stepFlight(
         this.state,
-        this.controls,
+        {
+          ...this.controls,
+          throttle: this.systems.effectiveThrottle,
+          thrustMultiplier: this.systems.thrustMultiplier,
+          gearDown: this.systems.gearFraction >= 0.99,
+        },
         this.environment,
         PLACEHOLDER_AIRCRAFT,
         dt,
@@ -213,8 +282,21 @@ export class FlightLayer {
     });
     this.alpha = result.alpha;
     if (result.clamped) this.clampedFrames++;
+    this.audio.update(
+      {
+        engineRunning: this.input.engineRunning,
+        spool: this.systems.engineSpool,
+        throttle: this.input.throttle,
+        afterburner: this.systems.afterburnerFraction > 0.1 && this.input.engineRunning,
+        airspeed: this.telemetry.airspeed,
+        gear: this.systems.gearFraction,
+        hook: this.systems.hookFraction,
+        status: this.state.status,
+      },
+      seconds,
+    );
   }
-  pose(): { position: Vector3; attitude: Quaternion; camera: Vector3; look: Vector3 } {
+  pose(): { position: Vector3; attitude: Quaternion; camera: Vector3; look: Vector3; up: Vector3 } {
     const a = this.previous.position,
       b = this.state.position;
     const position = new Vector3(a.x, a.y, a.z).lerp(new Vector3(b.x, b.y, b.z), this.alpha);
@@ -224,14 +306,14 @@ export class FlightLayer {
       new Quaternion(qb.x, qb.y, qb.z, qb.w),
       this.alpha,
     );
-    const camera = new Vector3(0, 10, 38).applyQuaternion(attitude).add(position);
-    const look = new Vector3(0, 2, -30).applyQuaternion(attitude).add(position);
+    const { camera, look, up } = flightCamera(position, attitude, this.input.cameraMode);
     // Keep the chase camera above known ground, even when the aircraft rolls.
-    camera.y = Math.max(
-      camera.y,
-      (this.ground.sample(camera.x, camera.z)?.height ?? position.y - 10) + 4,
-    );
-    return { position, attitude, camera, look };
+    if (this.input.cameraMode === 'world-up')
+      camera.y = Math.max(
+        camera.y,
+        (this.ground.sample(camera.x, camera.z)?.height ?? position.y - 10) + 4,
+      );
+    return { position, attitude, camera, look, up };
   }
   render(origin: { x: number; z: number }): void {
     const pose = this.pose();
@@ -241,7 +323,29 @@ export class FlightLayer {
       pose.position.z - origin.z,
     );
     this.aircraft.quaternion.copy(pose.attitude);
+    for (const gear of this.gearParts) {
+      gear.rotation.z =
+        ((Math.sign(gear.position.x) || 1) * ((1 - this.systems.gearFraction) * Math.PI)) / 2;
+      gear.visible = this.systems.gearFraction > 0.01;
+    }
+    for (const [name, part] of this.model?.parts ?? []) {
+      if (name.startsWith('wing-left')) part.rotation.y = this.wingSweep();
+      if (name.startsWith('wing-right')) part.rotation.y = -this.wingSweep();
+    }
+    this.hook.rotation.x = (this.systems.hookFraction * Math.PI) / 4;
+    for (const burner of this.burners) {
+      burner.visible = this.systems.afterburnerFraction > 0.01 && this.input.engineRunning;
+      burner.scale.y = Math.max(0.01, this.systems.afterburnerFraction);
+    }
     this.deck.position.set(this.strip.x - origin.x, this.strip.elevation, this.strip.z - origin.z);
+  }
+  private wingSweep(): number {
+    // Original visual schedule, held extended for landing. Not recovered retail animation.
+    return (
+      (1 - this.systems.gearFraction) *
+      Math.max(0, Math.min(1, (this.telemetry.airspeed - 160) / 180)) *
+      0.7
+    );
   }
   diagnostics(): FlightDiagnostics {
     return {
@@ -276,10 +380,33 @@ export class FlightLayer {
       takeoffs: this.takeoffs,
       landings: this.landings,
       runway: { ...this.strip },
+      aircraftName: this.model?.data.name ?? 'Peregrine original placeholder (F-14 not installed)',
+      modelTriangles: this.model?.triangles ?? 0,
+      cameraMode: this.input.cameraMode,
+      cameraUp: { ...this.pose().up },
+      engineRunning: this.input.engineRunning,
+      afterburner: this.input.afterburner,
+      gearDown: this.input.gearDown,
+      hookDown: this.input.hookDown,
+      systems: { ...this.systems },
+      audio: this.audio.diagnostics(),
+      animation: {
+        gear: this.systems.gearFraction,
+        hook: this.systems.hookFraction,
+        afterburner: this.systems.afterburnerFraction,
+        wingSweepRad: this.wingSweep(),
+        gearRotation: this.gearParts[0]?.rotation.z ?? 0,
+        gearVisible: Number(this.gearParts[0]?.visible),
+        hookRotation: this.hook.rotation.x,
+        burnerVisible: Number(this.burners[0]?.visible),
+        wingLeftRotation: this.model?.parts.get('wing-left-color')?.rotation.y ?? 0,
+      },
     };
   }
   dispose(): void {
     this.input.dispose();
+    this.audio.dispose();
+    this.model?.dispose();
     this.ground.dispose();
     const materials = new Set<MeshStandardMaterial>();
     for (const group of [this.aircraft, this.deck]) {

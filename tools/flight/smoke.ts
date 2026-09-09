@@ -26,6 +26,7 @@ const session = await openDesktop({
   binary: option('--binary'),
   ...(args.includes('--app') ? { app: option('--app') } : {}),
   terrain: option('--terrain', 'extracted/terrain/ukraine'),
+  ...(args.includes('--aircraft') ? { aircraft: option('--aircraft') } : {}),
   out: option('--out', `extracted/flight-smoke-${scenario}`),
   query: { mode: 'flight', flightStart: scenario === 'approach' ? 'approach' : 'runway' },
   initialization,
