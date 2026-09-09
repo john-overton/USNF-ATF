@@ -11,10 +11,112 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 |---|---|---|
 | 0: retail toolkit | Containers, images/fonts and data readers; bounded nearest-detail F-14 static export with textures | F-14 is recognizable in packaged flight. General SH interpreter, native animation semantics and unified deliverable remain open |
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
-| 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
-| 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, diagnostics | Packaged coast/detail ~60 fps at 1440p; 0↔1 and 1↔2 fades plus 24km fast lateral flights pass. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing and optional RGB atlas | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
+| 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite paint, FXAA, worker water triangulation and diagnostics | Polished packaged coast/detail ~60 fps at 1440p; current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness, indexed exact water queries | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: actual 4× imagery and terrain handoff
+
+User authorized installing higher-detail imagery and committing/pushing the terrain
+work. Added bounded tiled WMS fetching for a real ~6144-square source, expanding
+producer/runtime limits to 6144 per axis / 152 MiB compressed and checking the GPU
+texture-size limit explicitly. A single 6144 WMS request returned HTTP 400; the
+four-request geographic mosaic resolves that service limit. Tile-grid tests cover
+north/south orientation, exact seams and partial final tiles. Existing smoothed
+water and DEM chunks are preserved. The earlier upscaled allocation experiment
+remains historical evidence, not proof of the newly fetched imagery. Final source
+commit, installation and fresh packaged results are recorded in phase 3 baseline.
+
+
+## 2026-09-09: texture resolution performance experiment
+
+A user-requested four-times-texel test doubles the atlas axes from 3071×3072 to
+6142×6144 through isolated CDP instrumentation. Six packaged flight jumps held
+59.86–60.17 fps at 1440p, with first mountain/coast maximum frames of 50 ms and
+no repeated-jump degradation; 720p averaged 60.17 fps. GPU mip allocation rises
+from ~48 to ~192 MiB, plus CPU source storage from ~36 to ~144 MiB. These are
+calculated allocations, not physical residency. The test upscales existing pixels;
+new imagery detail, larger-file loading and production support above the existing
+4096 cap remain untested. Exact source, scope and results are in the phase 3 baseline.
+Installed data and renderer defaults are unchanged by this experiment.
+
+
+## 2026-09-09: waypoint flight slowdown — indexed water queries
+
+Repeated packaged waypoint jumps reproduced a persistent slowdown specifically
+in practice flight: mountains averaged 13.39 fps and coast 11.82 fps on the first
+cycle, falling to 9.87 fps on a later coast visit. The explorer recovered to about
+60 fps at the same destinations. Flight CPU submission reached 65–114 ms after
+loading completed. A ten-second mountain CPU profile spent 7.323 seconds in
+`inRing`, the full polygon containment loop. The smoothed coastline increased the
+work in a path queried repeatedly by the fixed 120 Hz simulation and chase camera.
+The earlier explorer-only polish acceptance did not cover this workload.
+
+GroundSampler now pre-indexes each original ring into bounded scanline buckets,
+with bounds rejection and a separate list for long edges. Queries retain the
+identical ray-crossing expression and island-hole semantics; no collision polygon
+simplification, lower simulation rate or altered assisted physics is introduced.
+The index holds at most eight references per edge and 256 buckets per ring.
+Real-theater samples at three destinations agree with the previous classifier;
+200 mountain/coast queries measured about 33×/103× faster in the local Bun probe.
+Independent review additionally passed 105,107 deterministic polygon comparisons.
+
+A separate first-visit profile found about 340 ms in shoreline triangulation.
+Water geometry now builds in one module worker with at most four outstanding
+batches; obsolete results are discarded, disposal terminates the worker and
+readiness still waits for live water. This preserves the original triangulation
+and budgets while moving its large blocking operation off the flight thread.
+
+Settled shared-edge graphs also stop recalculating and uploading unchanged
+buffers; morph changes or new topology resume updates, and the final 250 ms
+ownership-easing update is retained. Repeated-jump tools and exact before/after
+packaged measurements are recorded in the phase 3 baseline. Final six-jump flight
+averages are 59.85–60.18 fps at 1440p (60.14 fps at 720p), with first mountain/coast
+maximum frames of 50.9/48.9 ms and no pending water at each stage end.
+`bun run check` passes 135 tests / 22,098 expectations; Mac packages rebuilt.
+Water budgets now also account for extra hole triangles, and workers preserve
+16-bit indices when possible to prevent eviction/rebuild loops. Linux remains
+deferred. These changes preserve the paint, smoothing, FXAA and earlier terrain
+work; they address the user-reported runtime regression in that work.
+
+## 2026-09-09: terrain paint, coast smoothing and shared panel edges
+
+Added an optional, geographically registered satellite atlas to phases 2/3. The
+local Ukraine build uses label-free EOX Sentinel-2 cloudless 2024 at 3071×3072
+(about 183 m/pixel), with source URL/checksum, CC BY-NC-SA attribution and a persistent
+credit. Terrain installation validates/copies the optional image; missing imagery
+metadata retains the original tint. Outputs remain under ignored extracted/ and
+app data. See [terrain-polish.md](terrain-polish.md) for reproducible commands,
+provider sources, exact limitations and the local dataset path.
+
+Coast exteriors receive bounded 25 m/12.5 m corner cuts while island holes, clipping
+boundaries and point-touch junctions stay fixed. The resulting 492,147 water points
+fit the existing 500,000-point budget. All 832 height chunks remain unchanged.
+
+Independent review reproduced a 4.838429 m shared-edge mismatch from per-patch
+morph factors and discontinuous one-sided chunk normals. A shared boundary graph
+now stitches heights and lighting, with separate graphs during source fades.
+Review then reproduced a 3.376860 m ownership pop during subdivision; retained edge
+values and interpolated prior-edge samples ease the handoff over 250 ms. The
+morph interval is widened while preserving split-boundary parity. Dynamic edge
+uploads are now included in the upload estimate. Geometry coarsening and existing
+source-fade silhouette stipple remain temporal limits; this is not a claim that
+every camera path is artifact-free.
+
+An Odesa screenshot still showed ocean dashes after land stitching. A controlled
+MSAA-off comparison removed those dashes; FXAA now provides post-process edge
+smoothing without the multisample/log-depth interaction. The first imagery
+screenshot also exposed DataTexture's nearest magnification default; explicit
+linear filtering fixes the visible pixel blocks. Screenshot inspection caught
+both issues despite passing geometry tests and 60 fps counters.
+
+Verification, exact source scope, observed failures and remaining acceptance are
+recorded in [phase 3 baseline](baselines/phase-3.md). Linux remains deferred; x64
+packaging does not establish x64 launch acceptance. No flight force routines or
+retail decoder behavior changed. Next reproducible acceptance: launch the current
+Mac app, use the coast/mountain waypoints, and compare near-ground refinement
+against the recorded camera runs.
 
 ## 2026-09-09: square 20-button MFD and cartographic distance scale
 

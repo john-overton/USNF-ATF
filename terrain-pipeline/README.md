@@ -21,3 +21,14 @@ progress and fails on uncovered land, corruption, seams, or runtime water limits
 See [implementation, source attribution, and limitations](../Docs/phase-2-pipeline.md)
 and [terrain contract](../Docs/terrain-contract.md). The media-dependent seam
 regression skips explicitly when local downloaded Copernicus inputs are absent.
+
+## Optional satellite paint and coast polish
+
+Builds apply bounded sea-level water exterior smoothing with dry holes retained.
+Existing generated datasets can use `python -m pipeline smooth-coasts <manifest>`
+once. `python -m pipeline imagery <manifest> --cache extracted/terrain-source/imagery`
+fetches a cached EOX Sentinel-2 cloudless 2024 overview and reprojects it into the
+theater. `--source <rgb.tif> --attribution <credit> --license <license>` accepts a
+local raster instead. The default longer side is 3072 pixels (`--size`, cap 6144).
+Manifest JSON is compact to preserve the existing 32 MiB runtime limit. Full
+commands, source terms and resolution limits are in[terrain polish](../Docs/terrain-polish.md).

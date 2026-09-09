@@ -133,3 +133,18 @@ th {
 .terrain-panel-minimized .terrain-panel-heading {
   margin-bottom: 0;
 }
+
+.terrain-imagery-credit {
+  position: fixed;
+  bottom: 2px;
+  left: 6px;
+  right: 6px;
+  z-index: 5;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.3;
+  text-shadow:
+    0 1px 3px #000,
+    0 0 3px #000;
+  pointer-events: none;
+}

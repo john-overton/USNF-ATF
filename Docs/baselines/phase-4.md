@@ -1,5 +1,17 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: practice-flight waypoint performance
+
+See [phase 3 waypoint correction](phase-3.md#2026-09-09-waypoint-slowdown-correction)
+for the exact dirty source snapshot, packaged commands, profiles and repeated-jump
+measurements. Smoothed water polygons caused repeated full-ring collision queries
+at 120 Hz, reproducing 10–14 fps near mountain/coast waypoints. GroundSampler now
+indexes the same exact rings; flight physics, assisted-model defaults and missing
+terrain semantics are preserved. Worker triangulation also removes the major cold
+water-build stall. Synthetic parity, actual-theater query comparisons and packaged
+flight are separate evidence; this does not establish original-game flight parity.
+
+
 ## 2026-09-09: square 20-button MFD and segmented distance bar
 
 Product **ce533a3**, Apple M3/macOS arm64, Bun1.4.2/Electron44.2.0. Mac arm64

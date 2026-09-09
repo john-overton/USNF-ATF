@@ -1,5 +1,6 @@
 import type { TerrainChunk, TheaterManifest, WaterBody } from '../data';
 import type { FsRoot, Platform } from '../platform/Platform';
+import { WaterBodyIndex } from './WaterIndex';
 import { ByteCache } from '../terrain/cache';
 import { decodeChunk, sampleHeight } from '../terrain/chunk';
 
@@ -40,7 +41,7 @@ export class GroundSampler {
   private readonly data = new ByteCache<Float32Array>(8 * 1024 * 1024);
   private readonly pending = new Map<string, Promise<void>>();
   private readonly index = new Map<string, TerrainChunk>();
-  private readonly water = new Map<string, WaterBody[]>();
+  private readonly water = new Map<string, WaterBodyIndex[]>();
   private disposed = false;
   strip?: PracticeStrip;
   error = '';
@@ -53,21 +54,13 @@ export class GroundSampler {
     for (const chunk of manifest.chunks)
       this.index.set(`${chunk.lod}/${chunk.x}/${chunk.y}`, chunk);
     for (const body of manifest.waterBodies) {
-      let minX = Infinity,
-        maxX = -Infinity,
-        minZ = Infinity,
-        maxZ = -Infinity;
-      for (const [x, z] of body.polygon) {
-        minX = Math.min(minX, x);
-        maxX = Math.max(maxX, x);
-        minZ = Math.min(minZ, z);
-        maxZ = Math.max(maxZ, z);
-      }
+      const indexed = new WaterBodyIndex(body);
+      const { minX, maxX, minZ, maxZ } = indexed.exterior;
       for (let x = Math.floor(minX / 16384); x <= Math.floor(maxX / 16384); x++)
         for (let z = Math.floor(minZ / 16384); z <= Math.floor(maxZ / 16384); z++) {
           const key = `${x}/${z}`,
             items = this.water.get(key) ?? [];
-          items.push(body);
+          items.push(indexed);
           this.water.set(key, items);
         }
     }
@@ -149,9 +142,9 @@ export class GroundSampler {
     if (this.strip && onStrip(this.strip, x, z))
       return { height: this.strip.elevation, normal: { x: 0, y: 1, z: 0 }, kind: 'land' };
     for (const body of this.water.get(`${Math.floor(x / 16384)}/${Math.floor(z / 16384)}`) ?? []) {
-      if (containsWater(body, x, z))
+      if (body.contains(x, z))
         return {
-          height: Math.max(height, body.elevation),
+          height: Math.max(height, body.body.elevation),
           normal: { x: 0, y: 1, z: 0 },
           kind: 'water',
         };

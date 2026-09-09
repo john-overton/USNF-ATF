@@ -3,7 +3,7 @@ import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { decodeChunk } from '../../engine/src/terrain/chunk';
+import { decodeChunk, decodeTerrainBytes } from '../../engine/src/terrain/chunk';
 import { parseManifest } from '../../engine/src/terrain/manifest';
 
 async function exists(target: string): Promise<boolean> {
@@ -37,6 +37,10 @@ export async function installTerrain(
       throw new Error('Chunk path conflicts with manifest');
     await decodeChunk(await sourceBytes(chunk.path), chunk);
   }
+  if (manifest.imagery) {
+    const image = manifest.imagery;
+    await decodeTerrainBytes(await sourceBytes(image.path), image, image.width * image.height * 4);
+  }
   // All source content passes the same transport checks used by the renderer before destination changes.
   const parent = path.resolve(dataRoot, 'terrains');
   await mkdir(parent, { recursive: true });
@@ -62,6 +66,13 @@ export async function installTerrain(
       // Revalidate the bytes actually written: source files may have changed since the first pass.
       await decodeChunk(bytes, chunk);
       const destination = path.join(staging, chunk.path);
+      await mkdir(path.dirname(destination), { recursive: true });
+      await writeFile(destination, bytes);
+    }
+    if (manifest.imagery) {
+      const image = manifest.imagery, bytes = await sourceBytes(image.path);
+      await decodeTerrainBytes(bytes, image, image.width * image.height * 4);
+      const destination = path.join(staging, image.path);
       await mkdir(path.dirname(destination), { recursive: true });
       await writeFile(destination, bytes);
     }

@@ -2,7 +2,7 @@
 
 A non-commercial fan remake of Jane's US Navy Fighters '97 (and, later, ATF Gold), built with TypeScript, Three.js, React, and Electron. The goal is retail aircraft and missions over real-elevation terrain, using assets imported from your own copy.
 
-**Current status (2026-09-09):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, water, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. Practice flight now supports a locally imported F-14 with throttle presets, engine/gear/hook controls, retail engine sounds, moving control surfaces, a flight HUD, bracket-selected waypoints, a zoomable regional terrain map and F2/F3 chase views over the generated theater. The existing assisted flight remains the default, with separate opt-in PT-calibrated and recovered-envelope models for comparison. Combat, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
+**Current status (2026-09-09):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, stitched panel edges, water, optional georeferenced satellite paint, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. Practice flight now supports a locally imported F-14 with throttle presets, engine/gear/hook controls, retail engine sounds, moving control surfaces, a flight HUD, bracket-selected waypoints, a zoomable regional terrain map and F2/F3 chase views over the generated theater. The existing assisted flight remains the default, with separate opt-in PT-calibrated and recovered-envelope models for comparison. Combat, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
 
 Start with [progress and review findings](Docs/progress.md), the [build plan](Docs/build-plan.md) (phase order and exit criteria), and the [design brief](Docs/usnf-atf-plan.md). Contributor and agent instructions are in [AGENTS.md](AGENTS.md). The [full US Navy Fighters manual](Docs/reference/JANES_US_NAVY_FIGHTERS_djvu.txt) is available locally; [reference details](Docs/reference/README.md) record its source and checksum.
 
@@ -66,6 +66,9 @@ For a quick offline fixture, replace fetch/build with
 `PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline fixture --output extracted/terrain/synthetic`.
 Fixtures are explicitly labeled synthetic; install only the dataset you intend
 to view. Existing installed theaters require the installer's `--replace` option.
+
+The [terrain polish guide](Docs/terrain-polish.md) covers optional label-free satellite
+paint, bounded coastline smoothing and shared panel edges.
 
 See the [pipeline guide](Docs/phase-2-pipeline.md), [renderer guide](Docs/phase-3-renderer.md),
 and [packaged smoke/installation tools](tools/terrain/README.md) for full commands

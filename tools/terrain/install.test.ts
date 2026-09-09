@@ -121,3 +121,20 @@ test('rejects source symlinks outside the terrain folder without changing user d
     );
   });
 });
+
+test('imagery installs with validation and corrupt replacement preserves the old theater', async () => {
+  await fixture(async (source, data) => {
+    const manifestPath = path.join(source, 'manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    const bytes = Bun.gzipSync(new Uint8Array(4 * 4 * 4).fill(123));
+    manifest.imagery = { path: 'paint.gz', width: 4, height: 4, byteLength: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'), attribution: 'Synthetic RGB', license: 'CC0' };
+    await writeFile(path.join(source, 'paint.gz'), bytes);
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    const target = await installTerrain(source, data);
+    expect(await readFile(path.join(target, 'paint.gz'))).toEqual(Buffer.from(bytes));
+    await writeFile(path.join(source, 'paint.gz'), new Uint8Array(bytes.length));
+    await failure(installTerrain(source, data, true), 'checksum');
+    expect(await readFile(path.join(target, 'paint.gz'))).toEqual(Buffer.from(bytes));
+  });
+});

@@ -283,3 +283,45 @@ test('measured full-theater water component counts fit while body and vertex cap
     parseManifest(JSON.stringify({ ...manifest, waterBodies: Array(6).fill(large) })),
   ).toThrow('vertex budget');
 });
+
+test('optional imagery rejects excessive size and conflicting paths; decode is bounded', async () => {
+  const image = {
+    path: 'paint.gz',
+    width: 2,
+    height: 2,
+    byteLength: 20,
+    sha256: 'a'.repeat(64),
+    attribution: 'Synthetic',
+    license: 'CC0',
+  };
+  expect(parseManifest(JSON.stringify({ ...manifest, imagery: image })).imagery?.width).toBe(2);
+  expect(
+    parseManifest(JSON.stringify({ ...manifest, imagery: { ...image, width: 6144, height: 6144 } }))
+      .imagery?.width,
+  ).toBe(6144);
+  for (const bad of [
+    { width: 6145 },
+    { width: 1 },
+    { byteLength: 1.5 },
+    { path: '../paint.gz' },
+    { path: chunk.path },
+    { path: 'manifest.json' },
+  ])
+    expect(() =>
+      parseManifest(JSON.stringify({ ...manifest, imagery: { ...image, ...bad } })),
+    ).toThrow();
+  const { decodeTerrainBytes } = await import('./chunk');
+  const { bytes, metadata } = await compressed(new Uint8Array(17));
+  for (const [size, message] of [
+    [16, 'exceeds'],
+    [18, 'Truncated'],
+  ] as const)
+    await decodeTerrainBytes(bytes, metadata, size).then(
+      () => {
+        throw new Error('Expected bounded decode failure');
+      },
+      (error: unknown) => {
+        expect(String(error)).toContain(message);
+      },
+    );
+});

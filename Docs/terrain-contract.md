@@ -18,6 +18,8 @@ Manifest JSON schemaVersion 1:
 - attribution: array of strings; source: string (explicitly identifies synthetic fixtures)
 - chunks: array of {lod, x, y, path, originX, originZ, spacing, size, offset, scale,
   minElevation, maxElevation, byteLength, sha256}
+- imagery?: {path, width, height, byteLength, sha256, attribution, license}
+- coastSmoothing?: producer provenance (method, passes, cut distances; runtime ignores this metadata)
 - waterBodies: array of {id, elevation, polygon: array of [x,z] pairs,
   holes?: array of interior rings (each an array of [x,z] pairs)}
 
@@ -40,3 +42,26 @@ Water rings preserve dry islands explicitly. The initial row-rectangle
 decomposition created 80,660 surfaces in the first Ukraine run; hole rings
 avoid duplicating a water body into thousands of drawables. The renderer loads
 water geometry within the visible horizon and accounts for its memory budget.
+
+## Optional paint atlas (2026-09-09)
+
+Imagery is gzip-compressed, interleaved RGBA8 (sRGB color, opaque alpha), with
+width×height×4 inflated bytes. Dimensions are integers 2..6144; compressed length
+is bounded to 152MiB and verified with SHA-256. Rows run south to north, columns
+west to east. Pixels are area cells: pixel centres map to ((i+0.5)/width,
+(j+0.5)/height) of the full projected theater extents. Render UV=(worldX/widthMeters,
+worldZ/heightMeters); all LODs use this same registration. Edge sampling clamps.
+No implicit latitude/longitude stretching or per-panel texture origin.
+
+The path is safe and manifest-relative, cannot conflict with the manifest or a
+chunk, and is copied/revalidated by the terrain installer. Missing imagery files,
+corrupt transport or invalid inflated dimensions fail a declared imagery load.
+Absent imagery retains original elevation colors. Producers require full RGB
+coverage and explicit source attribution/license; runtime displays these credits.
+
+Coast smoothing cuts only existing sea-level polygon exteriors. Dry interior
+rings, clipped theater edges and repeated point-touch junctions are fixed. A
+25m pass is followed by a 12.5m pass on exteriors with at least 16 original points;
+each cut is also limited to one quarter of its adjacent edge. Existing runtime
+body/point budgets remain enforced. This is mask-derived visualization polish,
+not a claim of newly surveyed shoreline accuracy.

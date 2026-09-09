@@ -1,4 +1,4 @@
-import { BufferGeometry, Float32BufferAttribute } from 'three';
+import { BufferGeometry, Float32BufferAttribute, DynamicDrawUsage } from 'three';
 import type { TerrainChunk } from '../data';
 import { sampleHeight } from './chunk';
 import { PATCH_CELLS, type Patch } from './lod';
@@ -35,6 +35,7 @@ export function buildPatch(
   const positions: number[] = [],
     coarse: number[] = [],
     colors: number[] = [],
+    uvs: number[] = [],
     indices: number[] = [];
   const step = patch.span / PATCH_CELLS;
   const maxX = Math.min(255, ((extents?.width ?? Infinity) - chunk.originX) / chunk.spacing);
@@ -51,6 +52,10 @@ export function buildPatch(
     const h = sampleHeight(samples, sx, sz),
       drop = skirt ? Math.max(100, chunk.maxElevation - chunk.minElevation + 10) : 0;
     const index = positions.length / 3;
+    uvs.push(
+      (chunk.originX + x) / (extents?.width ?? 255 * chunk.spacing),
+      (chunk.originZ + z) / (extents?.height ?? 255 * chunk.spacing),
+    );
     positions.push(x - patch.x, h - drop, z - patch.z);
     coarse.push(coarseAt((px, pz) => sampleHeight(samples, px, pz), sx, sz) - drop);
     const tint = Math.max(0, Math.min(1, h / 2500));
@@ -81,6 +86,7 @@ export function buildPatch(
     indices.push(edge[i]!, edge[n]!, bottoms[i]!, edge[n]!, bottoms[n]!, bottoms[i]!);
   }
   const geometry = new BufferGeometry();
+  geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
   geometry.setAttribute('coarseHeight', new Float32BufferAttribute(coarse, 1));
   geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
@@ -123,6 +129,16 @@ export function buildPatch(
     coarseColors.push(0.19 + tint * 0.34, 0.31 + tint * 0.27, 0.13 + tint * 0.4);
   }
   geometry.setAttribute('coarseColor', new Float32BufferAttribute(coarseColors, 3));
+  const count = positions.length / 3;
+  geometry.setAttribute(
+    'seamHeight',
+    new Float32BufferAttribute(new Float32Array(count), 1).setUsage(DynamicDrawUsage),
+  );
+  geometry.setAttribute(
+    'seamNormal',
+    new Float32BufferAttribute(new Float32Array(count * 3), 3).setUsage(DynamicDrawUsage),
+  );
+  geometry.setAttribute('seamWeight', new Float32BufferAttribute(new Float32Array(count), 1));
   geometry.computeBoundingSphere();
   const bytes =
     Object.values(geometry.attributes).reduce((sum, a) => sum + a.array.byteLength, 0) +

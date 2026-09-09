@@ -60,6 +60,9 @@ export function TerrainViewer() {
   }, [request]);
   return (
     <div className="probe-root">
+      {stats?.imageryAttribution && (
+        <small className="terrain-imagery-credit">{stats.imageryAttribution}</small>
+      )}
       <canvas
         id="terrain-canvas"
         ref={canvas}
@@ -356,7 +359,7 @@ export function TerrainViewer() {
                 </dd>
                 <dt>CPU + geometry cache estimate</dt>
                 <dd>{(stats.cacheBytes / 1048576).toFixed(1)} MiB</dd>
-                <dt>Geometry created (upload estimate)</dt>
+                <dt>Geometry / edge uploads (estimate)</dt>
                 <dd>{(stats.uploadBytesPerSecond / 1048576).toFixed(2)} MiB/s</dd>
                 <dt>Water batches / omitted by budget</dt>
                 <dd>

@@ -27,7 +27,9 @@ ATTRIBUTION = [
 
 
 def dump(path, obj):
-    Path(path).write_text(json.dumps(obj, indent=2, allow_nan=False) + "\n")
+    compact = Path(path).name == 'manifest.json'
+    Path(path).write_text(json.dumps(obj, indent=None if compact else 2,
+                                    separators=(',', ':') if compact else None, allow_nan=False) + "\n")
 
 
 def tile_name(lat, lon):
@@ -273,6 +275,8 @@ def build(config, output, source):
         if any(c['lod']==lod for c in manifest['chunks']):
             manifest['lods'].append(lod)
         print(f'built LOD {lod}: {sum(c["lod"]==lod for c in manifest["chunks"])} chunks',flush=True)
+    from .coast import smooth_coasts
+    smooth_coasts(manifest)
     dump(output/'manifest.json',manifest)
     import subprocess
     revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
@@ -284,7 +288,10 @@ def build(config, output, source):
 
 
 def probe(path):
-    manifest=json.loads(path.read_text())
+    text=path.read_text()
+    if len(text)>32*1024*1024:
+        raise ValueError('Manifest exceeds 32 MiB')
+    manifest=json.loads(text)
     if manifest.get('schemaVersion')!=1 or not manifest.get('chunks'):
         raise ValueError('invalid/empty terrain manifest')
     width,height=manifest['extents']['width'],manifest['extents']['height']
@@ -325,6 +332,19 @@ def probe(path):
             for y in range(math.ceil(height/(255*SPACINGS[lod]))):
                 if (lod,x,y) not in cache:
                     raise ValueError('missing base/coarse coverage')
+    if 'imagery' in manifest:
+        image=manifest['imagery']; w,h=image['width'],image['height']
+        if not all(isinstance(n,int) and 2<=n<=6144 for n in (w,h)):
+            raise ValueError('invalid imagery dimensions')
+        target=(path.parent/image['path']).resolve()
+        if not target.is_relative_to(path.parent.resolve()):
+            raise ValueError('imagery path escapes manifest folder')
+        data=target.read_bytes()
+        if not 1 <= len(data) <= 152*1024*1024 or len(data)!=image['byteLength'] or hashlib.sha256(data).hexdigest()!=image['sha256']:
+            raise ValueError('imagery checksum/length mismatch')
+        with gzip.GzipFile(fileobj=io.BytesIO(data)) as stream:
+            if len(stream.read(w*h*4+1))!=w*h*4:
+                raise ValueError('invalid inflated imagery size')
     max_seam=0
     for (lod,x,y),(vals,c) in cache.items():
         for neighbour,edge in [((lod,x+1,y),'east'),((lod,x,y+1),'north')]:
@@ -388,11 +408,30 @@ def main():
     for command in ['fetch','build','fixture']:
         p=sub.add_parser(command);p.add_argument('--config',type=Path,default=Path('theaters/ukraine.json'));p.add_argument('--output',type=Path,required=True)
         if command=='build':p.add_argument('--source',type=Path,required=True)
+    p=sub.add_parser('imagery');p.add_argument('manifest',type=Path)
+    p.add_argument('--source',type=Path);p.add_argument('--cache',type=Path)
+    p.add_argument('--size',type=int,default=3072);p.add_argument('--attribution');p.add_argument('--license')
+    p=sub.add_parser('smooth-coasts');p.add_argument('manifest',type=Path)
     sub.add_parser('probe').add_argument('manifest',type=Path)
     sub.add_parser('compare-compression').add_argument('manifest',type=Path)
     args=parser.parse_args()
     try:
-        if args.command=='probe': result=probe(args.manifest)
+        if args.command=='imagery':
+            from .imagery import add_imagery, fetch_eox
+            if args.source:
+                if not args.attribution or not args.license:
+                    raise ValueError('local imagery requires --attribution and --license')
+                result=add_imagery(args.manifest,args.source,args.attribution,args.license,args.size)
+            elif args.cache:
+                result=fetch_eox(args.manifest,args.cache,args.size)
+            else:raise ValueError('imagery requires --source or --cache for EOX')
+        elif args.command=='smooth-coasts':
+            from .coast import smooth_coasts
+            manifest=json.loads(args.manifest.read_text())
+            smooth_coasts(manifest)
+            dump(args.manifest,manifest)
+            result=probe(args.manifest)
+        elif args.command=='probe': result=probe(args.manifest)
         elif args.command=='compare-compression': result=compare_compression(args.manifest)
         else:
             config=json.loads(args.config.read_text())

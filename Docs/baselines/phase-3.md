@@ -1,5 +1,228 @@
 # Phase 3 baseline: packaged terrain on Apple M3
 
+## 2026-09-09: four-times-texture-pixels allocation experiment
+
+Same Apple M3, toolchain and corrected packaged binary as the waypoint entry below.
+User asked about texture resolution, not terrain vertices. Scope is four times the
+texel count: 3071×3072 → 6142×6144, doubling each axis. Actual higher-resolution
+georeferenced imagery would improve approximately 183 m/pixel to 92 m/pixel.
+
+```sh
+bun tools/terrain/waypoint-performance.ts --flight --retail --720p --texture-4x --assert-recovery --out extracted/terrain-texture-4x
+```
+
+This is a CDP-injected WebGL allocation/sampling experiment on the unchanged
+product binary and original atlas. It expands existing pixels, allocates and
+uploads exactly one larger texture with a full mip chain, and retains its CPU
+buffer. It is not a visual-detail comparison or larger-source download/decompression
+benchmark. The production 4096 dimension cap remains unchanged. Startup pixel
+expansion took 30 ms; this synthetic copy is not a production loading measurement.
+Renderer cache diagnostics retain original atlas accounting, so experimental bytes
+come from the separate `texture-allocation.json`, not those aggregate counters.
+
+| Atlas storage | Current | Four-times pixels |
+|---|---:|---:|
+| RGBA CPU buffer | 35.99 MiB | 143.95 MiB |
+| GPU texture including mipmaps (calculated allocation) | 47.98 MiB | 191.93 MiB |
+| Combined expected CPU + GPU allocation | 83.96 MiB | 335.88 MiB |
+
+These are logical allocations, not physical Metal residency measurements. The
+experiment additionally retains the original 35.99 MiB source; a native larger
+DataTexture would not need that extra copy. Hardware MAX_TEXTURE_SIZE was 16384.
+The atlas is resident across jumps; only its initial upload grows, not the ground
+vertex count or draw calls. More detailed source pixels could have different cache
+behavior; actual higher-resolution dataset loading and appearance remain untested.
+
+Binary source is the waypoint snapshot below. Experiment source copies/checksums
+live in `extracted/terrain-texture-4x/source/`: waypoint-performance.ts SHA-256
+`43d0381a205b9c8c60f0ce629d288fc30874821902b5df6e5de8b234e7251a7b`,
+texture-allocation-probe.js SHA-256
+`793e8534a75ad4a7d8fe66e6d78258607453adc4fe390b718bc889bfd00ab156`.
+The earlier source map preserves the version used for normal waypoint acceptance.
+
+Observed: six jumps averaged 59.86/59.89/60.12/60.17/60.16/60.12 fps at 1440p;
+final two-second windows were 59.99–60.02 fps. First mountain/coast peak frames
+were 50.0/50.0 ms, versus 50.9/48.9 ms with the normal atlas. Repeat jumps peaked
+at 17.7 ms. Final 720p averaged 60.17 fps. All stages ended ready with zero pending
+water, no runtime errors and passing recovery assertions. Within this 60 Hz test,
+there was no measurable sustained frame-rate loss or accumulated degradation.
+No uncapped GPU headroom claim follows from a vsync-limited result.
+
+Next step for actual sharper imagery is an isolated higher-resolution source build,
+with a larger validated atlas budget or tiled textures, followed by startup and
+visual checks. This experiment does not change installed terrain or product limits.
+
+
+## 2026-09-09: waypoint slowdown correction
+
+Machine/toolchain: Apple M3 arm64, macOS 26.6.2 (25G83), Bun 1.4.2,
+Node 22.14.0, Three.js 0.185.1, Electron 44.2.0 / Chromium 152.0.7977.76.
+Scope: packaged Mac arm64, polished Ukraine terrain, 2560×1440 and a final
+1280×720 sample. x64 packaging is not an x64 launch test; Linux is deferred.
+
+Source: uncommitted working tree based on
+`4e3f22667a31e3c1dae575ccc8d4e89a76974eaa`. Changed source/test bytes and tracked
+patch are preserved under `extracted/terrain-waypoints-source/`; source-files.json
+SHA-256 is `af800cc989a21242ec282858a48b3beb3307f9874594fcff43cc11137bc96f32`.
+Copies use `.txt` suffixes so Bun does not rediscover copied tests. Documentation
+was written after testing and is not claimed to be part of the measured binary.
+
+Reproduction and diagnosis:
+
+- Before: six flight jumps mountain/coast/runway twice averaged
+  13.39/11.82/60.18/12.87/9.87/60.17 fps. Last-frame CPU at mountain/coast was
+  65–114 ms; the first mountain jump's longest frame was 715.8 ms. Explorer
+  recovered to ~60 fps, so earlier explorer-only acceptance missed this regression.
+- A ten-second mountain CPU profile spent 7.323 seconds in full-ring `inRing`.
+  The new scanline index preserves exact crossing and hole semantics, with at
+  most eight references per edge and 256 buckets per ring. It does not simplify
+  collision coastlines or change assisted physics / the fixed 120 Hz simulation.
+- Real-theater benchmark: all 600 sampled classifications agree with the old
+  classifier. For 200 queries, mountain 74.77→2.28 ms; coast 60.20→0.585 ms;
+  runway 0.617→0.121 ms. Index construction took 17.59 ms in Bun. These are
+  CPU microbenchmarks, not frame-rate predictions.
+- Indexing recovered frame rate but a cold jump still blocked ~383 ms. A separate
+  imported-F14 profile identified ~340 ms of Earcut triangulation in that first
+  second. Geometry now builds in one worker, with four outstanding jobs maximum,
+  stale-result disposal, explicit errors and readiness until live water arrives.
+- Review caught an underestimate for polygons with holes: ten vertices/two holes
+  estimated 360 bytes but require 384 with uint32 indices. Selection now reserves
+  `36N + 24H` bytes and the worker retains uint16 indices where possible, preventing
+  selected geometry from evicting itself and rebuilding at the cache limit.
+- Unchanged settled seam graphs skip recalculation and uploads; moving morphs and
+  ownership easing still update. Independent review passed 105,107 deterministic
+  indexed/reference polygon comparisons and found no further worker lifecycle defect.
+
+Commands and artifacts:
+
+```sh
+bun tools/terrain/waypoint-performance.ts --flight --out extracted/terrain-waypoints-flight-before
+bun tools/terrain/waypoint-performance.ts --flight --ids 2 --profile-jump --out extracted/terrain-waypoints-flight-profile-before
+bun tools/terrain/water-query-benchmark.ts > extracted/terrain-waypoints-water-query.json
+bun run check
+bun run build
+bun tools/terrain/waypoint-performance.ts --flight --retail --720p --assert-recovery --out extracted/terrain-waypoints-flight-accepted
+bun tools/terrain/waypoint-performance.ts --ids 2,3,1 --assert-recovery --out extracted/terrain-waypoints-explorer-final
+```
+
+The first two commands were run against the earlier polish binary, before rebuilding.
+Each waypoint is clicked through the product UI and measured for ten seconds;
+recovery assertions require at least 50 fps over the final two seconds. Timing starts
+after the click returns; it includes subsequent loading but is not a measurement of
+synchronous click-handler latency. Before flight used the placeholder aircraft;
+after flight additionally loads the local F-14 model/profile/audio, retaining the
+preserved assisted model. Audio context was locked in automation; this is not audio
+playback acceptance. Raw per-frame records, summaries, CPU profiles and final
+screenshots live in the respective ignored output directories.
+
+Verification: `bun run check` passes 135 tests / 22,098 expectations, including exact
+water-query parity, boundary cases, idle seam uploads, bounded/stale worker jobs,
+disposal, explicit errors and hole budget regression. An earlier check discovered
+copied test sources in the prior ignored polish snapshot; those copies were renamed
+`.ts.txt`. Intermediate typecheck/lint failures (attribute version access and a
+non-type-only import) were corrected before the passing check. An automation poll
+initially treated false as ready; the script was corrected before recorded runs.
+No Python producer changed in this correction; prior pipeline acceptance stands.
+
+Final packaged flight: six jumps averaged 59.85/59.89/60.18/60.16/60.14/60.15 fps;
+all final two-second windows were 59.97–60.03 fps. First mountain/coast maximum
+frames were 50.9/48.9 ms; repeat jumps peaked at 17.8 ms. The final 720p sample
+averaged 60.14 fps. Every stage ended ready with zero pending/omitted water batches
+and runtime-errors.json was empty. Mac packaging passed in 26.7 seconds.
+These results establish recovery, not zero loading stalls or performance on other
+hardware. A separate explorer run also passed the recovery assertions; settled
+stationary seam uploads were zero. Next reproducible step is the same repeated-jump
+command on the user's session; restart the rebuilt app to load this code.
+
+
+
+## 2026-09-09: satellite paint, shared edges, coastline and FXAA acceptance
+
+Machine: Apple M3 / arm64, macOS 26.6.2 (25G83), Bun 1.4.2, Node 22.14.0,
+Python 3.14.6, Three.js 0.185.1, Electron 44.2.0 / Chromium 152.0.7977.76.
+Hardware probe: ANGLE Metal Renderer Apple M3; WebGL2, not software rendering.
+Scope: fresh Mac arm64 packaged renderer with real Ukraine DEM/WBM and optional
+EOX 2024 imagery. Linux remains deferred. x64 DMG/ZIP built, no x64 launch claim.
+
+Source: **uncommitted working tree based on
+`4e3f22667a31e3c1dae575ccc8d4e89a76974eaa`**, not the unchanged base commit.
+`extracted/terrain-polish-source/source-files.json` records every changed code/test
+file checksum. Its canonical source-file-map SHA-256 is
+`aaf6bb009de2a154439bd4ed6a766e35ff315f34bfb79d7547cc3d8fd76314e4`.
+The same folder preserves changed source files and the tracked patch. Reports
+record the base commit plus working-tree status. Documentation added afterward
+is not claimed to have existed during the binary runs.
+
+Final commands (all from repository root):
+
+```sh
+bun run check
+PYTHONPATH=terrain-pipeline .venv/bin/python -m unittest discover -s terrain-pipeline/tests
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline probe extracted/terrain/ukraine-polished/manifest.json
+bun run build
+bun tools/terrain/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --terrain extracted/terrain/ukraine-polished --out extracted/terrain-polish-odesa-accepted --camera '219144.16245100333,1800,267020.80352811713,-1.5707963267948966,-0.35' --seconds 10
+bun tools/terrain/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --terrain extracted/terrain/ukraine-polished --out extracted/terrain-polish-detail-accepted --camera '470475,1293.3447265625,49725,3.141592653589793,-0.2' --seconds 10 --transition-flight
+bun tools/terrain/install.ts --terrain extracted/terrain/ukraine-polished --data-root "$HOME/Library/Application Support/usnf-atf/data" --replace
+```
+
+`bun run check`: 128 tests, 9186 expectations, all pass; strict typecheck, lint,
+format all pass. Python: 15 tests, no failures or skips, including locally supplied
+Copernicus shared-border queries. Only rasterio/Affine deprecation warnings.
+Probe: 832 chunks, no checksum/coverage/edge failures; details in phase 2 baseline.
+Installer passes and installs the polished Ukraine theater to the displayed app
+root. `git diff --check` passes; staged diff is empty. No push or commit.
+
+| Final packaged run | Mean fps | p95 frame ms | Moving mean / p95 ms | Final cache estimate |
+|---|---:|---:|---:|---:|
+| Odesa |60.0196|18.5|16.5659 /18.5|155745244 bytes|
+| Mountain/detail |60.0550|18.5|16.7633 /18.6|174892752 bytes|
+
+Both use 2560×1440 with zero runtime errors and zero omitted water batches.
+The detail route completes 0→1→0. Unperturbed six-second ascent/descent stages:
+mean 16.7855/16.6476 ms, p95 18.6/18.5ms, p99 18.7/18.7ms. Timings include the
+stationary tail as documented by the harness. Final CPU submission samples were
+4.3 ms coast / 6.1 ms detail; these single samples are not CPU percentiles.
+Dynamic edge upload estimates were about 41.9/58.3 MB/s at final samples. This
+includes work that the prior geometry-created-only estimate omitted. Cache now
+includes CPU atlas pixels, estimated GPU mipmaps and approximately 59 MB of
+post-process targets. These estimates are not native GPU memory/DRAM counters.
+
+Visual inspection: accepted coast and detail `terrain.png` screenshots show
+registered, smoothly filtered low-resolution terrain paint and no broad missing
+panels. The ocean's former dashed triangle lines are absent, and sky/fog colors
+match again. Coast corners are softened conservatively; the original 100 m mask
+shape is still apparent. This is not photogrammetric coast reconstruction.
+Earlier `terrain-polish-detail-final/transition-*.png` captures inspected the
+same terrain/seam implementation before the background-color-only correction;
+those captures perturb timing and are not used for final transition performance.
+The existing screen-door source fade and coarse silhouette changes remain limits.
+Coarsening can still lose fine boundary curvature, and fallback height tint is
+not a shared color field. No assertion that every near-ground camera path is
+perfectly seamless. Prior 1↔2/24km lateral evidence below predates this polish.
+
+Observed failures/corrections, retained rather than counted as passes:
+
+- Initial seam graph review found a 3.376860 m ownership pop; regression and 250 ms
+  retained-edge easing added before accepted runs.
+- Initial imagery screenshot used DataTexture nearest magnification. Explicit
+  linear magnification fixes its pixel blocks.
+- Odesa MSAA/log-depth run retained water dashes; the controlled `odesa-no-msaa`
+  screenshot removed them. Final pipeline uses FXAA with MSAA disabled.
+- Two-pass coast polygons written as indented JSON exceeded the 32 MiB runtime
+  guard; the smoke correctly failed. Compact producer output is 12,277,911 bytes
+  and passes the unchanged guard.
+- First FXAA screenshot showed a bright background/hard fog horizon. A scene-owned
+  background fixes RenderPass's clear-color-space interaction; final accepted
+  screenshots were inspected after rebuilding.
+- Full-check lint caught invalid awaited Bun assertion typings and an untyped
+  FXAA resolution uniform call. Both corrected; final full check passes.
+
+Next reproducible step: open the rebuilt Mac app with the installed theater,
+select coast/mountain waypoints, and assess near-ground motion visually. The
+higher-resolution imagery/detail-streaming decision remains separate from this
+bounded regional atlas. Linux remains deferred and Windows phase 9 remains planned.
+
+
 ## 2026-09-08: source fades and mesh transition polish
 
 Current packaged source **`12851d8`**, including renderer commits `05d0ecd`,

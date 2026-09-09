@@ -28,7 +28,17 @@ export interface WaterBody {
   readonly polygon: readonly (readonly [number, number])[];
   readonly holes?: readonly (readonly (readonly [number, number])[])[];
 }
+export interface TerrainImagery {
+  readonly path: string;
+  readonly width: number;
+  readonly height: number;
+  readonly byteLength: number;
+  readonly sha256: string;
+  readonly attribution: string;
+  readonly license: string;
+}
 export interface TheaterManifest {
+  readonly imagery?: TerrainImagery;
   readonly schemaVersion: 1;
   readonly id: string;
   readonly name: string;

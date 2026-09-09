@@ -1,4 +1,4 @@
-import type { TerrainChunk, TheaterManifest } from '../data';
+import type { TerrainChunk, TerrainImagery, TheaterManifest } from '../data';
 import { LOD_METERS, type LodLevel } from './index';
 
 function object(value: unknown): Record<string, unknown> {
@@ -147,8 +147,43 @@ export function parseManifest(text: string): TheaterManifest {
       ...(holes ? { holes } : {}),
     };
   });
+  let imagery: TerrainImagery | undefined;
+  if (m.imagery !== undefined) {
+    const image = object(m.imagery);
+    const path = safeRelativePath(image.path);
+    const width = coordinate(image.width),
+      height = coordinate(image.height);
+    const byteLength = coordinate(image.byteLength),
+      sha256 = string(image.sha256);
+    if (
+      width < 2 ||
+      height < 2 ||
+      width > 6144 ||
+      height > 6144 ||
+      byteLength < 1 ||
+      byteLength > 152 * 1024 * 1024 ||
+      !/^[0-9a-f]{64}$/.test(sha256)
+    )
+      throw new Error('Invalid imagery dimensions/transport');
+    if (
+      path === 'manifest.json' ||
+      path.startsWith('manifest.json/') ||
+      [...paths].some((p) => p === path || p.startsWith(path + '/') || path.startsWith(p + '/'))
+    )
+      throw new Error('Imagery path conflicts with terrain files');
+    imagery = {
+      path,
+      width,
+      height,
+      byteLength,
+      sha256,
+      attribution: string(image.attribution),
+      license: string(image.license),
+    };
+  }
   return {
     schemaVersion: 1,
+    ...(imagery ? { imagery } : {}),
     id: string(m.id),
     name: string(m.name),
     projection: { crs: string(p.crs), originX: finite(p.originX), originY: finite(p.originY) },

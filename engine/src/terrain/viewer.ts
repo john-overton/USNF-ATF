@@ -1,5 +1,9 @@
 import {
   AmbientLight,
+  DataTexture,
+  SRGBColorSpace,
+  LinearMipmapLinearFilter,
+  LinearFilter,
   Color,
   DirectionalLight,
   DoubleSide,
@@ -16,8 +20,9 @@ import type { FsRoot, Platform } from '../platform/Platform';
 import { probeWebGL2 } from '../render/glProbe';
 import { ByteCache } from './cache';
 import { initialCamera } from './camera';
+import { WaterWorkerBuilder } from './water-worker-client';
 import { WaterLayer } from './water';
-import { decodeChunk } from './chunk';
+import { decodeChunk, decodeTerrainBytes } from './chunk';
 import {
   floatingOrigin,
   patchMorph,
@@ -29,10 +34,13 @@ import {
 } from './lod';
 import { parseManifest, safeRelativePath } from './manifest';
 import { buildPatch } from './mesh';
+import { TerrainAntialias } from './antialias';
+import { TerrainSeams, type SeamPatch } from './seams';
 import { SourceTransition } from './transition';
 import { waypointDestination, type TeleportWaypoint } from './teleport';
 
 export interface TerrainDiagnostics {
+  imageryAttribution?: string;
   flight?: FlightDiagnostics;
   status: 'loading' | 'ready' | 'error';
   error: string;
@@ -87,6 +95,7 @@ interface PatchResource {
   x: number;
   z: number;
   bytes: number;
+  seam: SeamPatch;
 }
 
 export function startTerrainViewer(
@@ -104,24 +113,28 @@ export function startTerrainViewer(
   let flight: FlightLayer | undefined;
   const renderer = new WebGLRenderer({
     canvas,
-    antialias: true,
+    antialias: false,
     powerPreference: 'high-performance',
     // Preserve depth separation for terrain and manifest water across kilometer views.
     logarithmicDepthBuffer: true,
   });
   // CSS pixels, intentionally 1:1: 2560x1440 means a measured 1440p drawing buffer.
   renderer.setPixelRatio(1);
+  renderer.info.autoReset = false;
   renderer.setClearColor(new Color(0x91b1c8));
   void platform.diagnostics.reportProbe(
     probeWebGL2(renderer.getContext() as WebGL2RenderingContext),
   );
   const scene = new Scene();
+  // Scene-owned background clears in the render target’s linear color space.
+  scene.background = new Color(0x91b1c8);
   scene.fog = new Fog(0x91b1c8, 80000, 180000);
   scene.add(new AmbientLight(0xffffff, 1.7));
   const sun = new DirectionalLight(0xfff0d0, 2.4);
   sun.position.set(-1, 2, -0.5);
   scene.add(sun);
   const camera = new PerspectiveCamera(60, 1, 5, 400000);
+  const antialias = new TerrainAntialias(renderer, scene, camera);
   const world: WorldPosition = { x: 0, y: 4000, z: 0 };
   let yaw = 0,
     pitch = -0.45;
@@ -133,9 +146,13 @@ export function startTerrainViewer(
   });
   const transition = new SourceTransition();
   const outgoing = new Set<string>();
+  let seamSignature = '';
+  let seams: TerrainSeams[] = [];
   const visible = new Set<string>(),
     pending = new Set<string>(),
     failed = new Set<string>();
+  let imagery: DataTexture | undefined;
+  let imageryBytes = 0;
   let water: WaterLayer | undefined;
   let reportedWaterBytes = 0;
   let desired: TerrainChunk[] = [],
@@ -242,6 +259,7 @@ export function startTerrainViewer(
     const w = canvas.clientWidth || 1280,
       h = canvas.clientHeight || 800;
     renderer.setSize(w, h, false);
+    antialias.resize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     d.width = w;
@@ -291,15 +309,39 @@ export function startTerrainViewer(
     const text = await platform.fs.readText(root, path);
     const m = parseManifest(text);
     if (disposed) return;
+    if (m.imagery) {
+      const meta = m.imagery;
+      if (Math.max(meta.width, meta.height) > renderer.capabilities.maxTextureSize)
+        throw new Error('Terrain imagery exceeds this GPU’s texture size limit');
+      const pixels = await decodeTerrainBytes(
+        await platform.fs.readBytes(root, folder + meta.path),
+        meta,
+        meta.width * meta.height * 4,
+      );
+      if (disposed) return;
+      imagery = new DataTexture(pixels, meta.width, meta.height);
+      imagery.colorSpace = SRGBColorSpace;
+      imagery.generateMipmaps = true;
+      imagery.minFilter = LinearMipmapLinearFilter;
+      imagery.magFilter = LinearFilter;
+      imagery.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      imagery.needsUpdate = true;
+      imageryBytes = pixels.byteLength + Math.ceil((pixels.byteLength * 4) / 3);
+      d.uploadBytesTotal += Math.ceil((pixels.byteLength * 4) / 3);
+      d.imageryAttribution = meta.attribution + ' · ' + meta.license;
+    }
     manifest = m;
     d.name = m.name;
     d.source = m.source;
-    d.attribution = m.attribution;
+    d.attribution = [
+      ...m.attribution,
+      ...(m.imagery ? [m.imagery.attribution, m.imagery.license] : []),
+    ];
     const pose = initialCamera(m, window.location.search);
     Object.assign(world, pose.position);
     yaw = pose.yaw;
     pitch = pose.pitch;
-    water = new WaterLayer(scene, m.waterBodies);
+    water = new WaterLayer(scene, m.waterBodies, new WaterWorkerBuilder());
     if (flightMode) {
       const layer = await FlightLayer.create(scene, m, platform, root, folder);
       if (disposed) {
@@ -318,6 +360,7 @@ export function startTerrainViewer(
       lastSelect = now;
       const horizon = viewDistance(world);
       water?.select(world, horizon);
+      if (water?.error) fail(new Error(water.error));
       if (scene.fog instanceof Fog) {
         scene.fog.near = horizon * 0.65;
         scene.fog.far = horizon;
@@ -368,7 +411,8 @@ export function startTerrainViewer(
         if (!resource) {
           const built = buildPatch(chunk, samples, patch, manifest.extents),
             material = new MeshStandardMaterial({
-              vertexColors: true,
+              vertexColors: !imagery,
+              map: imagery ?? null,
               roughness: 1,
               side: DoubleSide,
             });
@@ -380,19 +424,19 @@ export function startTerrainViewer(
             shader.uniforms.sourceFade = fadeUniform;
             shader.uniforms.sourceOutgoing = outgoingUniform;
             shader.vertexShader =
-              'attribute float coarseHeight;\nattribute vec3 coarseNormal;\nattribute vec3 coarseColor;\nuniform float terrainMorph;\n' +
+              'attribute float seamHeight;\nattribute vec3 seamNormal;\nattribute float seamWeight;\nattribute float coarseHeight;\nattribute vec3 coarseNormal;\nattribute vec3 coarseColor;\nuniform float terrainMorph;\n' +
               shader.vertexShader;
             shader.vertexShader = shader.vertexShader.replace(
               '#include <begin_vertex>',
-              '#include <begin_vertex>\ntransformed.y=mix(position.y,coarseHeight,terrainMorph);',
+              '#include <begin_vertex>\ntransformed.y=mix(mix(position.y,coarseHeight,terrainMorph),seamHeight,seamWeight);',
             );
             shader.vertexShader = shader.vertexShader.replace(
               '#include <beginnormal_vertex>',
-              '#include <beginnormal_vertex>\nobjectNormal=normalize(mix(normal,coarseNormal,terrainMorph));',
+              '#include <beginnormal_vertex>\nobjectNormal=mix(normalize(mix(normal,coarseNormal,terrainMorph)),seamNormal,seamWeight);',
             );
             shader.vertexShader = shader.vertexShader.replace(
               '#include <color_vertex>',
-              '#include <color_vertex>\nvColor.rgb=mix(color,coarseColor,terrainMorph);',
+              '#include <color_vertex>\n#ifdef USE_COLOR\nvColor.rgb=mix(color,coarseColor,terrainMorph);\n#endif',
             );
             shader.fragmentShader =
               'uniform float sourceFade;\nuniform bool sourceOutgoing;\n' + shader.fragmentShader;
@@ -405,7 +449,7 @@ export function startTerrainViewer(
               if(sourceOutgoing ? sourceNoise<sourceFade : sourceNoise>=sourceFade) discard;`,
             );
           };
-          material.customProgramCacheKey = () => 'terrain-normal-source-morph-v3';
+          material.customProgramCacheKey = () => 'terrain-shared-edge-imagery-v4';
           const mesh = new Mesh(built.geometry, material);
           resource = {
             mesh,
@@ -418,6 +462,7 @@ export function startTerrainViewer(
             x: patch.x,
             z: patch.z,
             bytes: built.bytes,
+            seam: { geometry: built.geometry, chunk, patch, morph: 0 },
           };
           patches.put(key, resource, built.bytes);
           scene.add(mesh);
@@ -498,6 +543,25 @@ export function startTerrainViewer(
         p.chunk.originZ + p.z - d.origin.z,
       );
       p.morphUniform.value = patchMorph(p.chunk, p.patch, world);
+      p.seam.morph = p.morphUniform.value;
+    }
+    const signature = [...visible].join('|') + ':' + [...outgoing].join('|');
+    if (signature !== seamSignature) {
+      seamSignature = signature;
+      const previous = seams;
+      seams = [visible, outgoing]
+        .filter((set) => set.size > 0)
+        .map((set) => {
+          const items = [...set].flatMap((key) => {
+            const p = patches.get(key);
+            return p ? [p.seam] : [];
+          });
+          const old = previous.find((graph) => graph.patches[0]?.chunk.lod === items[0]?.chunk.lod);
+          return new TerrainSeams(items, old);
+        });
+    }
+    for (const seam of seams) {
+      d.uploadBytesTotal += seam.update(dt);
     }
     water?.rebase(d.origin);
     d.waterCacheBytes = water?.bytes ?? 0;
@@ -507,14 +571,15 @@ export function startTerrainViewer(
     const waterBytes = water?.uploadedBytes ?? 0;
     d.uploadBytesTotal += waterBytes - reportedWaterBytes;
     reportedWaterBytes = waterBytes;
-    renderer.render(scene, camera);
+    renderer.info.reset();
+    antialias.render();
     d.frames++;
     d.triangles = renderer.info.render.triangles;
     d.drawCalls = renderer.info.render.calls;
     d.cpuMs = performance.now() - start;
     d.loadedChunks = data.size;
     d.pendingChunks = pending.size;
-    d.cacheBytes = data.bytes + patches.bytes + d.waterCacheBytes;
+    d.cacheBytes = data.bytes + patches.bytes + d.waterCacheBytes + imageryBytes + antialias.bytes;
     d.patches = visible.size + outgoing.size;
     d.geometryCacheBytes = patches.bytes;
     d.outgoingPatches = outgoing.size;
@@ -582,7 +647,9 @@ export function startTerrainViewer(
       data.clear();
       patches.clear();
       water?.dispose();
+      imagery?.dispose();
       flight?.dispose();
+      antialias.dispose();
       renderer.dispose();
       if (window.__terrainDiagnostics === diagnostics) delete window.__terrainDiagnostics;
     },

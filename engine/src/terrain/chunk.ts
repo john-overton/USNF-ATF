@@ -1,6 +1,10 @@
 import type { TerrainChunk } from '../data';
 
-export async function decodeChunk(bytes: Uint8Array, chunk: TerrainChunk): Promise<Float32Array> {
+export async function decodeTerrainBytes(
+  bytes: Uint8Array,
+  chunk: { path: string; byteLength: number; sha256: string },
+  expected: number,
+): Promise<Uint8Array> {
   if (bytes.byteLength !== chunk.byteLength)
     throw new Error(`Chunk length mismatch: ${chunk.path}`);
   const owned = new Uint8Array(bytes);
@@ -11,7 +15,7 @@ export async function decodeChunk(bytes: Uint8Array, chunk: TerrainChunk): Promi
     .stream()
     .pipeThrough(new DecompressionStream('gzip'))
     .getReader();
-  const raw = new Uint8Array(256 * 256 * 2);
+  const raw = new Uint8Array(expected);
   let count = 0;
   try {
     for (;;) {
@@ -27,6 +31,11 @@ export async function decodeChunk(bytes: Uint8Array, chunk: TerrainChunk): Promi
     reader.releaseLock();
   }
   if (count !== raw.length) throw new Error('Truncated inflated chunk');
+  return raw;
+}
+
+export async function decodeChunk(bytes: Uint8Array, chunk: TerrainChunk): Promise<Float32Array> {
+  const raw = await decodeTerrainBytes(bytes, chunk, 256 * 256 * 2);
   const samples = new Float32Array(256 * 256),
     view = new DataView(raw.buffer);
   for (let i = 0; i < samples.length; i++) {

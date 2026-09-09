@@ -59,8 +59,8 @@ bun tools/terrain/install.ts \
 ```
 
 The installer validates the runtime manifest, hash, inflated size and samples
-of every chunk before staging. It installs only the manifest and its referenced
-chunks under `terrains/<id>`. Existing targets require `--replace`; replacement
+of every chunk before staging. It installs only the manifest, its referenced
+chunks and optional checksum-validated RGBA imagery atlas under `terrains/<id>`. Existing targets require `--replace`; replacement
 stages a complete verified copy before swapping directories, and restores the
 previous theater if the swap fails. Unrelated data is preserved. Terrain here
 means generated public elevation data, not the future retail-game importer.
@@ -126,3 +126,44 @@ boundary and returning at the same altitude. The documented detail camera covers
 about 24 km per leg and crosses a floating-origin boundary. Both directions
 still must complete a source fade. CDP focus emulation keeps the isolated page
 active during automated sampling.
+
+## Repeated waypoint performance
+
+After rebuilding, exercise the real product's map buttons and check recovery:
+
+```sh
+bun tools/terrain/waypoint-performance.ts --flight --retail --720p --assert-recovery --out extracted/terrain-waypoints-flight-final
+bun tools/terrain/waypoint-performance.ts --assert-recovery --out extracted/terrain-waypoints-explorer-final
+bun tools/terrain/water-query-benchmark.ts
+```
+
+The default binary is the packaged Mac arm64 app; `--binary` overrides it.
+The terrain is `extracted/terrain/ukraine-polished`. `--retail` uses the local F-14,
+audio and profile under `extracted/flight`; omit it for the original placeholder.
+Omit `--flight` for explorer. Default route is mountains/coast/runway twice;
+`--ids 2,3,1` selects a shorter route. Each stage records ten seconds of frame
+intervals and diagnostics, including loading. `--assert-recovery` requires at
+least 50 fps over the final roughly two seconds of every stage. This separates
+cold loading stalls from lasting slowdowns. `--720p` repeats a final settled
+measurement at 1280×720 after the 2560×1440 route.
+
+A final five-second CPU profile is always recorded and is a separate profiled
+stage. `--profile-jump` additionally profiles the first mountain jump; do not
+compare profiled timings as uninstrumented performance. Raw stage data, summaries,
+profiles and screenshots stay under the selected ignored output directory.
+The water-query probe compares the original exact polygon classifier against the
+new index on 600 locally supplied real-theater samples; it does not substitute
+for actual Electron flight acceptance.
+
+For a texture allocation experiment on the current 3071×3072 atlas, add
+`--texture-4x` to `waypoint-performance.ts`. The CDP-only
+`texture-allocation-probe.js` doubles both dimensions at the WebGL upload boundary
+and retains an enlarged CPU buffer. It verifies exactly one atlas allocation and
+upload, records actual dimensions/byte counts in `texture-allocation.json`, and
+uses the same waypoint route. The product binary and installed data are unchanged.
+This uses upscaled existing pixels: it measures rendering/allocation pressure,
+not improved imagery, larger-file loading/decompression or importer support.
+Renderer cache counters still describe the original atlas; use the separate
+allocation report for experimental texture bytes. The probe also retains the
+original source, so CPU retention is one original atlas larger than a native
+6142×6144 implementation. The current production atlas limit remains 4096.

@@ -311,3 +311,12 @@ can lag the adjacent diagnostics JSON. These captures intentionally interrupt
 rendering and are visual evidence only; use the separate uncaptured flight for
 frame-time acceptance. The root phase 3 baseline records those timing runs and
 accelerated lateral coverage stress separately.
+
+## 2026-09-09 terrain paint and edge follow-up
+
+The current implementation supersedes the historical flat-tint-only and
+unstitched-edge descriptions above. See [terrain polish](terrain-polish.md) for
+the optional georeferenced atlas, pipeline coast changes, shared boundary graph,
+ownership easing, FXAA and expanded upload/cache estimate scope. Source fades
+remain screen-door fades, not geometric resampling. Measured source and packaged
+acceptance remain in the [phase 3 baseline](baselines/phase-3.md).

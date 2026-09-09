@@ -44,7 +44,10 @@ export function patchDistance(
   );
 }
 export function patchMorph(chunk: TerrainChunk, patch: Patch, camera: WorldPosition): number {
-  const t = Math.max(0, Math.min(1, (patchDistance(chunk, patch, camera) / patch.span - 2) / 0.8));
+  const t = Math.max(
+    0,
+    Math.min(1, (patchDistance(chunk, patch, camera) / patch.span - 1.4) / 1.4),
+  );
   return t * t * (3 - 2 * t);
 }
 /** Distance-driven dyadic mesh hierarchy within one independently sampled source tile. */

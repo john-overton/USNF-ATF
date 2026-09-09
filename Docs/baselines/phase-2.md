@@ -1,5 +1,48 @@
 # Phase 2 baseline: real Ukraine terrain
 
+## 2026-09-09: imagery and bounded coastline follow-up
+
+Same Apple M3/macOS 26.6.2, Python 3.14.6 environment and uncommitted source scope
+recorded in [phase 3 baseline](phase-3.md). Base commit 4e3f226; code/test source-map
+SHA-256 aaf6bb009de2a154439bd4ed6a766e35ff315f34bfb79d7547cc3d8fd76314e4.
+This is a polish of the existing real Ukraine build, not a new DEM fetch/build.
+All 832 original chunk metadata/bytes are retained. The preserved original is
+`extracted/terrain/ukraine`; output is `extracted/terrain/ukraine-polished`.
+
+Commands: `PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline smooth-coasts
+extracted/terrain/ukraine-polished/manifest.json` starting from the original
+manifest; `PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline imagery
+extracted/terrain/ukraine-polished/manifest.json --cache
+extracted/terrain-source/imagery --size 3072`; then the exact probe/test commands
+in the phase 3 entry. Coast algorithm was revised to two bounded passes and the
+final manifest regenerated from preserved original polygons; the smoothing marker
+prevents accidentally applying the algorithm twice to already-smoothed polygons.
+
+Probe passes every 832 chunks: 71,245,197 compressed height bytes, 109,051,904 raw bytes,
+maximum shared-border disagreement 0.021069959933129212m within the existing
+quantization tolerance. 33,731 water bodies, 492,147 total water vertices including
+unchanged dry holes, within the existing 500,000 guard. Compact manifest 12,277,911 bytes
+passes the 32 MiB guard; an earlier indented output failed and was corrected.
+
+EOX Sentinel-2 cloudless 2024 atlas: 3071×3072, 182.7843×182.7725 m/pixel,
+21,045,384 compressed RGBA bytes,37,736,448 raw RGBA bytes. Compressed SHA-256:
+299980f77cbc38f77dd416b92f05b070e3c2f51f2000cdc1886ca549b04cdaec.
+`imagery-info.json` and cached EOX JSON retain source URL, bounds, raster checksum,
+license and attribution. Geography is reprojected into manifest LAEA; rows run
+south-to-north. Synthetic RGB orientation and missing-coverage tests pass.
+
+Python suite: 15 tests, no failures/skips (local Copernicus source available).
+No new dependencies. WMS JPEG ingestion emits the expected missing-georeference
+warning before the known WMS bounds are assigned. Rasterio emits Affine
+PendingDeprecationWarnings. Original raster water classification is unchanged;
+only existing sea-level exterior rings are cut. Dry holes remain unchanged.
+
+Next step: use installed terrain for visual acceptance; rebuild/fetch finer
+imagery only if the intentionally low-resolution paint is insufficient. Source
+provider terms and repeatable workflow are in [terrain polish](../terrain-polish.md).
+Linux baseline remains deferred.
+
+
 Recorded 2026-09-08 on Apple M3, arm64, macOS 26.6.2 (25G83).
 Python 3.14.6, rasterio 1.5.1, numpy 2.5.3, scipy 1.18.1; pinned environment in
 `terrain-pipeline/requirements.txt`. Producer commit recorded by the build:

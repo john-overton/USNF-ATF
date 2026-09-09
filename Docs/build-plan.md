@@ -161,7 +161,7 @@ Goal: know exactly what we can import before writing engine code that depends on
 | Flag-4 LIB codec identity | Resolved in phase 0: PKWare DCL implode |
 | `.SH` model layout | Phase 0 |
 | `.PT` field meanings | Phase 0, cross-checked against phase 4 harness |
-| Land cover in v1 | Phase 2, after the flat-tint version is seen |
+| Terrain surface paint | 2026-09-09: optional offline georeferenced RGB atlas; EOX Sentinel-2 2024 for non-commercial development, attribution/license retained. See terrain-polish.md |
 | Chunk compression | Phase 2 measured: deterministic gzip/u16 v1; real codec comparison in phase 2 baseline |
 | macOS signing identity | End of phase 9 |
 | Windows signing certificate | Phase 9 |
