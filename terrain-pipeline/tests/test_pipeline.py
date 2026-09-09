@@ -81,6 +81,27 @@ class PipelineTests(unittest.TestCase):
             for x,z in body['polygon']:
                 self.assertTrue(0<=x<=51000 and 0<=z<=51000)
 
+    def test_missing_base_chunk_rejected(self):
+        manifest=json.loads(self.original)
+        manifest['chunks']=[c for c in manifest['chunks'] if not (c['lod']==1 and c['x']==0 and c['y']==0)]
+        dump(self.root/'manifest.json',manifest)
+        with self.assertRaisesRegex(ValueError,'coverage'):probe(self.root/'manifest.json')
+
+    def test_water_hole_preserves_dry_island(self):
+        class RingSource(SyntheticSource):
+            extents=(10000,10000)
+            def sample(self,xs,zs,kind='dem'):
+                x,z=np.meshgrid(np.clip(xs,0,10000),np.clip(zs,0,10000))
+                d=(x-5000)**2+(z-5000)**2
+                return np.where((d>1000**2)&(d<3000**2),2,0) if kind=='water' else np.full(x.shape,100.)
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
+            root=Path(tmp);build(self.config,root,RingSource())
+            manifest=json.loads((root/'manifest.json').read_text())
+            self.assertGreater(len(manifest['waterBodies']),2)
+            for body in manifest['waterBodies']:
+                xs,zs=zip(*body['polygon'])
+                self.assertFalse(min(xs)<5000<max(xs) and min(zs)<5000<max(zs))
+
     def test_real_raster_warp_void_and_valid_zero_land(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);records=[]

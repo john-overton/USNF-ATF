@@ -15,7 +15,7 @@ from rasterio.features import shapes
 from rasterio.transform import Affine, from_bounds
 from rasterio.warp import reproject, transform_bounds
 from rasterio.windows import from_bounds as window_bounds
-from scipy.ndimage import map_coordinates
+from scipy.ndimage import map_coordinates, uniform_filter
 
 SPACINGS = (30, 100, 300, 900, 2700)
 SIZE = 256
@@ -182,7 +182,7 @@ def build(config, output, source):
     labels = np.zeros(mask.shape,dtype='int32')
     count = 0
     # Separate ocean/lakes/rivers; river elevation bands avoid flattening an entire watershed.
-    bands = np.where(water_classes==3, np.maximum(0,np.rint(base/5))*5+10,water_classes)
+    bands = np.where(water_classes==3, np.rint(base/5)*5+100000,water_classes)
     for value in np.unique(bands[mask]):
         parts,n = label(mask & (bands==value))
         labels[parts>0] = parts[parts>0]+count
@@ -191,7 +191,7 @@ def build(config, output, source):
         if region is None:
             continue
         body = labels[region]==ident
-        elevation = 0 if np.any(water_classes[region][body]==1) else max(0,float(np.median(base[region][body])))
+        elevation = 0 if np.any(water_classes[region][body]==1) else float(np.median(base[region][body]))
         x0,z0=region[1].start*100,region[0].start*100
         for geometry,_ in shapes(body.astype('uint8'),mask=body,transform=Affine(100,0,x0,0,100,z0)):
             # Complex polygons with holes are represented as row rectangles to preserve dry islands.
@@ -220,6 +220,7 @@ def build(config, output, source):
             if float(np.std(values))>=config.get('roughnessThreshold',80):
                 detail_regions.add((x,y))
     for lod,spacing in enumerate(SPACINGS):
+        filtered_base = uniform_filter(base,size=round(spacing/100),mode="nearest") if lod>1 else base
         span=255*spacing
         for y in range(math.ceil(height/span)):
             for x in range(math.ceil(width/span)):
@@ -233,7 +234,7 @@ def build(config, output, source):
                     xs=np.clip((np.arange(SIZE)*spacing+x*span)/100,0,base.shape[1]-1)
                     zs=np.clip((np.arange(SIZE)*spacing+y*span)/100,0,base.shape[0]-1)
                     zz,xx=np.meshgrid(zs,xs,indexing='ij')
-                    values=map_coordinates(base,[zz,xx],order=1,mode='nearest')
+                    values=map_coordinates(filtered_base,[zz,xx],order=1,mode='nearest')
                 data,offset,scale,high=encode(values)
                 path=f'chunks/{lod}/{x}-{y}.u16.gz'
                 target=output/path;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
@@ -254,8 +255,17 @@ def probe(path):
     manifest=json.loads(path.read_text())
     if manifest.get('schemaVersion')!=1 or not manifest.get('chunks'):
         raise ValueError('invalid/empty terrain manifest')
+    width,height=manifest['extents']['width'],manifest['extents']['height']
+    if not all(math.isfinite(v) and v>0 for v in (width,height)):
+        raise ValueError('invalid theater extents')
     cache={}; compressed=0
     for c in manifest['chunks']:
+        if not isinstance(c['lod'],int) or not 0<=c['lod']<len(SPACINGS):
+            raise ValueError('invalid LOD')
+        if not all(isinstance(c[k],int) and c[k]>=0 for k in ['x','y']):
+            raise ValueError('invalid chunk coordinates')
+        if c['originX']!=c['x']*255*c['spacing'] or c['originZ']!=c['y']*255*c['spacing']:
+            raise ValueError('chunk origin/address mismatch')
         key=(c['lod'],c['x'],c['y'])
         if key in cache or c['size']!=SIZE or c['spacing']!=SPACINGS[c['lod']]:
             raise ValueError('duplicate chunk or invalid addressing')
@@ -276,6 +286,13 @@ def probe(path):
         if vals.min()<c['minElevation']-c['scale'] or vals.max()>c['maxElevation']+c['scale']:
             raise ValueError('elevation range mismatch')
         cache[key]=({'west':vals[:,0].copy(),'east':vals[:,-1].copy(),'south':vals[0,:].copy(),'north':vals[-1,:].copy()},c); compressed+=len(data)
+    if sorted(set(c['lod'] for c in manifest['chunks']))!=manifest['lods']:
+        raise ValueError('LOD index mismatch')
+    for lod in range(1,5):
+        for x in range(math.ceil(width/(255*SPACINGS[lod]))):
+            for y in range(math.ceil(height/(255*SPACINGS[lod]))):
+                if (lod,x,y) not in cache:
+                    raise ValueError('missing base/coarse coverage')
     max_seam=0
     for (lod,x,y),(vals,c) in cache.items():
         for neighbour,edge in [((lod,x+1,y),'east'),((lod,x,y+1),'north')]:
@@ -288,6 +305,8 @@ def probe(path):
     for body in manifest['waterBodies']:
         if not math.isfinite(body['elevation']) or len(body['polygon'])<3 or not np.isfinite(body['polygon']).all():
             raise ValueError('invalid flat water polygon')
+        if any(not (0<=x<=width and 0<=z<=height) for x,z in body['polygon']):
+            raise ValueError('water polygon outside theater')
     report={'chunks':len(cache),'compressedBytes':compressed,'rawBytes':len(cache)*SIZE*SIZE*2,
             'compressionRatio':compressed/(len(cache)*SIZE*SIZE*2),'maxSeamErrorMeters':max_seam,
             'waterBodies':len(manifest['waterBodies']),'source':manifest['source']}

@@ -61,7 +61,7 @@ ocean. Water class 0 is valid land, not nodata.
 - Chunks follow [terrain-contract.md](terrain-contract.md): 256 samples,
   255 intervals, shared borders, south-to-north rows, little-endian uint16,
   per-chunk offset/scale and SHA256 of gzip bytes.
-- Base sampling is 100 m. The 300/900/2700 m grids are sampled from that base.
+- Base sampling is 100 m. The 300/900/2700 m grids are box-averaged and sampled from that base.
   Thirty-meter detail promotion uses standard deviation of source heights
   over each 25.5 km base tile and the configured threshold (80 m initially).
   A detail tile intersecting any promoted region is retained. This is tile
@@ -96,9 +96,14 @@ versus 4,980,736 raw bytes, ratio 0.73775884. Maximum shared-border difference
 compression or visual fidelity. Exact source revision and real-theater
 measurements belong in `Docs/baselines/phase-2.md` after the source commit.
 
-Nine tests pass: deterministic encoding, quantization error, constant heights,
+Eleven tests pass: deterministic encoding, quantization error, constant heights,
 void rejection, compressed corruption, a deliberately mismatched seam with
-valid internal metadata, path traversal, flat water elevations, and actual
+valid internal metadata, path traversal, flat water elevations, missing base coverage, dry-island preservation, and actual
 rasterio reprojection including valid mask-zero land and missing land DEM.
 `rasterio.transform.from_origin` emits an upstream affine multiplication
 PendingDeprecationWarning in the test fixture; it does not affect results.
+
+Follow-up: coarse box filtering changes the synthetic compressed size to
+3,674,863 bytes (ratio 0.73781525); the initial measurement above remains a
+historical pre-filter baseline. Non-ocean water retains negative source
+elevations; mask semantics take precedence over inferring ocean from height.
