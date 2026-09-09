@@ -13,8 +13,32 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics | Polished packaged coast/detail ~60 fps at 1440p; current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness, indexed exact water queries | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness, indexed exact water queries | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: selectable A-4E and X-31 with their own flight profiles
+
+Added the sim helper Aircraft dropdown, per-aircraft model/audio/profile paths,
+and explicit profile identity checks. Imported both new exteriors/textures from
+ATF-GOLD. X-31 uses ATF-GOLD F31.PT; A-4E uses USNF97 A4E.PT for flight data/audio
+because its ATF-GOLD counterpart is not available as a decoded PT record.
+The experimental envelope solver uses their own mass, fuel, thrust and G rows.
+A-4 has no burner; X-31 has one burner and no hook. Preserved assisted handling
+remains the default; new imports do not enable F-14 recovered-native helpers.
+
+Fresh Mac Electron checks verify the actual geometry, profile hashes, thrust,
+mass, fuel burn and dropdown roundtrips. Independent review confirmed the A-4
+needs military thrust as its effective maximum when raw aftThrust is zero, and
+found the existing generic smoke lacked an aircraft ID; both are addressed.
+Original control assistance, static-pose limitations and X-31 vectoring remain
+open. Full native game-flight parity is not claimed. Exact source, commands,
+failures/skips and platform limits are recorded in the phase 4 baseline.
+
+Next reproducible step: restart practice flight, choose an aircraft, then select
+**Retail PT envelope fit (experimental)**. Compare handling against preserved
+assisted using the [aircraft setup](phase-4-aircraft.md). All retail-derived bytes
+stay in local ignored extraction/app-data directories. Environment work belongs
+to the other agent and is excluded from this aircraft commit.
 
 ## 2026-09-09: classified shoreline ribbons and bank faces
 

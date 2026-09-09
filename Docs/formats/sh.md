@@ -187,3 +187,18 @@ coplanar face, and replacing a tailplane face without mutating its source.
 expectations checking actual Three.js point rotations for pitch, roll, rudder,
 flaps and outward speedbrake motion. Renderer screenshots and keyboard integration
 are separate acceptance evidence in the flight documentation.
+
+
+## 2026-09-09: ATF-GOLD A4 and F31 static projection
+
+The existing bounded neutral projection walks ATF-GOLD A4.SH (234 source faces,
+371 exported triangles) and F31.SH (224 source faces, 350 exported triangles).
+A4 emits two material groups; F31 emits ten including neutral articulated parts.
+Both retain retail textures and use the ATF-GOLD palette. Export naming and
+presentation length are explicit CLI parameters; F-14 surface partitioning,
+wing renaming and nozzle classification remain restricted to F14.SH.
+
+Mac Electron chase screenshots show distinct recognizable A-4 and X-31 exteriors.
+This does not validate full SH control flow, native animation or thrust-vectoring
+semantics. Non-F14 exports state their static limitation without claiming the
+F-14 authored rig. See [aircraft setup](../phase-4-aircraft.md).

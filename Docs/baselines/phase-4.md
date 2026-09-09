@@ -1,5 +1,82 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: A-4E / X-31 selection and retail flight profiles
+
+Source **2a1bf9590e76bff406c0c8f9871fe1612934b5b3**, isolated detached worktree
+`/tmp/usnf-aircraft-verification-20260909`. Mac Apple M3 arm64, macOS 26.6.2
+(25G83), Bun 1.4.2, Node 22.14.0, Python 3.14.6, Electron 44.2.0. Dependencies and ignored
+local retail/terrain inputs were symlinked from the main checkout. The isolation
+excludes concurrent environment-agent changes; source files match this commit.
+No installer packaging, x64 launch or Linux test is claimed. Linux is deferred;
+Windows launch acceptance remains scheduled for phase 9.
+
+Commands, run in that worktree:
+
+```sh
+bun run check
+bun test
+python3 -m unittest discover -s tools/retail/tests
+bun run harness --output extracted/flight-harness/aircraft-additions.json
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/aircraft-smoke.ts
+```
+
+Results:
+
+- `bun run check`: typecheck and lint pass; formatting fails on pre-existing
+  `CLAUDE.MD` only. It was not reformatted because this commit owns only aircraft
+  work. Explicit Prettier checks of the eight changed engine TypeScript files
+  pass. Standalone `bun test`: **144 pass, 0 fail**, 24,042 expectations.
+- Python retail suite: **79 run, 78 pass, 1 skip**, 69.737 s. Skip is the missing
+  optional scratchpad `USNF_1.LIB` comparison (`USNF_SCRATCHPAD`); both discs and
+  both newly imported PT records were exercised. Existing unclosed-file
+  ResourceWarnings remain in media tests. New static-export and flight-profile
+  synthetic tests pass; no committed fixtures contain retail bytes.
+- Original placeholder maneuver harness: **11/11 pass**, including exact state
+  equality at 30/60/144 Hz. This is regression evidence, not A-4/X-31 parity.
+- Fresh unpackaged production renderer build succeeds. Actual Electron smoke
+  loads A-4's **371** and X-31's **350** triangles with their own audio manifests,
+  exercises both dropdowns, returns through missing-F14 placeholder, reloads
+  the correct model, and checks PT hashes, mass, military/maximum thrust, fuel
+  decrease and burner capability. Both runs pass with **zero renderer errors**.
+  `extracted/aircraft-smoke/{a4e,x31}/{report.json,airborne.png,retail-flight.png}`
+  records the observed states and images. Inspected chase screenshots show the
+  distinct textured exteriors. Audio remains gesture-locked: this establishes
+  manifest loading, not audible mixing. Runs are short functional checks, not
+  steady-state GPU/performance or full takeoff/landing acceptance.
+
+| Imported fact | A-4E (USNF97 PT) | X-31 (ATF-GOLD PT) |
+|---|---:|---:|
+| Empty mass | 4,898.80 kg | 7,359.54 kg |
+| Internal fuel | 2,011.23 kg | 4,524.58 kg |
+| Military / effective maximum thrust | 49.82 / 49.82 kN | 93.41 / 142.34 kN |
+| G rows | -4..7 | -4..9 |
+| Observed full-power fuel rate | 0.45359 kg/s, no burner | 6.35029 kg/s, burner |
+
+Both models/textures use ATF-GOLD. A-4 PT/audio falls back to USNF97 because the
+ATF-GOLD archive has only an A4E.PTS executable module, not a decoded A4E.PT.
+Raw A-4 aftThrust=0 is retained; effective maximum equals military thrust for
+positive force fitting. Converted profiles omit native-helper data. Field
+conversion is evidence about the game's parameters, not real aircraft specs.
+ATF fuel timing/scaling, aerodynamic device scaling, angular assistance and
+X-31 vectoring remain unverified/original approximations.
+
+Earlier working-tree checks encountered concurrent unfinished environment
+TypeScript/lint/test failures; the isolated checks above supersede those for
+this aircraft commit only. A first smoke assertion used the wrong expected
+sound-source enum (`retail` versus `retail-pt-samples`); corrected in the test.
+One intermediate Electron launch failed in `sandboxed_renderer.bundle.js` with
+null `startupData`; subsequent runs including this exact-source run passed.
+A test-fixture lint error was also corrected before this commit.
+
+Independent bounded review confirmed profile-path isolation and finite envelope
+fits, identified the A-4 zero-maximum-thrust fitting failure, and found generic
+`tools/flight/smoke.ts` lacked an aircraft ID. Effective-thrust normalization and
+`--aircraft-id` address those defects. Native per-aircraft flight/vectoring and
+moving surfaces remain open. Next: restart the dev app, choose an aircraft and
+**Retail PT envelope fit (experimental)**, then compare manual handling with the
+preserved assisted mode. See [conversion/setup](../phase-4-aircraft.md).
+
 ## 2026-09-09: practice-flight waypoint performance
 
 See [phase 3 waypoint correction](phase-3.md#2026-09-09-waypoint-slowdown-correction)

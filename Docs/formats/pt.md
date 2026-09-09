@@ -190,3 +190,18 @@ higher `hitPoints`. Shared fields (`weight`, `maxTakeoffWeight`, `thrust`,
 
 `.PTS` files are not plane types: they are 4 KB Win32 PE modules (see
 [object-types.md](object-types.md)).
+
+
+## 2026-09-09: bounded A-4E and X-31 flight exports
+
+`retail.flight` now accepts the inspected unlabelled USNF97 A4E.PT variant
+(typeSize 608, G rows -4..7) and labelled ATF-GOLD F31.PT (typeSize 660,
+G rows -4..9), in addition to the existing USNF97 F14.PT. Source game identity
+is preserved. ATF-GOLD A4E.PTS is an MZ/PL module and is not accepted as BRF PT.
+
+A-4E's `aftThrust` is zero. Export preserves that raw value and sets the force
+fitter's effective maximum/afterburner thrust equal to military thrust. This
+avoids a zero-thrust fit without inventing an A-4 burner. The new profiles omit
+native-helper data: neither native X-31 vectoring nor full per-aircraft flight
+parity is established. PT facts and SI conversion are separate from the
+original envelope-fit force law; see [aircraft setup](../phase-4-aircraft.md).
