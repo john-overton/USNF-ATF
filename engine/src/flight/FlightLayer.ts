@@ -78,6 +78,7 @@ export interface FlightDiagnostics {
   afterburnerThrustN: number;
   flightProfileSha256: string | null;
   cameraMode: string;
+  waypointIndex: number;
   cameraUp: { x: number; y: number; z: number };
   engineRunning: boolean;
   afterburner: boolean;
@@ -556,6 +557,7 @@ export class FlightLayer {
       flightProfileSha256: this.useRetail ? this.profile!.source.sha256 : null,
       modelTriangles: this.model?.triangles ?? 0,
       cameraMode: this.input.cameraMode,
+      waypointIndex: this.input.waypointIndex,
       cameraUp: { ...this.pose().up },
       engineRunning: this.input.engineRunning,
       afterburner: this.input.afterburner,

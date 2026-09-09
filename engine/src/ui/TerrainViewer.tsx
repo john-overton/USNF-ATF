@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getPlatform } from '../platform';
-import { FlightHud } from '../flight/FlightHud';
+import { FlightNavigationOverlay } from '../flight/FlightNavigationOverlay';
 import type { FsRoot } from '../platform/Platform';
 import { startTerrainViewer, type TerrainDiagnostics } from '../terrain/viewer';
 
@@ -59,13 +59,19 @@ export function TerrainViewer() {
         ref={canvas}
         className="probe-canvas"
         tabIndex={0}
-        aria-label="Terrain free camera. WASD move, Q E altitude, drag to look."
+        aria-label={
+          flightMode
+            ? 'Practice flight. Arrows pitch and roll, brackets select waypoint.'
+            : 'Terrain free camera. WASD move, Q E altitude, drag to look.'
+        }
       />
       {stats?.flight && (
-        <FlightHud
+        <FlightNavigationOverlay
+          key={request.generation}
           flight={stats.flight}
-          flapFraction={stats.flight.systems.flapFraction}
-          airbrakeFraction={stats.flight.systems.airbrakeFraction}
+          root={request.root}
+          manifestPath={request.path}
+          onFlightFocus={() => canvas.current?.focus()}
         />
       )}
       <main
@@ -134,7 +140,7 @@ export function TerrainViewer() {
           {!error && stats?.status === 'loading' && <p>Loading terrain chunks…</p>}
           <p>
             {flightMode
-              ? 'Arrows pitch/roll · Q/E rudder · 1–5 throttle 0/25/50/75/100% · 6 afterburner · W/S fine throttle · T engine · G gear · H hook · F flaps · B speed/wheel brakes · F2 locked chase · F3 horizon-up · M mute · R reset.'
+              ? 'Arrows pitch/roll · Q/E rudder · 1–5 throttle 0/25/50/75/100% · 6 afterburner · W/S fine throttle · T engine · G gear · H hook · F flaps · B speed/wheel brakes · F2 locked chase · F3 horizon-up · [ / ] waypoint · M mute · R reset.'
               : 'WASD move · Q/E altitude · drag to look · arrows turn · Shift accelerates. Click the terrain to focus controls.'}
           </p>
           {flightMode && !stats?.flight && !error && !stats?.error && (

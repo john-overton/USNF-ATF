@@ -1,3 +1,5 @@
+import { applyWaypointAction } from './navigation';
+
 export type ChaseCameraMode = 'attitude' | 'world-up';
 export interface AircraftCommands {
   throttle: number;
@@ -43,6 +45,8 @@ export function deadzone(value: number, zone = 0.12): number {
   return Math.sign(value) * Math.min(1, (Math.abs(value) - zone) / (1 - zone));
 }
 const PILOT_KEYS = new Set([
+  'BracketLeft',
+  'BracketRight',
   'ArrowUp',
   'ArrowDown',
   'ArrowLeft',
@@ -96,6 +100,7 @@ export class FlightInput {
   airbrakeDown = false;
   cameraMode: ChaseCameraMode = 'world-up';
   resetRequested = false;
+  waypointIndex = 0;
   gamepadConnected = false;
   private key = (event: KeyboardEvent): void => {
     const editing =
@@ -107,6 +112,7 @@ export class FlightInput {
     if (!updateHeldPilotKeys(this.keys, event, editing)) return;
     if (!editing) event.preventDefault();
     if (!editing) applyPilotAction(this, event);
+    if (!editing) applyWaypointAction(this, event);
   };
   private focus = (event: FocusEvent): void => {
     if (
@@ -167,6 +173,7 @@ export class FlightInput {
     };
   }
   reset(): void {
+    this.waypointIndex = 0;
     this.throttle = 0;
     this.engineRunning = true;
     this.afterburner = false;

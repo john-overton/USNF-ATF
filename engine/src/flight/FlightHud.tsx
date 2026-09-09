@@ -1,16 +1,21 @@
 import { useId } from 'react';
 import type { FlightDiagnostics } from './FlightLayer';
 import { flightHudReadout, wrapHeading, HUD_PITCH_PIXELS_PER_DEGREE } from './hud';
+import type { WaypointGuidance } from './navigation';
 
 /** Original SVG instruments; the retail HUD is an x86 plug-in, not browser artwork. */
 export function FlightHud({
   flight,
   flapFraction,
   airbrakeFraction,
+  navigation,
+  navigationStatus,
 }: {
   flight: FlightDiagnostics;
   flapFraction?: number;
   airbrakeFraction?: number;
+  navigation?: WaypointGuidance | undefined;
+  navigationStatus?: string | undefined;
 }) {
   const clip = useId();
   const hud = flightHudReadout(flight.state, flight.telemetry);
@@ -70,6 +75,18 @@ export function FlightHud({
         </text>
       </g>
       <path d="M230 89H530 M380 88l-6 9h12z" />
+      {navigation && !navigation.arrived && (
+        <g
+          data-hud="waypoint-steering"
+          transform={`translate(${380 + Math.max(-29, Math.min(29, navigation.relativeDegrees)) * 5} 99)`}
+        >
+          {Math.abs(navigation.relativeDegrees) <= 29 ? (
+            <path d="M0 0l5 6-5 6-5-6z" />
+          ) : (
+            <path d={navigation.relativeDegrees < 0 ? 'M5 0l-7 6 7 6' : 'M-5 0l7 6-7 6'} />
+          )}
+        </g>
+      )}
       {Array.from({ length: 9 }, (_, i) => headingBase + (i - 4) * 10).map((heading) => {
         const x = 380 + (heading - hud.heading) * 5;
         if (x < 230 || x > 530) return null;
@@ -229,6 +246,13 @@ export function FlightHud({
         <text data-hud="warning" x="380" y="590" textAnchor="middle" fontSize="21" fill="#ffd481">
           {warning}
         </text>
+        {(navigation ?? navigationStatus) && (
+          <text data-hud="waypoint" x="380" y="551" textAnchor="middle" fontSize="15">
+            {navigation
+              ? `WP ${navigation.waypoint.id} ${navigation.waypoint.name.toUpperCase()} · ${navigation.distanceNm.toFixed(1)} NM · ${navigation.arrived ? 'ARRIVED' : `${String(Math.round(navigation.bearingDegrees) % 360).padStart(3, '0')}°`} [ ]`
+              : navigationStatus}
+          </text>
+        )}
       </g>
     </svg>
   );
