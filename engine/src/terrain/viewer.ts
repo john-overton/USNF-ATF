@@ -10,6 +10,7 @@ import {
   Scene,
   WebGLRenderer,
 } from 'three';
+import { FlightLayer, type FlightDiagnostics } from '../flight/FlightLayer';
 import type { TerrainChunk, TheaterManifest } from '../data';
 import type { FsRoot, Platform } from '../platform/Platform';
 import { probeWebGL2 } from '../render/glProbe';
@@ -31,6 +32,7 @@ import { buildPatch } from './mesh';
 import { SourceTransition } from './transition';
 
 export interface TerrainDiagnostics {
+  flight?: FlightDiagnostics;
   status: 'loading' | 'ready' | 'error';
   error: string;
   frames: number;
@@ -93,6 +95,8 @@ export function startTerrainViewer(
   manifestPath: string,
   update: (d: TerrainDiagnostics) => void,
 ): { dispose(): void } {
+  const flightMode = new URLSearchParams(window.location.search).get('mode') === 'flight';
+  let flight: FlightLayer | undefined;
   const renderer = new WebGLRenderer({
     canvas,
     antialias: true,
@@ -186,6 +190,7 @@ export function startTerrainViewer(
   window.__terrainDiagnostics = diagnostics;
   const keys = new Set<string>();
   const onKey = (event: KeyboardEvent): void => {
+    if (flightMode) return;
     if (
       event.target instanceof HTMLInputElement ||
       event.target instanceof HTMLSelectElement ||
@@ -217,7 +222,7 @@ export function startTerrainViewer(
     keys.clear();
   };
   const move = (event: PointerEvent): void => {
-    if (event.buttons === 1) {
+    if (!flightMode && event.buttons === 1) {
       yaw -= event.movementX * 0.003;
       pitch = Math.max(-1.5, Math.min(1.5, pitch - event.movementY * 0.003));
     }
@@ -288,6 +293,15 @@ export function startTerrainViewer(
     yaw = pose.yaw;
     pitch = pose.pitch;
     water = new WaterLayer(scene, m.waterBodies);
+    if (flightMode) {
+      const layer = await FlightLayer.create(scene, m, platform, root, folder);
+      if (disposed) {
+        layer.dispose();
+        return;
+      }
+      flight = layer;
+      Object.assign(world, flight.pose().camera);
+    }
   })().catch(fail);
 
   function select(now: number): void {
@@ -415,23 +429,33 @@ export function startTerrainViewer(
   function frame(now: number): void {
     if (disposed) return;
     const start = performance.now(),
-      dt = Math.min(0.1, (now - last) / 1000);
+      frameSeconds = (now - last) / 1000,
+      dt = Math.min(0.1, frameSeconds);
     frameTimes.push(now - last);
     if (frameTimes.length > 240) frameTimes.shift();
     last = now;
-    const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 6000 : 1200) * dt;
-    if (keys.has('ArrowLeft')) yaw += dt;
-    if (keys.has('ArrowRight')) yaw -= dt;
-    if (keys.has('ArrowUp')) pitch = Math.min(1.5, pitch + dt);
-    if (keys.has('ArrowDown')) pitch = Math.max(-1.5, pitch - dt);
-    const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS')),
-      right = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
-    world.x += (-Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
-    world.z += (-Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
-    world.y = Math.max(25, world.y + (Number(keys.has('KeyE')) - Number(keys.has('KeyQ'))) * speed);
-    if (manifest) {
-      world.x = Math.max(0, Math.min(manifest.extents.width, world.x));
-      world.z = Math.max(0, Math.min(manifest.extents.height, world.z));
+    if (flight) {
+      flight.advance(frameSeconds);
+      Object.assign(world, flight.pose().camera);
+      d.flight = flight.diagnostics();
+    } else if (!flightMode) {
+      const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 6000 : 1200) * dt;
+      if (keys.has('ArrowLeft')) yaw += dt;
+      if (keys.has('ArrowRight')) yaw -= dt;
+      if (keys.has('ArrowUp')) pitch = Math.min(1.5, pitch + dt);
+      if (keys.has('ArrowDown')) pitch = Math.max(-1.5, pitch - dt);
+      const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS')),
+        right = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
+      world.x += (-Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
+      world.z += (-Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
+      world.y = Math.max(
+        25,
+        world.y + (Number(keys.has('KeyE')) - Number(keys.has('KeyQ'))) * speed,
+      );
+      if (manifest) {
+        world.x = Math.max(0, Math.min(manifest.extents.width, world.x));
+        world.z = Math.max(0, Math.min(manifest.extents.height, world.z));
+      }
     }
     if (transition.update(now)) {
       for (const key of outgoing) {
@@ -444,7 +468,13 @@ export function startTerrainViewer(
     select(now);
     d.origin = floatingOrigin(world);
     camera.position.set(world.x - d.origin.x, world.y, world.z - d.origin.z);
-    camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    if (flight) {
+      const target = flight.pose().look;
+      camera.lookAt(target.x - d.origin.x, target.y, target.z - d.origin.z);
+      flight.render(d.origin);
+      yaw = camera.rotation.y;
+      pitch = camera.rotation.x;
+    } else camera.rotation.set(pitch, yaw, 0, 'YXZ');
     d.yaw = yaw;
     d.pitch = pitch;
     for (const key of new Set([...visible, ...outgoing])) {
@@ -508,6 +538,7 @@ export function startTerrainViewer(
       data.clear();
       patches.clear();
       water?.dispose();
+      flight?.dispose();
       renderer.dispose();
       if (window.__terrainDiagnostics === diagnostics) delete window.__terrainDiagnostics;
     },

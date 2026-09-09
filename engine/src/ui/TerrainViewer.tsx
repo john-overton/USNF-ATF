@@ -5,6 +5,7 @@ import { startTerrainViewer, type TerrainDiagnostics } from '../terrain/viewer';
 
 export function TerrainViewer() {
   const params = new URLSearchParams(window.location.search);
+  const flightMode = params.get('mode') === 'flight';
   const [root, setRoot] = useState<FsRoot>(params.get('root') === 'assets' ? 'assets' : 'appData');
   const [path, setPath] = useState(params.get('manifest') ?? 'terrains/ukraine/manifest.json');
   const [request, setRequest] = useState({ root, path, generation: 0 });
@@ -56,7 +57,7 @@ export function TerrainViewer() {
         aria-label="Terrain free camera. WASD move, Q E altitude, drag to look."
       />
       <main className="terrain-panel">
-        <h1>Terrain explorer</h1>
+        <h1>{flightMode ? 'Practice flight' : 'Terrain explorer'}</h1>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -99,9 +100,46 @@ export function TerrainViewer() {
         )}
         {!error && stats?.status === 'loading' && <p>Loading terrain chunks…</p>}
         <p>
-          WASD move · Q/E altitude · drag to look · arrows turn · Shift accelerates. Click the
-          terrain to focus controls.
+          {flightMode
+            ? 'Arrows pitch/roll · Q/E rudder · W/S throttle · B brake · R reset. Standard gamepad supported.'
+            : 'WASD move · Q/E altitude · drag to look · arrows turn · Shift accelerates. Click the terrain to focus controls.'}
         </p>
+        {flightMode && !stats?.flight && !error && !stats?.error && (
+          <p>Validating practice strip and ground data…</p>
+        )}
+        {stats?.flight && (
+          <section aria-label="Flight instruments">
+            <strong>
+              {stats.flight.status}
+              {stats.flight.stalled ? ' · STALL' : ''}
+            </strong>
+            <p>{stats.flight.reason}</p>
+            <dl className="terrain-stats">
+              <dt>Airspeed</dt>
+              <dd>{(stats.flight.airspeed * 1.94384).toFixed(0)} kt</dd>
+              <dt>Altitude / ground clearance</dt>
+              <dd>
+                {stats.flight.position.y.toFixed(0)} / {stats.flight.altitudeAGL?.toFixed(1) ?? '…'}{' '}
+                m
+              </dd>
+              <dt>Throttle / load</dt>
+              <dd>
+                {(stats.flight.throttle * 100).toFixed(0)}% / {stats.flight.loadFactor.toFixed(2)} g
+              </dd>
+              <dt>Angle of attack</dt>
+              <dd>{((stats.flight.alphaRad * 180) / Math.PI).toFixed(1)}°</dd>
+              <dt>Sim / steps</dt>
+              <dd>
+                {stats.flight.simTime.toFixed(1)} s / {stats.flight.steps} at 120 Hz
+              </dd>
+              <dt>Takeoffs / landings</dt>
+              <dd>
+                {stats.flight.takeoffs} / {stats.flight.landings}
+              </dd>
+            </dl>
+            <p>Original placeholder aircraft · fictional practice strip.</p>
+          </section>
+        )}
         {stats && (
           <>
             <strong>{stats.name || 'No terrain loaded'}</strong>
@@ -160,6 +198,12 @@ export function TerrainViewer() {
           </>
         )}
         <p>
+          <a href="?mode=flight">Practice runway</a>
+          {' · '}
+          <a href="?mode=flight&flightStart=approach">Final approach</a>
+          {' · '}
+          <a href="?">Terrain explorer</a>
+          {' · '}
           <a href="?view=probe">Renderer diagnostic</a>
         </p>
       </main>
