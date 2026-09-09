@@ -314,6 +314,35 @@ def probe(path):
     return report
 
 
+def compare_compression(path):
+    """Measure codecs over the exact same quantized samples, without changing chunks."""
+    from rasterio.io import MemoryFile
+    import warnings
+    manifest=json.loads(path.read_text())
+    totals={'gzipBytes':0,'png16Bytes':0,'deltaGzipBytes':0,'chunks':0}
+    for chunk in manifest['chunks']:
+        data=(path.parent/chunk['path']).read_bytes()
+        if hashlib.sha256(data).hexdigest()!=chunk['sha256']:
+            raise ValueError('checksum mismatch during codec comparison')
+        raw=gzip.decompress(data)
+        values=np.frombuffer(raw,dtype='<u2').reshape(SIZE,SIZE)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore',rasterio.errors.NotGeoreferencedWarning)
+            with MemoryFile() as mem:
+                with mem.open(driver='PNG',width=SIZE,height=SIZE,count=1,dtype='uint16') as dst:
+                    dst.write(values,1)
+                png=mem.read()
+        deltas=np.empty_like(values)
+        deltas[:,0]=values[:,0]
+        deltas[:,1:]=values[:,1:]-values[:,:-1]
+        totals['gzipBytes']+=len(data)
+        totals['png16Bytes']+=len(png)
+        totals['deltaGzipBytes']+=len(gzip.compress(deltas.astype('<u2').tobytes(),compresslevel=9,mtime=0))
+        totals['chunks']+=1
+    dump(path.parent/'compression.json',totals)
+    return totals
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     sub=parser.add_subparsers(dest='command',required=True)
@@ -321,9 +350,11 @@ def main():
         p=sub.add_parser(command);p.add_argument('--config',type=Path,default=Path('theaters/ukraine.json'));p.add_argument('--output',type=Path,required=True)
         if command=='build':p.add_argument('--source',type=Path,required=True)
     sub.add_parser('probe').add_argument('manifest',type=Path)
+    sub.add_parser('compare-compression').add_argument('manifest',type=Path)
     args=parser.parse_args()
     try:
         if args.command=='probe': result=probe(args.manifest)
+        elif args.command=='compare-compression': result=compare_compression(args.manifest)
         else:
             config=json.loads(args.config.read_text())
             if args.command=='fetch':result=fetch(config,args.output)

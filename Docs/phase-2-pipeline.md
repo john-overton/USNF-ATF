@@ -107,3 +107,19 @@ Follow-up: coarse box filtering changes the synthetic compressed size to
 3,674,863 bytes (ratio 0.73781525); the initial measurement above remains a
 historical pre-filter baseline. Non-ocean water retains negative source
 elevations; mask semantics take precedence over inferring ocean from height.
+
+## Codec comparison
+
+```sh
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline compare-compression extracted/terrain/ukraine/manifest.json
+```
+
+This measures gzip, lossless 16-bit PNG, and horizontal uint16 modular delta
+followed by gzip over exactly the same quantized samples; outputs remain gzip
+and the results are written to `compression.json`. The synthetic fixture gives
+3,674,863 / 1,814,220 / 1,019,375 bytes respectively. Smooth analytic hills
+favor prediction strongly, so this is not a real-theater compression decision.
+Gzip remains the v1 contract for built-in browser decoding and checksum support;
+changing transport requires a coordinated schema/decoder change. Record the
+real-theater comparison before deciding whether that simplicity is worth its
+measured size overhead.
