@@ -142,3 +142,48 @@ repeat across both titles. Do not close phase 0 on polygon counts alone.
 The batch CLI returns 1 when any shape lacks polygons or has stops; single-file
 conversion can return 0 despite incomplete geometry. Always inspect exported
 face counts and diagnostics as well as the exit status.
+
+## 2026-09-09: movable exterior from the neutral F-14 projection
+
+`retail.sh_static` now separates the existing retail horizontal tailplanes and
+subdivides neutral wing, fin and aft fuselage faces into an **authored rig**.
+This reuses source vertices, palette colors and interpolated texture coordinates;
+it does not recover the original aircraft's animation program. The neutral body
+faces are replaced by their partition, so an opening surface does not have an
+unchanged duplicate underneath. Opposite-facing faces and logo overlays already
+present in the source remain present. Subdivision retains the original polygon
+address for diagnostics.
+
+The local USNF97 model exports 186 original polygons, 206 partition polygons,
+364 triangles and 18 material groups. Parts include left/right tailerons,
+left/right rudders, left/right trailing-edge flaps and upper/lower aft speedbrake
+panels. Tailerons mix pitch and differential roll in the new renderer; the
+result is not evidence that USNF uses that same mixer. We have not decoded an
+original aileron animation. The flap partitions follow the existing wing sweep.
+
+The version-1 development JSON part contract gains optional `rotationAxis`
+(engine XYZ, normalize before rotating) and `parent` (exact part name).
+`pivot` continues to be in aircraft body space even when a parent is specified;
+loaders subtract the parent's pivot from the child placement. The flap parents
+are `wing-left-color` / `wing-right-color`. Hinge boundaries, tailplane pivots,
+angle limits, speed scheduling and mixing are **original approximations fitted
+to the inspected neutral exterior**, not decoded native constants. The slightly
+nonplanar low-polygon fins prevent a single rigid hinge from exactly matching
+every interpolated fin/texture boundary.
+
+Bounded static inspection found wing state guards using several unknown state
+words and jumps to alternate vertex tables. The meanings of those state words,
+conditional drawing links and their relation to flap/spoiler controls are still
+unknown. Only neutral C4 wing pivots are established; no retail x86 was executed.
+Do not describe these authored cuts as recovered original control-surface code.
+
+Verification: `python3 -m unittest discover -s tools/retail/tests -p test_sh_static.py`
+passes 13 tests on this Mac: 12 synthetic tests plus one local-media test (which
+explicitly skips if the extracted F14 is absent). The local test checks all eight
+logical surface groups and conservation of each original face's oriented area
+vector through partitioning. Synthetic tests cover UV interpolation, no duplicate
+coplanar face, and replacing a tailplane face without mutating its source.
+`bun test engine/src/flight/control-surfaces.test.ts` passes two tests / ten
+expectations checking actual Three.js point rotations for pitch, roll, rudder,
+flaps and outward speedbrake motion. Renderer screenshots and keyboard integration
+are separate acceptance evidence in the flight documentation.

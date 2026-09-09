@@ -137,9 +137,92 @@ def project(data: bytes, name: str = '') -> dict:
         raise sh.SHError('truncated or missing SH container/record') from exc
 
 
+def split_polygon(polygon: dict, plane: tuple) -> tuple:
+    """Split a convex source polygon at dot(xyz, plane[:3])+plane[3] == 0.
+
+    Preserve winding, source metadata and interpolated UVs. Return positive and
+    negative pieces; coplanar polygons belong only to positive (no duplicates).
+    """
+    vertices = polygon['vertices']
+    distances = [sum(a * b for a, b in zip(v, plane)) + plane[3] for v in vertices]
+    if min(distances) >= -1e-9:
+        return polygon, None
+    if max(distances) <= 1e-9:
+        return None, polygon
+    outputs = []
+    for sign in (1, -1):
+        points, uvs = [], []
+        for i, v in enumerate(vertices):
+            j = (i + 1) % len(vertices)
+            a, b = distances[i], distances[j]
+            if sign * a >= -1e-9:
+                points.append(v)
+                if polygon['uvs']:
+                    uvs.append(polygon['uvs'][i])
+            if a * b < -1e-18:
+                t = a / (a - b)
+                points.append(tuple(x + t * (y - x) for x, y in zip(v, vertices[j])))
+                if polygon['uvs']:
+                    uvs.append(tuple(x + t * (y - x) for x, y in zip(polygon['uvs'][i], polygon['uvs'][j])))
+        outputs.append({**polygon, 'vertices': points, 'uvs': uvs or None} if len(points) >= 3 else None)
+    return tuple(outputs)
+
+
+def f14_surfaces(model: dict) -> dict:
+    """Author a movable rig by subdividing existing F14 neutral-pose faces.
+
+    This is geometry reuse, NOT recovered retail control-surface semantics.
+    Coordinates/hinges are presentation choices fitted to the inspected model.
+    The original polygons are replaced by their partition, never overlaid.
+    """
+    polygons, pivots, rig = [], dict(model['parts']), {}
+    for polygon in model['polygons']:
+        vertices = polygon['vertices']
+        lo = [min(v[i] for v in vertices) for i in range(3)]
+        hi = [max(v[i] for v in vertices) for i in range(3)]
+        side = -1 if sum(v[0] for v in vertices) < 0 else 1
+        suffix = 'left' if side < 0 else 'right'
+        name, planes, pivot, axis, parent = '', [], None, None, None
+        if polygon['part'].startswith('part-'):
+            # Spanwise aft strip; keep the outer wingtip and root intact.
+            name = f'flap-{suffix}'
+            planes = [(side, 0, 0, -30), (-side, 0, 0, 80), (-side * 5 / 28, -1, 0, 9)]
+            pivot, axis = (side * 30, 9 - 30 * 5 / 28, 2), (1, 0, side * 5 / 28)
+            parent = f'wing-{suffix}-color'
+        elif lo[2] == hi[2] == -2 and hi[1] < -10 and min(abs(v[0]) for v in vertices) >= 18:
+            name, pivot, axis = f'taileron-{suffix}', (side * 22, -30, -2), (1, 0, 0)
+        elif lo[2] >= 1 and hi[2] >= 27 and hi[1] < -5 and min(abs(v[0]) for v in vertices) >= 14 and max(abs(v[0]) for v in vertices) <= 16:
+            name, planes = f'rudder-{suffix}', [(0, -1, -.25, -31)]
+            pivot, axis = (side * 14.5, -34.75, 15), (0, 1, .25)
+        elif lo[2] == hi[2] == 1 and lo[0] >= -8 and hi[0] <= 7 and hi[1] <= -26:
+            name, planes = 'airbrake-upper', [(0, -1, 0, -30)]
+            pivot, axis = (0, -30, 1), (1, 0, 0)
+        elif lo[0] >= -7 and hi[0] <= 7 and lo[2] >= -6 and hi[2] <= -5 and lo[1] <= -38 and hi[1] >= 2:
+            name, planes = 'airbrake-lower', [(0, -1, 0, -28)]
+            pivot, axis = (0, -28, -5.25), (1, 0, 0)
+        if not name:
+            polygons.append(polygon)
+            continue
+        inside = polygon
+        for plane in planes:
+            inside, outside = split_polygon(inside, plane)
+            if outside:
+                polygons.append(outside)
+            if inside is None:
+                break
+        if inside:
+            polygons.append({**inside, 'part': name})
+            pivots[name] = pivot
+            rig[name] = {'rotationAxis': axis, **({'parent': parent} if parent else {})}
+    return {**model, 'polygons': polygons, 'parts': pivots, 'rig': rig}
+
+
 def export(source: Path, palette_path: Path, output: Path, length_metres: float = 19.1) -> dict:
     data = source.read_bytes()
     model = project(data, source.stem)
+    source_polygons = len(model['polygons'])
+    if source.stem.upper() == 'F14':
+        model = f14_surfaces(model)
     vertices = [v for p in model['polygons'] for v in p['vertices']]
     lo = [min(v[i] for v in vertices) for i in range(3)]
     hi = [max(v[i] for v in vertices) for i in range(3)]
@@ -166,6 +249,8 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
             if key[0].startswith('part-') and source.stem.upper() == 'F14':
                 groups[key]['name'] = 'wing-left' if model['parts'][key[0]][0] < 0 else 'wing-right'
             groups[key]['name'] += '-textured' if key[1] else '-color'
+            if key[0] in model.get('rig', {}):
+                groups[key].update(model['rig'][key[0]])
             if key[1]:
                 groups[key]['uvs'] = []
                 pic = parse_pic((source.parent / key[1].upper()).read_bytes())
@@ -190,10 +275,11 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
               'source': {'file': source.name, 'sha256': hashlib.sha256(data).hexdigest(),
                          'paletteSha256': hashlib.sha256(palette_path.read_bytes()).hexdigest(),
                          'projection': 'nearest LOD, neutral static state', 'lengthMetres': length_metres,
-                         'polygons': len(model['polygons']), 'instructions': model['instructions']},
+                         'polygons': source_polygons, 'partitionPolygons': len(model['polygons']), 'instructions': model['instructions']},
               'limitations': ['Original flight dynamics are not imported.',
                               'Static neutral pose; original x86 animation and renderer are not executed.',
                               '19.1 m length is a presentation scale, not decoded retail units.',
+                              'Retail faces are partitioned into authored taileron/rudder/flap/airbrake rig; hinges and motion are not decoded retail semantics.',
                               'Neutral projection includes wings; gear and hook animation are not recovered.',
                               'Special exhaust disks are separated for authored engine-state presentation.',
                               'Original texture dispatch is partial; DataTexture uses flipY=false.']}

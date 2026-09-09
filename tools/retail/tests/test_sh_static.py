@@ -6,9 +6,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from _paths import TOOLS_RETAIL  # noqa: F401
+from _paths import REPO, TOOLS_RETAIL  # noqa: F401
 from retail.sh import SHError
-from retail.sh_static import project, export
+from retail.sh_static import project, export, split_polygon, f14_surfaces
 
 
 def image(code):
@@ -111,6 +111,52 @@ class StaticShapeTest(unittest.TestCase):
             self.assertEqual(part['name'], 'exhaust-left-textured')
             self.assertEqual(part['uvs'][:2], [1 / 32, 1 - 2 / 64])
             self.assertEqual(len(part['texture']['rgba']), 32 * 64 * 4)
+
+    def test_surface_split_preserves_area_uv_and_coplanar_ownership(self):
+        polygon = {'vertices': [(0, 0, 0), (4, 0, 0), (4, 2, 0), (0, 2, 0)],
+                   'uvs': [(0, 0), (1, 0), (1, 1), (0, 1)], 'part': 'body', 'addr': 123}
+        a, b = split_polygon(polygon, (1, 0, 0, -1))
+        def area(p):
+            v = p['vertices']
+            return abs(sum(v[i][0] * v[(i + 1) % len(v)][1] - v[(i + 1) % len(v)][0] * v[i][1] for i in range(len(v)))) / 2
+        self.assertEqual(area(a), 6)
+        self.assertEqual(area(b), 2)
+        for part in (a, b):
+            self.assertEqual(part['addr'], 123)
+            for v, uv in zip(part['vertices'], part['uvs']):
+                self.assertEqual(uv, (v[0] / 4, v[1] / 2))
+        self.assertEqual(split_polygon(polygon, (0, 0, 1, 0)), (polygon, None))
+
+    def test_authored_taileron_replaces_source_face_and_keeps_metadata(self):
+        # Synthetic plane matching the documented classification, no retail bytes.
+        face = {'vertices': [(20, -20, -2), (30, -20, -2), (30, -40, -2)],
+                'uvs': None, 'part': 'body', 'color': 12}
+        result = f14_surfaces({'polygons': [face], 'parts': {}})
+        self.assertEqual(len(result['polygons']), 1)
+        self.assertEqual(result['polygons'][0]['vertices'], face['vertices'])
+        self.assertEqual(result['polygons'][0]['part'], 'taileron-right')
+        self.assertEqual(result['rig']['taileron-right']['rotationAxis'], (1, 0, 0))
+        self.assertEqual(face['part'], 'body')
+
+    @unittest.skipUnless((Path(REPO) / 'extracted/usnf97/USNF_2.LIB/F14.SH').is_file(), 'local extracted F14.SH unavailable')
+    def test_local_f14_partition_conserves_every_face_and_has_all_surface_groups(self):
+        model = project((Path(REPO) / 'extracted/usnf97/USNF_2.LIB/F14.SH').read_bytes())
+        rigged = f14_surfaces(model)
+        expected = {'taileron-left', 'taileron-right', 'rudder-left', 'rudder-right',
+                    'flap-left', 'flap-right', 'airbrake-upper', 'airbrake-lower'}
+        self.assertEqual(set(rigged['rig']), expected)
+        def area_vector(face):
+            v = face['vertices']
+            return [sum(v[i][(a + 1) % 3] * v[(i + 1) % len(v)][(a + 2) % 3] -
+                        v[i][(a + 2) % 3] * v[(i + 1) % len(v)][(a + 1) % 3]
+                        for i in range(len(v))) / 2 for a in range(3)]
+        for face in model['polygons']:
+            pieces = [p for p in rigged['polygons'] if p['addr'] == face['addr']]
+            self.assertTrue(pieces)
+            for axis in range(3):
+                self.assertAlmostEqual(sum(area_vector(p)[axis] for p in pieces), area_vector(face)[axis], places=7)
+        for side in ('left', 'right'):
+            self.assertEqual(rigged['rig'][f'flap-{side}']['parent'], f'wing-{side}-color')
 
     def test_out_of_range_part_target_rejected(self):
         code = bytes([0xc4, 0]) + struct.pack('<hhhhhhh', 0, 0, 0, 0, 0, 0, 500)
