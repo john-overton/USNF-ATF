@@ -44,19 +44,37 @@ test('water uses polygon union and leaves dry holes intact regardless of ground 
   expect([...result.rgba.slice(55 * 4, 55 * 4 + 3)]).toEqual([45, 115, 61]);
   expect(result.minLandElevation).toBe(-10);
 });
-test('regional land percentile excludes water and uncovered samples; flat ground stays green', () => {
+test('regional diagnostics exclude water and uncovered samples without changing elevation bands', () => {
   const heights = Float32Array.from({ length: 100 }, (_, i) => i);
   const water = new Uint8Array(100);
   water[99] = 1;
   heights[98] = NaN;
   const result = colorNavigationMap(grid, heights, water, water);
-  expect(result.whiteElevation).toBe(92);
+  expect(result.whiteElevation).toBe(3500);
   expect(result.maxLandElevation).toBe(97);
   expect(result.waypoints.find((w) => w.id === 2)?.elevationM).toBe(97);
   expect([...result.rgba.slice(98 * 4, 98 * 4 + 3)]).toEqual([20, 26, 30]);
-  expect(elevationColor(92, 0, 92)).toEqual([238, 238, 224]);
-  expect(elevationColor(3, 3, 3)).toEqual([45, 115, 61]);
+
   expect(result.waypoints.some((w) => w.id === 1)).toBe(false);
+});
+test('fixed elevation colors are consistent across lowland and mountain regions', () => {
+  const mask = new Uint8Array(100);
+  const low = new Float32Array(100).fill(0);
+  const high = new Float32Array(100).fill(5000);
+  low[0] = high[0] = 120;
+  const lowMap = colorNavigationMap(grid, low, mask, mask);
+  const highMap = colorNavigationMap(grid, high, mask, mask);
+  expect([...lowMap.rgba.slice(0, 4)]).toEqual([...highMap.rgba.slice(0, 4)]);
+  expect([...lowMap.rgba.slice(4, 7)]).toEqual([45, 115, 61]);
+  expect([...highMap.rgba.slice(4, 7)]).toEqual([238, 238, 224]);
+  expect(lowMap.whiteElevation).toBe(3500);
+  expect(highMap.whiteElevation).toBe(3500);
+  expect(elevationColor(-100)).toEqual([45, 115, 61]);
+  expect(elevationColor(500)).toEqual([202, 185, 67]);
+  expect(elevationColor(1500)).toEqual([185, 70, 47]);
+  expect(elevationColor(2500)).toEqual([102, 69, 46]);
+  expect(elevationColor(3500)).toEqual([238, 238, 224]);
+  expect(elevationColor(3000)).toEqual([170, 154, 135]);
 });
 test('zoom tracks the aircraft, clamps every edge, and preserves a meaningful NM distance scale', () => {
   const map = { width: 512, height: 256, extents: { width: 185200, height: 92600 } };

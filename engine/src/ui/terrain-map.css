@@ -206,8 +206,7 @@
 }
 .terrain-map-legend {
   height: 4px;
-  margin: 6px 5px 1px;
-  background: linear-gradient(to right, #2d733d, #cab943, #b9462f, #66452e 94%, #eeeee0 95%);
+  margin: 6px 0 1px;
 }
 .terrain-map-caption {
   font-size: 9px;
@@ -237,4 +236,21 @@
     top: 8px;
     right: 8px;
   }
+}
+
+.terrain-map-elevation {
+  margin: 0 5px;
+}
+.terrain-map-elevation-labels {
+  position: relative;
+  height: 12px;
+  font-size: 8px;
+}
+.terrain-map-elevation-labels span {
+  position: absolute;
+  top: 1px;
+}
+.terrain-map-elevation .terrain-map-caption {
+  padding: 2px 0;
+  font-size: 8px;
 }

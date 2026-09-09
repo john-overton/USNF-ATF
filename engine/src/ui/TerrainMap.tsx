@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FsRoot, Platform } from '../platform/Platform';
 import {
   loadNavigationMap,
+  MAP_ELEVATION_BANDS,
   navigationViewport,
   worldToMap,
   type NavigationMapData,
@@ -162,7 +163,7 @@ export function TerrainMap({
                     ref={canvas}
                     width={data.width}
                     height={data.height}
-                    aria-label="Regional elevation: blue water; green, yellow, red, brown rising land; white highest five percent"
+                    aria-label="Elevation in metres above mean sea level: blue water; green 0, yellow 500, red 1500, brown 2500, white 3500 and above"
                   />
                   <svg
                     viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`}
@@ -286,10 +287,34 @@ export function TerrainMap({
               />
               <span>{viewport.scaleNm} NM</span>
             </div>
-            <div className="terrain-map-legend" aria-hidden="true" />
-            <div className="terrain-map-caption">
-              <span>{Math.round(data.minLandElevation)} m</span>
-              <span>White ≥ {Math.round(data.whiteElevation)} m</span>
+            <div
+              className="terrain-map-elevation"
+              aria-label="Elevation legend in metres above mean sea level"
+            >
+              <div
+                className="terrain-map-legend"
+                aria-hidden="true"
+                style={{
+                  background: `linear-gradient(to right, ${MAP_ELEVATION_BANDS.map((band) => `rgb(${band.rgb.join(' ')}) ${(band.height / data.whiteElevation) * 100}%`).join(', ')})`,
+                }}
+              />
+              <div className="terrain-map-elevation-labels">
+                {MAP_ELEVATION_BANDS.map((band, index) => (
+                  <span
+                    key={band.height}
+                    style={{
+                      left: `${(band.height / data.whiteElevation) * 100}%`,
+                      transform: `translateX(${index === 0 ? 0 : index === MAP_ELEVATION_BANDS.length - 1 ? -100 : -50}%)`,
+                    }}
+                  >
+                    {band.height}
+                  </span>
+                ))}
+              </div>
+              <div className="terrain-map-caption">
+                <span>BLUE WATER</span>
+                <span>ELEV m MSL</span>
+              </div>
             </div>
             <div className="terrain-map-caption">
               <span>{Math.round(data.extents.width / zoom / 1000)} km across</span>

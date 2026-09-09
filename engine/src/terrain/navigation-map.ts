@@ -70,20 +70,28 @@ export function rasterizeWater(grid: MapGrid, bodies: readonly WaterBody[]): Uin
   return mask;
 }
 
-const LAND_COLORS = [
-  [45, 115, 61],
-  [202, 185, 67],
-  [185, 70, 47],
-  [102, 69, 46],
+/** Fixed metres above mean sea level; identical heights have identical colors in every theater. */
+export const MAP_ELEVATION_BANDS = [
+  { height: 0, rgb: [45, 115, 61] },
+  { height: 500, rgb: [202, 185, 67] },
+  { height: 1500, rgb: [185, 70, 47] },
+  { height: 2500, rgb: [102, 69, 46] },
+  { height: 3500, rgb: [238, 238, 224] },
 ] as const;
-export function elevationColor(height: number, minimum: number, white: number): readonly number[] {
-  if (height >= white && white > minimum) return [238, 238, 224];
-  const t = white > minimum ? Math.max(0, Math.min(1, (height - minimum) / (white - minimum))) : 0;
-  const scaled = t * (LAND_COLORS.length - 1);
-  const index = Math.min(LAND_COLORS.length - 2, Math.floor(scaled));
-  const a = LAND_COLORS[index]!;
-  const b = LAND_COLORS[index + 1]!;
-  return a.map((v, channel) => Math.round(v + (b[channel]! - v) * (scaled - index)));
+export function elevationColor(height: number): readonly number[] {
+  const first = MAP_ELEVATION_BANDS[0];
+  if (height <= first.height) return first.rgb;
+  for (let index = 1; index < MAP_ELEVATION_BANDS.length; index++) {
+    const upper = MAP_ELEVATION_BANDS[index]!;
+    if (height < upper.height) {
+      const lower = MAP_ELEVATION_BANDS[index - 1]!;
+      const fraction = (height - lower.height) / (upper.height - lower.height);
+      return lower.rgb.map((value, channel) =>
+        Math.round(value + (upper.rgb[channel]! - value) * fraction),
+      );
+    }
+  }
+  return MAP_ELEVATION_BANDS[MAP_ELEVATION_BANDS.length - 1]!.rgb;
 }
 
 function polygonArea(body: WaterBody): number {
@@ -118,14 +126,14 @@ export function colorNavigationMap(
   land.sort((a, b) => a - b);
   const minLandElevation = land[0] ?? 0;
   const maxLandElevation = land[land.length - 1] ?? 0;
-  const whiteElevation = land[Math.floor((land.length - 1) * 0.95)] ?? 0;
+  const whiteElevation = MAP_ELEVATION_BANDS[MAP_ELEVATION_BANDS.length - 1]!.height;
   const rgba = new Uint8ClampedArray(grid.width * grid.height * 4);
   for (let i = 0; i < heights.length; i++) {
     const rgb = !Number.isFinite(heights[i])
       ? [20, 26, 30]
       : water[i]
         ? [33, 86, 132]
-        : elevationColor(heights[i]!, minLandElevation, whiteElevation);
+        : elevationColor(heights[i]!);
     rgba.set([...rgb, 255], i * 4);
   }
   const waypoint = (id: MapWaypoint['id'], name: string, index: number): MapWaypoint => ({
