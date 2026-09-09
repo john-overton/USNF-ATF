@@ -2,7 +2,7 @@
 
 A non-commercial fan remake of Jane's US Navy Fighters '97 (and, later, ATF Gold), built with TypeScript, Three.js, React, and Electron. The goal is retail aircraft and missions over real-elevation terrain, using assets imported from your own copy.
 
-**Current status (2026-09-08):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, water, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. Flight gameplay and the in-app retail importer are not implemented. Python retail research tools remain available; SH model export is partial.
+**Current status (2026-09-09):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, water, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. An original practice aircraft now takes off, flies and lands over the generated theater. Combat, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
 
 Start with [progress and review findings](Docs/progress.md), the [build plan](Docs/build-plan.md) (phase order and exit criteria), and the [design brief](Docs/usnf-atf-plan.md). Contributor and agent instructions are in [AGENTS.md](AGENTS.md).
 
@@ -70,6 +70,30 @@ to view. Existing installed theaters require the installer's `--replace` option.
 See the [pipeline guide](Docs/phase-2-pipeline.md), [renderer guide](Docs/phase-3-renderer.md),
 and [packaged smoke/installation tools](tools/terrain/README.md) for full commands
 and limits. Terrain outputs and source rasters remain ignored under `extracted/`.
+
+## Practice flight
+
+Run `bun run dev:electron`, then choose **Practice runway** or **Final approach**.
+These are original practice starts over the installed Ukraine terrain, with an
+original placeholder aircraft and a fictional runway; no retail import is needed.
+
+- Hold **W/S** to increase/decrease throttle; the setting stays when released.
+- **ArrowDown** pulls up, **ArrowUp** pushes down; left/right arrows bank.
+- **Q/E** controls rudder, **B** brakes on the ground, **R** resets the practice start.
+- Standard gamepads use the left stick for pitch/roll, right-stick X for rudder,
+  triggers for throttle and B for brakes.
+
+The free terrain explorer keeps its existing controls. Flight physics run at
+120 Hz with render interpolation. The automated pilot exists only in test tools;
+the app is flown manually. Physical gamepad testing and USNF feel comparison
+remain human acceptance work.
+
+```sh
+bun run harness --output extracted/flight-harness/report.json
+```
+
+See [practice flight](Docs/phase-4-flight.md), the [maneuver harness](Docs/phase-4-harness.md),
+and [desktop flight tests](tools/flight/README.md) for implementation and validation.
 
 ## Validation and retail tools
 

@@ -5,7 +5,7 @@ Newest entry first. Update the snapshot and add an entry for meaningful port wor
 keep commands, evidence, uncertainty, and a concrete next step. Baselines live in
 [baselines/](baselines/). The design brief describes the intended product.
 
-## Current snapshot — development 2026-09-08
+## Current snapshot — development 2026-09-09
 
 | Phase | Implemented | Acceptance / remaining work |
 |---|---|---|
@@ -13,7 +13,52 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, diagnostics | Packaged coast/detail ~60 fps at 1440p; 0↔1 and 1↔2 fades plus 24km fast lateral flights pass. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4–10 | Plans and importer contracts only | Flight model, gameplay, in-app retail import and release work not implemented |
+| 4: flight model | Original 120 Hz assisted aircraft, terrain contact, practice runway/approach, HUD, chase camera, keyboard/gamepad adapter and 11-case harness | Packaged ground/takeoff/landing pass at ~60 FPS on Mac. Physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: native measurement checkpoint pushed; phase 4 implemented
+
+The completed GPU measurement/terrain-polish checkpoint **`7d19abd` was pushed
+to `origin/main`** before phase 4 development. This supersedes the earlier
+entry's local-only status. Native GPU external-memory totals were 20.946 GB/s
+coast and 13.653 GB/s detail; scope remains sampled GPU-wide traffic, not an
+app-exclusive physical DRAM measurement. Linux stays tabled.
+
+Phase 4 source commits `400bdf9`, `cb038c6`, `0110ba7`, `636f80a` and `49a3123`
+implement the original coefficient contract/model, safe gear contact, real
+terrain integration, controls and deterministic maneuver harness. Independent
+subagent review covered model/integration boundaries and packaged visuals.
+See [phase 4 baseline](baselines/phase-4.md), [flight guide](phase-4-flight.md)
+and [harness guide](phase-4-harness.md).
+
+- **53 tests / 4642 expectations** pass; types, lint and formatting pass.
+- All **11 headless scenarios** pass: level/turn/loop/stall/energy, takeoff,
+  approach, hard/water impact, render-rate determinism and missing terrain.
+- Fresh Mac package from `49a3123` builds in **22.5 s**. Real 1440p arm64
+  ground/takeoff/approach samples achieve **60.035 / 60.013 / 60.007 FPS**.
+  Takeoff ends at 149.01 m/s and 227.55 m AGL; approach lands and stops inside
+  the runway. No renderer exceptions or console errors; visual review passes.
+  Approach records one clamped frame, retained in the baseline.
+- An additional default terrain-only coast check timed out during CDP frame
+  collection. No new explorer timing result is claimed; the cause remains open
+  and the phase 3 baseline retains its original source provenance.
+- Original procedural aircraft and fictional practice runway require no retail
+  assets. Flight contact uses an independent bounded cache and pauses for
+  missing data; visual LOD does not determine collision height.
+- Reusable packaged acceptance drives ordinary gamepad inputs and preserves
+  source provenance, per-frame evidence and screenshots in ignored outputs.
+
+Lessons: clear held controls when a form receives focus; publish diagnostics
+only after an asynchronous scene load is accepted; ground initialization is not
+a landing; verify velocity trajectories rather than quaternion rotation for
+loops. Model determinism, packaged behavior, physical gamepad compatibility and
+human flight feel are separate kinds of evidence. Short 60 FPS samples do not
+establish long-duration performance or erase isolated clamped frames.
+
+**Next work:** human practice-flight/USNF feel assessment and physical gamepad
+checks remain phase 4 acceptance items. Combat and mission work remain phase 5+
+plans; Linux testing remains explicitly deferred. Phase 4 changes are committed
+locally after validation; the pushed checkpoint above predates them.
 
 ## 2026-09-08: verified Mac source transitions and native memory profiling
 

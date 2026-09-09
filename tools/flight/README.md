@@ -1,0 +1,44 @@
+# Packaged flight acceptance
+
+These tests launch the real Electron renderer in an isolated profile with the
+locally generated Ukraine theater. Nothing is installed into normal app data.
+The virtual standard gamepad drives the product input adapter; the test does
+not write aircraft state or replace the physics. It does not verify physical
+controller hardware.
+
+Build first, record the commit that was built, then run:
+
+```sh
+bun run build
+bun tools/flight/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --scenario ground --out extracted/flight-ground
+bun tools/flight/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --scenario takeoff --out extracted/flight-takeoff
+bun tools/flight/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --scenario approach --out extracted/flight-approach
+```
+
+Replace `<built-commit>` with the actual hash; it is independent of the current
+working-tree HEAD recorded in the report. `--terrain` defaults to
+`extracted/terrain/ukraine`. The default durations are 15, 40 and 60 seconds;
+`--seconds` permits 1–60 seconds, but shortening a maneuver may prevent completing
+its required state change. An unpackaged Electron binary can use `--app shell`.
+
+The ground case verifies advancing simulation and the 2560×1440 renderer. Takeoff
+requires a recorded liftoff and an aircraft still above 20m ground clearance at
+flying speed. Approach starts from the user-visible final-approach preset and
+must touch down safely and brake below 5m/s. Every case rejects crashes, renderer
+exceptions and browser console errors, including shader errors.
+
+The feedback pilot follows the same control policy calibrated in the headless
+harness. It compensates for the product axis deadzone and changes throttle through
+normal trigger inputs. This controller is test tooling, not a product autopilot.
+
+Each ignored output directory contains `initial.png`, `final.png`, `report.json`,
+`runtime-errors.json` and `electron.log`. Per-frame reports preserve raw rAF
+intervals, flight snapshots and terrain metrics. Screenshot capture occurs outside
+the timed interval. Inspect screenshots as well as assertions: triangle counters
+alone do not prove valid shaders or visible aircraft.
+
+Like the terrain smoke, this harness suppresses physical input in its isolated
+page, disables background/occlusion throttling and emulates focus through CDP.
+Normal app launch settings are unchanged. `desktop.ts` owns setup and cleanup;
+its initial integration probe successfully rendered the existing packaged terrain
+at 1440p without errors before the flight scenarios were added.

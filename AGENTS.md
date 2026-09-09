@@ -4,7 +4,7 @@
 
 - Read [README.md](README.md), the current snapshot in [Docs/progress.md](Docs/progress.md), and [Docs/build-plan.md](Docs/build-plan.md) before planning work.
 - `Docs/build-plan.md` owns phase numbering, sequencing, decisions, and exit criteria. `Docs/usnf-atf-plan.md` is the original design brief; its older build order is superseded.
-- This is an early fan remake: the runnable app is a terrain explorer and renderer probe. Python retail research is substantially ahead of the TypeScript importer. Flight gameplay and retail in-app importing remain planned; see the current progress snapshot for acceptance status.
+- This is an early fan remake: the runnable app has a terrain explorer, original practice flight, and renderer probe. Python retail research is substantially ahead of the TypeScript importer. The original flight model and maneuver harness are implemented; retail importing and combat remain planned; see the current progress snapshot for acceptance status.
 
 ## Development machine and commands
 
@@ -16,6 +16,7 @@ From the repository root:
 bun install
 bun run dev:electron
 bun run check
+bun run harness
 python3 -m unittest discover -s tools/retail/tests
 PYTHONPATH=terrain-pipeline .venv/bin/python -m unittest discover -s terrain-pipeline/tests
 ```
@@ -39,6 +40,7 @@ bun run probe --unpackaged
 - `shell/`: Electron main/preload, IPC, native filesystem/window/power access, development and packaging scripts. Preserve context isolation, sandboxing, and disabled renderer Node integration.
 - `importer/`: TypeScript import contracts now; decoder port and first-run workflow in phase 5. Python tools in `tools/retail/` are the research reference.
 - `terrain-pipeline/` owns source fetching/reprojection/chunks. Keep [Docs/terrain-contract.md](Docs/terrain-contract.md) synchronized with Python producers and engine validators. Never infer water from elevation alone; shared-border probes and dry-island tests are acceptance gates.
+- `engine/src/sim/flight/` is pure flight physics; `engine/src/flight/` adapts input, rendering and contact data. Aircraft tables are original placeholder data, not imported retail parameters. Contact sampling must remain independent of visual LOD and must never invent zero ground for missing data.
 - Keep the simulation fixed at 120 Hz and independent of React/render timing. Preserve the terrain renderer’s floating origin when adding aircraft rendering.
 - Maintain strict TypeScript and existing conventions. Prefer focused changes; do not add CI before phase 9 or new dependencies without a concrete need.
 
