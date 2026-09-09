@@ -83,7 +83,7 @@ samples, not exact pixel/frame synchronization.
 ### Verification and failed attempts
 
 `bun run check`: **41 pass, 0 fail, 4580 expectations**, TypeScript/lint/format
-clean. GPU tooling Python suite: **5 pass**. The separately excluded smoke tool
+clean. GPU tooling Python suite: **6 pass**. The separately excluded smoke tool
 also passes an explicit Bun-types TypeScript check. Pipeline/retail code and
 source data were unchanged; their previous test counts are historical.
 
@@ -106,7 +106,24 @@ source data were unchanged; their previous test counts are historical.
 ### Native bandwidth and deferred gates
 
 Final native hardware memory measurements are recorded in
-[GPU trace notes](../gpu-trace-notes.md). Native external-memory counters are
+[GPU trace notes](../gpu-trace-notes.md). Native exported units are GB/s; means
+are weighted over recorded intervals, not wall-time averages or app-exclusive
+physical DRAM measurements. Both recordings selected Performance Limiters,
+kept the default GPU performance state, and attached to this app's GPU helper.
+
+| View | GPU read GB/s | GPU write GB/s | GPU total GB/s | Samples per counter | Summed sample seconds | Timestamp span seconds |
+|---|---:|---:|---:|---:|---:|---:|
+| Odesa coast | 8.860 | 12.086 | 20.946 | 59,551 | 5.819 | 15.660 |
+| Crimean detail | 5.484 | 8.169 | 13.653 | 148,831 | 12.430 | 15.719 |
+
+GPU-wide scope and different sampling coverage prevent treating these numbers
+as directly comparable whole-run physical-memory averages. Native total-counter
+maxima were 95.186 and 98.612 GB/s respectively, over individual sampled
+intervals. No legacy `DRAM Bandwidth` samples were exposed. The native trace
+exports expanded to roughly 3 and 6.4 GiB of XML and took several minutes to
+export/parse. One optional display label was a sentinel; preserving the valid
+numeric row required a parser regression, bringing GPU tooling to **6 tests**.
+ Native external-memory counters are
 separate from geometry upload estimates and the absent legacy `DRAM Bandwidth`
 counter; they do not isolate physical DRAM traffic. WebGL2 exposes no live
 bandwidth counter. Linux testing is **deferred by the user**;

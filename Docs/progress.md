@@ -42,9 +42,9 @@ and [GPU notes](gpu-trace-notes.md) for the native measurement's scope/units.
   read/write/external-memory bandwidth. The tool preserves the difference from
   the absent legacy `DRAM Bandwidth` counter, GPU upload estimates, and live
   in-app counters. Measurements are GPU-wide sampled intervals, not exclusive
-  physical-DRAM traffic attributable to the app. Final numbers are in GPU notes.
+  physical-DRAM traffic attributable to the app. Sample-weighted totals: **20.946 GB/s coast**, **13.653 GB/s detail** in native exported units; sample coverage differs, so these are not wall-time means. Exact read/write figures and scope are in GPU notes.
 - `bun run check`: **41 pass / 4580 expectations**, strict types/lint/format pass.
-  GPU Python tooling: **5 pass**. Explicit smoke-tool TypeScript check passes.
+  GPU Python tooling: **6 pass**. Explicit smoke-tool TypeScript check passes.
   Mac arm64/x64 DMG/ZIP build passes in **26.7 s**; only arm64 was launched.
   Pipeline/retail sources are unchanged, so earlier Python results are historical.
 
@@ -56,6 +56,9 @@ overwrote raw samples; the harness now waits for completed fades and records
 controls made subsequent runs complete, without proving occlusion as the sole
 cause. Instruments can exit 0 with an unsupported counter profile; inspect
 actual exported samples and native units rather than trusting the exit status.
+Full native counter exports expanded to multi-GiB XML and took minutes; an
+optional display-label sentinel required a parser regression while preserving
+the valid numeric value. Use shorter counter captures for routine profiling.
 
 **Next work:** keep Linux tabled per user decision. Remaining Mac refinement is
 fine patch/shoreline edges, isolated streaming stalls and longer thermal runs;
