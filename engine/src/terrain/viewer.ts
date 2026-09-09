@@ -47,6 +47,8 @@ export interface TerrainDiagnostics {
   uploadBytesTotal: number;
   uploadBytesPerSecond: number;
   camera: WorldPosition;
+  yaw: number;
+  pitch: number;
   origin: { x: number; z: number };
   sourceLod: number;
   patches: number;
@@ -140,6 +142,8 @@ export function startTerrainViewer(
     uploadBytesTotal: 0,
     uploadBytesPerSecond: 0,
     camera: world,
+    yaw,
+    pitch,
     origin: { x: 0, z: 0 },
     sourceLod: 0,
     patches: 0,
@@ -364,6 +368,8 @@ export function startTerrainViewer(
     d.origin = floatingOrigin(world);
     camera.position.set(world.x - d.origin.x, world.y, world.z - d.origin.z);
     camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    d.yaw = yaw;
+    d.pitch = pitch;
     for (const key of visible) {
       const p = patches.get(key);
       if (!p) continue;
