@@ -1,15 +1,15 @@
 import unittest
 from types import SimpleNamespace
 from _paths import TOOLS_RETAIL  # noqa: F401
-from retail.flight import convert, RAW_FIELDS, LB_KG, FT_M, LBF_N
+from retail.flight import convert, RAW_FIELDS, OBJ_RAW_FIELDS, LB_KG, FT_M, LBF_N
 from retail.pt import Envelope
 
 
 def fixture():
-    return SimpleNamespace(labeled=False, obj={'typeSize': 632}, env_min=-4, env_max=9,
+    return SimpleNamespace(labeled=False, obj={'typeSize': 632, **{k: 0 for k in OBJ_RAW_FIELDS}}, env_min=-4, env_max=9,
                            weight=10000, max_takeoff_weight=20000, internal_fuel=4000,
                            thrust=15000, aft_thrust=25000, long_name='Synthetic test aircraft',
-                           plane={k: 64 for k in RAW_FIELDS},
+                           plane={**{k: 64 for k in RAW_FIELDS}, 'structure[0]': 1200, 'structure[1]': 2200},
                            envelopes=[Envelope(g, 3, 1, 2, [(100, 0), (200, 1000), (400, 0), (999, 999)])
                                       for g in range(-4, 10)])
 
@@ -53,3 +53,37 @@ class FlightExportTest(unittest.TestCase):
         pt.envelopes[0].points[1] = pt.envelopes[0].points[0]
         result = convert(pt, b'synthetic')
         self.assertEqual(result['envelopes'][0]['points'][0], result['envelopes'][0]['points'][1])
+        self.assertEqual(result['native']['envelopes'][0]['points'][0],
+                         result['native']['envelopes'][0]['points'][1])
+
+    def test_native_envelopes_preserve_headers_and_integer_coordinates(self):
+        pt = fixture()
+        pt.obj['_maxSpeed'] = 1234
+        result = convert(pt, b'synthetic')
+        native = result['native']['envelopes']
+        self.assertEqual([e['g'] for e in native], list(range(-4, 10)))
+        self.assertEqual(native[0]['count'], 3)
+        self.assertEqual(native[0]['maxSpeedIndex'], 2)
+        self.assertEqual(native[0]['stallLiftIndex'], 1)
+        self.assertEqual(native[0]['points'], [
+            {'speedFps': 100, 'altitudeFt': 0},
+            {'speedFps': 200, 'altitudeFt': 1000},
+            {'speedFps': 400, 'altitudeFt': 0}])
+        self.assertEqual(result['rawFields']['_maxSpeed']['value'], 1234)
+        self.assertEqual(result['rawFields']['_minSpeed']['value'], 0)
+        self.assertEqual(result['native']['structuralSpeedFps'],
+                         {'seaLevel': 1200, 'at36000Ft': 2200})
+
+    def test_rejects_invalid_native_header_indices(self):
+        for field, value in [('max_speed', 3), ('max_speed', -1), ('stall_lift', 20),
+                             ('stall_lift', 1.5)]:
+            pt = fixture()
+            setattr(pt.envelopes[0], field, value)
+            with self.assertRaises(ValueError):
+                convert(pt, b'synthetic')
+
+    def test_rejects_invalid_structural_speed_limits(self):
+        pt = fixture()
+        pt.plane['structure[1]'] = -1
+        with self.assertRaises(ValueError):
+            convert(pt, b'synthetic')
