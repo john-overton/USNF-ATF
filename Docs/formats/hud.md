@@ -78,7 +78,7 @@ bun test engine/src/flight/hud.test.ts
 bunx eslint engine/src/flight/hud.ts engine/src/flight/hud.test.ts engine/src/flight/FlightHud.tsx
 ```
 
-Three focused tests / 51 expectations verify cardinal headings, SI conversions,
+Three focused tests / 52 expectations verify cardinal headings, SI conversions,
 body-relative path changes during banking, reverse/slow/off-scale handling,
 missing ground, and server-rendered throttle, engine/warning and system labels.
 The first unit-conversion assertion incorrectly expected reference-point AGL;
@@ -89,3 +89,13 @@ belong in the phase 4 baseline after the viewer integration is built.
 The current dynamics remain original assisted dynamics. Inspecting a `.PT`
 reference or using retail HUD labels does not mean the F-14's native physics or
 HUD routines have been ported.
+
+Independent review of packaged source `2d662c4` screenshots
+`extracted/f14-retail-acceptance/{hud-clean,flaps-airbrake-down,roll-control}.png`
+confirmed readable instruments and visible flap/brake annunciator changes at
+1440p. It also found two presentation defects: the wheel-brake label appeared
+airborne because the control bit is shared with speed brakes, and lower pitch
+rungs overlapped the fixed bank/pitch readout. The follow-up gates WHEEL BRAKE
+to grounded state and clips the ladder above the fixed readout. A regression
+assertion covers the airborne/grounded label distinction. Final screenshot
+acceptance must name the rebuilt follow-up source rather than `2d662c4`.

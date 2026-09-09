@@ -84,9 +84,11 @@ test('HUD renders live throttle, engine, flight warning and all four retail-name
     'HOOK',
     'TAS KT',
     'ALT FT MSL',
-    'WHEEL BRAKE',
   ])
     expect(markup).toContain(label);
+  expect(markup).not.toContain('WHEEL BRAKE');
+  flight.status = 'grounded';
+  expect(renderToStaticMarkup(createElement(FlightHud, { flight }))).toContain('WHEEL BRAKE');
   expect(markup).toContain('pointer-events:none');
   expect(markup).toContain('data-hud="heading"');
   flight.throttle = 1;

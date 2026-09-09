@@ -53,7 +53,7 @@ export function FlightHud({
     >
       <defs>
         <clipPath id={clip}>
-          <rect x="220" y="140" width="320" height="320" />
+          <rect x="220" y="140" width="320" height="270" />
         </clipPath>
       </defs>
       <g
@@ -204,7 +204,7 @@ export function FlightHud({
           {flight.cameraMode === 'attitude' ? 'F2 LOCKED CHASE' : 'F3 WORLD-UP CHASE'}
         </text>
         <text x="650" y="514" textAnchor="end" fontSize="13">
-          {flight.controls.brake ? 'WHEEL BRAKE' : ''}
+          {flight.controls.brake && flight.status === 'grounded' ? 'WHEEL BRAKE' : ''}
         </text>
         {systems.map(([name, fraction], i) => (
           <text
