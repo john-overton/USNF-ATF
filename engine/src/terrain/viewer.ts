@@ -51,6 +51,7 @@ export interface TerrainDiagnostics {
   pitch: number;
   origin: { x: number; z: number };
   sourceLod: number;
+  depthBuffer: 'logarithmic';
   patches: number;
   width: number;
   height: number;
@@ -84,6 +85,8 @@ export function startTerrainViewer(
     canvas,
     antialias: true,
     powerPreference: 'high-performance',
+    // Preserve depth separation for terrain and manifest water across kilometer views.
+    logarithmicDepthBuffer: true,
   });
   // CSS pixels, intentionally 1:1: 2560x1440 means a measured 1440p drawing buffer.
   renderer.setPixelRatio(1);
@@ -146,6 +149,7 @@ export function startTerrainViewer(
     pitch,
     origin: { x: 0, z: 0 },
     sourceLod: 0,
+    depthBuffer: 'logarithmic',
     patches: 0,
     width: 0,
     height: 0,
