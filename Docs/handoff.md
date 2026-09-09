@@ -75,10 +75,13 @@ Recorded for the next pass, not implemented in this fuel-acceptance task:
   have been selected yet.
 - Add a top-down map in the **top-right corner** so users can see their aircraft's
   location. Aircraft heading and the selected waypoint would help orient it.
-- User suggested rendering from the existing regional heightmap: **blue for
-  water**, **green for lower land**, progressing through **brown at maximum
-  elevation**, scaled using the available region's elevation range. This is a
-  requested visual direction, with rendering details still to decide.
+- Updated user color direction: **blue water**, then **green → yellow → red →
+  brown** as land elevation rises, with **white for the highest roughly 5% of
+  land elevations**. Render from the existing regional heightmap and scale colors
+  to its valid land elevations. A regional 95th-percentile white threshold is a
+  reasonable starting interpretation; tune intermediate stops for readability.
+  This is an elevation map, not aircraft-relative clearance or danger coloring.
+  Exact palette/thresholds remain flexible, as the user described a visual intent.
 - Reuse the actual water mask/classification; elevation alone must not turn dry
   low ground into water. Use the theater's coordinate transform consistently for
   aircraft, waypoint, terrain and water positions. Keep the map useful while the

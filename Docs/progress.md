@@ -30,7 +30,8 @@ engine states and a clear orange automated-test label. No product fix was needed
 The user asked to record the next development pass in [handoff.md](handoff.md):
 HUD waypoint switching with [ / ], destinations for the practice strip, Ukraine
 mountains and coast, plus a top-right location map using regional height colors
-and the actual water mask. These requests are documented, not implemented here.
+and the actual water mask. The clarified palette is blue water and green →
+yellow → red → brown land, with white for the highest roughly 5% of land elevations. These requests are documented, not implemented here.
 The broader final aero/approach retest remains separate from this fuel acceptance;
 Linux remains deferred. See the baseline for exact scope and reproduction.
 
