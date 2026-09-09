@@ -107,3 +107,8 @@ test('fixed step and controls reject invalid input, quaternion stays normalized 
   expect(Math.hypot(q.x, q.y, q.z, q.w)).toBeCloseTo(1, 12);
   expect(Object.values(state.position).every(Number.isFinite)).toBe(true);
 });
+
+test('a nearly vertical touchdown cannot be accepted as safe gear contact', () => {
+  const initial = createFlightState({ position: { x: 0, y: 2.19, z: 0 }, pitchRad: 1.4 });
+  expect(stepFlight(initial, NEUTRAL_CONTROLS, flat).state.status).toBe('crashed');
+});

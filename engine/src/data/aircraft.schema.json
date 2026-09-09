@@ -182,7 +182,8 @@
         "maxBankRad",
         "maxSlopeRad",
         "rollingFriction",
-        "brakeDecelerationMps2"
+        "brakeDecelerationMps2",
+        "maxPitchRad"
       ],
       "properties": {
         "maxSinkMps": {
@@ -209,6 +210,11 @@
           "type": "number",
           "minimum": 0,
           "maximum": 30
+        },
+        "maxPitchRad": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 1
         }
       },
       "additionalProperties": false

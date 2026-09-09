@@ -18,6 +18,7 @@ export interface AircraftDefinition {
   landing: {
     maxSinkMps: number;
     maxBankRad: number;
+    maxPitchRad: number;
     maxSlopeRad: number;
     rollingFriction: number;
     brakeDecelerationMps2: number;
@@ -99,6 +100,7 @@ export function parseAircraftDefinition(value: unknown): AircraftDefinition {
     landing: {
       maxSinkMps: number(landing.maxSinkMps, 0.1, 20),
       maxBankRad: number(landing.maxBankRad, 0.01, 1),
+      maxPitchRad: number(landing.maxPitchRad, 0.01, 1),
       maxSlopeRad: number(landing.maxSlopeRad, 0.01, 0.5),
       rollingFriction: number(landing.rollingFriction, 0, 1),
       brakeDecelerationMps2: number(landing.brakeDecelerationMps2, 0, 30),

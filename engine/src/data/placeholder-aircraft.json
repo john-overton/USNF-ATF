@@ -67,6 +67,7 @@
     "maxBankRad": 0.22,
     "maxSlopeRad": 0.12,
     "rollingFriction": 0.025,
-    "brakeDecelerationMps2": 4.5
+    "brakeDecelerationMps2": 4.5,
+    "maxPitchRad": 0.35
   }
 }

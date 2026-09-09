@@ -298,12 +298,16 @@ export function stepFlight(
       sink = -dot(velocity, n),
       up = rotate(attitude, { x: 0, y: 1, z: 0 });
     const slope = Math.acos(clamp(n.y, -1, 1));
-    // Pitch is allowed for takeoff/flare; excessive bank is not a survivable touchdown.
+    // Authored attitude limits allow a normal flare but reject a nose/tail-first impact.
     const bankAngle = Math.abs(flightEuler(attitude).rollRad);
+    const pitchAngle = Math.abs(
+      Math.asin(clamp(dot(rotate(attitude, { x: 0, y: 0, z: -1 }), n), -1, 1)),
+    );
     if (
       nextGround.kind === 'water' ||
       sink > def.landing.maxSinkMps ||
       bankAngle > def.landing.maxBankRad ||
+      pitchAngle > def.landing.maxPitchRad ||
       slope > def.landing.maxSlopeRad ||
       up.y < 0
     ) {
