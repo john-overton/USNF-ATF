@@ -252,8 +252,10 @@ fully match its triangle heights. Morph normals and tint now interpolate parent
 triangle attributes as well, including nonlinear tint clamping at each parent
 vertex. Normal normalization/raster interpolation can still differ slightly
 between triangulations. Skirts continue bridging neighboring patch morph levels.
-The selection timer remains 200ms; this does not promise continuous topology or
-eliminate all transient errors when a fast camera crosses thresholds between ticks.
+Source and water selection retain their 200ms cadence, but inexpensive mesh
+quadtree selection now runs every frame alongside morph evaluation. This avoids
+inserting children up to 1200m past a split after a 200ms accelerated-camera
+interval. Discrete rendered frames and skirt/normal approximations still apply.
 
 The same regression review found a separate 8.95776m jump at clipped theater
 boundaries: parent samples used unclipped grid corners while rendered vertices

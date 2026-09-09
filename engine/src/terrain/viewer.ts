@@ -291,31 +291,35 @@ export function startTerrainViewer(
   })().catch(fail);
 
   function select(now: number): void {
-    if (!manifest || now - lastSelect < 200) return;
-    lastSelect = now;
-    const horizon = viewDistance(world);
-    water?.select(world, horizon);
-    if (scene.fog instanceof Fog) {
-      scene.fog.near = horizon * 0.65;
-      scene.fog.far = horizon;
+    if (!manifest) return;
+    if (now - lastSelect >= 200) {
+      lastSelect = now;
+      const horizon = viewDistance(world);
+      water?.select(world, horizon);
+      if (scene.fog instanceof Fog) {
+        scene.fog.near = horizon * 0.65;
+        scene.fog.far = horizon;
+      }
+      camera.far = horizon * 1.2;
+      camera.updateProjectionMatrix();
+      const selection = selectSourceChunks(manifest, world);
+      desired = selection.chunks;
+      pump();
+      // A stable complete set starts one transition at a time. Freeze both patch
+      // hierarchies during the fade so topology churn cannot interrupt the blend.
+      const loaded = desired.every((c) => data.get(c.path));
+      if (transition.consider(selection.lod, loaded, now)) {
+        if (transition.active) for (const key of visible) outgoing.add(key);
+        displayed = desired;
+        d.sourceLod = selection.lod;
+      } else if (!transition.active && selection.lod === transition.to && loaded) {
+        displayed = desired;
+      } else if (!displayed.length) displayed = desired.filter((c) => data.get(c.path));
+      if (d.status !== 'error')
+        d.status = loaded && !transition.active && !water?.pending ? 'ready' : 'loading';
     }
-    camera.far = horizon * 1.2;
-    camera.updateProjectionMatrix();
-    const selection = selectSourceChunks(manifest, world);
-    desired = selection.chunks;
-    pump();
-    // A stable complete set starts one transition at a time. Freeze both patch
-    // hierarchies during the fade so topology churn cannot interrupt the blend.
-    const loaded = desired.every((c) => data.get(c.path));
-    if (transition.consider(selection.lod, loaded, now)) {
-      if (transition.active) for (const key of visible) outgoing.add(key);
-      displayed = desired;
-      d.sourceLod = selection.lod;
-    } else if (!transition.active && selection.lod === transition.to && loaded) {
-      displayed = desired;
-    } else if (!displayed.length) displayed = desired.filter((c) => data.get(c.path));
-    if (d.status !== 'error')
-      d.status = loaded && !transition.active && !water?.pending ? 'ready' : 'loading';
+    // Keep mesh topology synchronized with the per-frame morph metric; a 200ms
+    // source/water cadence could otherwise insert already-unmorphed children.
     if (transition.active && [...visible].some((key) => !outgoing.has(key))) return;
     // Touch retained outgoing resources before allocations, keeping inactive LRU
     // entries first in the eviction queue. Each active hierarchy is capped below.
