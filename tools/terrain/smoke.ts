@@ -321,6 +321,9 @@ try {
       JSON.stringify(transitionFlight, null, 2) + '\n',
     );
   }
+  if (runtimeErrors.length)
+    throw new Error(`Renderer exceptions: ${JSON.stringify(runtimeErrors)}`);
+  const finalDiagnostics = await evaluate('window.__terrainDiagnostics()');
   const screenshot = await send('Page.captureScreenshot', { format: 'png' });
   await Bun.write(path.join(out, 'terrain.png'), Buffer.from(screenshot.data, 'base64'));
   const sorted = [...frames].sort((a, b) => a - b);
@@ -351,6 +354,7 @@ try {
     initial: ready,
     beforeMovement: before,
     afterMovement: after,
+    finalDiagnostics,
     note: 'rAF cadence measures displayed frame intervals; upload counters are not total GPU DRAM bandwidth.',
   };
   await Bun.write(path.join(out, 'report.json'), JSON.stringify(report, null, 2) + '\n');
