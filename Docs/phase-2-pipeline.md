@@ -162,3 +162,35 @@ strict combined half-step seam tolerance rather than hiding errors by widening
 it. The local-media regression covers both observed failing tile pairs. Interior
 samples remain normal bilinear warps; canonical borders remove request-dependent
 partition differences at the mesh joins.
+
+## Final local Ukraine result
+
+Built and probed successfully on this Mac from pipeline implementation `f229ad7`
+(documentation HEAD `48b01b8`, pipeline clean), after the failures above:
+
+- Generation: 86.196 seconds, 561.3 × 561.5 km projected rectangle.
+- 832 chunks: 229 detail, 529 base, 64 at 300 m, 9 at 900 m, 1 at 2700 m.
+  Eighteen base regions exceeded the 80 m roughness threshold.
+- Every chunk passed dimension, hash, range, coverage, and strict shared-border
+  checks. Maximum decoded seam error 0.02106996 m, within the per-pair combined
+  quantization half-step tolerance.
+- 33,731 water polygons with 347,838 exterior/interior ring points. JSON is
+  approximately 24.9 MB; interior rings preserve islands without row rectangles.
+- Gzip chunks: 71,245,197 bytes; raw quantized samples: 109,051,904 bytes.
+  Ratio 0.65331456. Comparison over these exact samples: 16-bit PNG 61,493,257
+  bytes; horizontal delta plus gzip 63,218,871 bytes.
+
+Gzip is retained for v1: PNG's roughly 14% saving on real data is modest against
+its additional uint16 decoding path, while gzip uses the built-in runtime
+stream decompressor. The much larger synthetic delta advantage did not carry
+over to real terrain. This is below the brief's absolute 300–400 MB budget for
+1500 × 1500 km, but **above** its approximately 42–56 MB area-scaled estimate
+for this smaller rectangle; the benchmark is not a claim of normalized budget
+compliance. The 24.9 MB manifest is additional overhead and a future compact
+encoding opportunity.
+
+Verification commands are the build/probe/compare commands above. Thirteen
+Python tests pass locally, including the downloaded-media seam regression
+(no skips here). Other machines explicitly skip that regression without source
+inputs. Runtime decoder/triangulation and packaged rendering acceptance are
+recorded separately by their owners. Linux remains unverified.
