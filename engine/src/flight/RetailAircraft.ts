@@ -1,5 +1,6 @@
 import {
   BufferGeometry,
+  Color,
   Float32BufferAttribute,
   Group,
   Mesh,
@@ -111,6 +112,7 @@ export class RetailAircraft {
           UnsignedByteType,
         );
         texture.colorSpace = SRGBColorSpace;
+        texture.flipY = true;
         texture.magFilter = NearestFilter;
         texture.needsUpdate = true;
         this.textures.push(texture);
@@ -127,7 +129,13 @@ export class RetailAircraft {
           3,
         ),
       );
-      geometry.setAttribute('color', new Float32BufferAttribute(part.colors, 3));
+      const linearColors = new Float32Array(part.colors.length);
+      const color = new Color();
+      for (let i = 0; i < part.colors.length; i += 3) {
+        color.setRGB(part.colors[i]!, part.colors[i + 1]!, part.colors[i + 2]!, SRGBColorSpace);
+        color.toArray(linearColors, i);
+      }
+      geometry.setAttribute('color', new Float32BufferAttribute(linearColors, 3));
       if (part.uvs) geometry.setAttribute('uv', new Float32BufferAttribute(part.uvs, 2));
       geometry.computeVertexNormals();
       const material = new MeshStandardMaterial({
