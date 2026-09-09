@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Original phase 4 aircraft definition",
+  "description": "SI units. Runtime validator additionally enforces strict axis ordering, matching grid dimensions, and alpha coverage through both stall angles.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "massKg",
+    "wingAreaM2",
+    "gearHeightM",
+    "stallAlphaRad",
+    "aero",
+    "engine",
+    "controls",
+    "landing"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]{1,64}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "massKg": {
+      "type": "number",
+      "minimum": 100,
+      "maximum": 1000000
+    },
+    "wingAreaM2": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 2000
+    },
+    "gearHeightM": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 20
+    },
+    "stallAlphaRad": {
+      "type": "number",
+      "minimum": 0.05,
+      "maximum": 0.8
+    },
+    "aero": {
+      "type": "object",
+      "required": ["alphaRad", "mach", "lift", "drag"],
+      "properties": {
+        "alphaRad": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 256,
+          "items": {
+            "type": "number",
+            "minimum": -3.141592653589793,
+            "maximum": 3.141592653589793
+          }
+        },
+        "mach": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 256,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          }
+        },
+        "lift": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 256,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 256,
+            "items": {
+              "type": "number",
+              "minimum": -5,
+              "maximum": 5
+            }
+          }
+        },
+        "drag": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 256,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 256,
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "engine": {
+      "type": "object",
+      "required": ["altitudeM", "mach", "thrustN"],
+      "properties": {
+        "altitudeM": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 256,
+          "items": {
+            "type": "number",
+            "minimum": -1000,
+            "maximum": 100000
+          }
+        },
+        "mach": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 256,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          }
+        },
+        "thrustN": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 256,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 256,
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10000000
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "controls": {
+      "type": "object",
+      "required": ["pitchRateRadS", "rollRateRadS", "yawRateRadS", "responseSeconds"],
+      "properties": {
+        "pitchRateRadS": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 5
+        },
+        "rollRateRadS": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 10
+        },
+        "yawRateRadS": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 3
+        },
+        "responseSeconds": {
+          "type": "number",
+          "minimum": 0.02,
+          "maximum": 3
+        }
+      },
+      "additionalProperties": false
+    },
+    "landing": {
+      "type": "object",
+      "required": [
+        "maxSinkMps",
+        "maxBankRad",
+        "maxSlopeRad",
+        "rollingFriction",
+        "brakeDecelerationMps2"
+      ],
+      "properties": {
+        "maxSinkMps": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 20
+        },
+        "maxBankRad": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 1
+        },
+        "maxSlopeRad": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 0.5
+        },
+        "rollingFriction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "brakeDecelerationMps2": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 30
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
