@@ -53,6 +53,8 @@ const neutral: FlightControls = {
   gearFraction: 0,
 };
 const abRatio = profile.afterburnerThrustN / profile.militaryThrustN;
+const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const workingTreeStatus = execFileSync('git', ['status', '--short'], { encoding: 'utf8' }).trim();
 const results: Record<string, unknown>[] = [];
 function run(
   name: string,
@@ -194,8 +196,6 @@ assert(
 );
 
 await mkdir(dirname(output), { recursive: true });
-const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-const workingTreeStatus = execFileSync('git', ['status', '--short'], { encoding: 'utf8' }).trim();
 await writeFile(
   output,
   JSON.stringify(
@@ -203,6 +203,7 @@ await writeFile(
       date: new Date().toISOString(),
       sourceCommit,
       workingTreeStatus,
+      endingSourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
       profilePath,
       profileSource: profile.source,
       referenceMassKg: fullMass,
