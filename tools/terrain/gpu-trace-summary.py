@@ -34,7 +34,10 @@ def summarize(path):
         start = float(value(element.find('start-time'))[0]) / 1e9
         duration = float(value(element.find('duration'))[0]) / 1e9
         reading = float(value(element.find('fixed-decimal'))[0])
-        label = value(element.find('formatted-label'))[1]
+        # xctrace occasionally emits <sentinel/> for the optional display label.
+        # The numeric reading and identity remain valid and mandatory.
+        label_element = element.find('formatted-label')
+        label = value(label_element)[1] if label_element is not None else ''
         if not all(math.isfinite(v) for v in (start, duration, reading)) or duration < 0:
             raise ValueError('Invalid GPU counter numeric value')
         key = (gpu, name)
@@ -43,6 +46,8 @@ def summarize(path):
                                  startSeconds=start, endSeconds=start+duration, sampledSeconds=0,
                                  weightedTotal=0, exampleLabel=label)
         entry = counters[key]
+        if not entry['exampleLabel'] and label:
+            entry['exampleLabel'] = label
         entry['samples'] += 1
         entry['minimum'] = min(entry['minimum'], reading)
         entry['maximum'] = max(entry['maximum'], reading)

@@ -9,7 +9,7 @@ spec.loader.exec_module(module)
 
 
 class SummaryTests(unittest.TestCase):
-    def summarize(self, name):
+    def summarize(self, name, sentinel=False):
         xml = f'''<trace-query-result><node>
         <row><start-time id="1">0</start-time><duration id="2">1000000000</duration>
         <gpu-counter-name id="3" fmt="{name}">{name}</gpu-counter-name>
@@ -19,6 +19,8 @@ class SummaryTests(unittest.TestCase):
         <gpu-counter-name ref="3"/><formatted-label ref="4"/>
         <fixed-decimal>6</fixed-decimal><metal-device-name ref="6"/></row>
         </node></trace-query-result>'''
+        if sentinel:
+            xml = xml.replace('<formatted-label ref="4"/>', '<sentinel/>')
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder)/'counters.xml'
             path.write_text(xml)
@@ -33,6 +35,13 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(counter['sampledSeconds'], 4)
         self.assertEqual(counter['minimum'], 2)
         self.assertEqual(counter['maximum'], 6)
+
+    def test_missing_optional_display_label_preserves_numeric_sample(self):
+        result = self.summarize('GPU Bandwidth', sentinel=True)
+        counter = result['externalMemoryCounters'][0]
+        self.assertEqual(counter['samples'], 2)
+        self.assertEqual(counter['durationWeightedMean'], 5)
+        self.assertEqual(counter['exampleLabel'], '2 GB/s')
 
     def test_external_memory_counter_is_not_silently_renamed_dram(self):
         result = self.summarize('GPU Bandwidth')
