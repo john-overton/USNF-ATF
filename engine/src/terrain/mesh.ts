@@ -3,16 +3,25 @@ import type { TerrainChunk } from '../data';
 import { sampleHeight } from './chunk';
 import { PATCH_CELLS, type Patch } from './lod';
 
-/** Same triangle diagonal as the mesh indices, so a fully morphed child follows its parent. */
-function parentHeight(samples: Float32Array, x: number, z: number, step: number): number {
+/** Interpolate on the parent's actual (possibly theater-clipped) triangle. */
+function parentSample(
+  sample: (x: number, z: number) => number,
+  x: number,
+  z: number,
+  step: number,
+  maxX: number,
+  maxZ: number,
+): number {
   const x0 = Math.floor(x / step) * step,
     z0 = Math.floor(z / step) * step;
-  const fx = (x - x0) / step,
-    fz = (z - z0) / step;
-  const a = sampleHeight(samples, x0, z0),
-    b = sampleHeight(samples, x0 + step, z0);
-  const c = sampleHeight(samples, x0, z0 + step),
-    d = sampleHeight(samples, x0 + step, z0 + step);
+  const x1 = Math.min(maxX, x0 + step),
+    z1 = Math.min(maxZ, z0 + step);
+  const fx = x1 > x0 ? (x - x0) / (x1 - x0) : 0;
+  const fz = z1 > z0 ? (z - z0) / (z1 - z0) : 0;
+  const a = sample(x0, z0),
+    b = sample(x1, z0),
+    c = sample(x0, z1),
+    d = sample(x1, z1);
   return fx + fz <= 1
     ? a + (b - a) * fx + (c - a) * fz
     : d + (c - d) * (1 - fx) + (b - d) * (1 - fz);
@@ -28,6 +37,12 @@ export function buildPatch(
     colors: number[] = [],
     indices: number[] = [];
   const step = patch.span / PATCH_CELLS;
+  const maxX = Math.min(255, ((extents?.width ?? Infinity) - chunk.originX) / chunk.spacing);
+  const maxZ = Math.min(255, ((extents?.height ?? Infinity) - chunk.originZ) / chunk.spacing);
+  const coarseAt = (sample: (x: number, z: number) => number, x: number, z: number): number =>
+    patch.depth === 0
+      ? sample(x, z)
+      : parentSample(sample, x, z, (2 * step) / chunk.spacing, maxX, maxZ);
   const vertex = (x: number, z: number, skirt = false): number => {
     x = Math.min(x, (extents?.width ?? Infinity) - chunk.originX);
     z = Math.min(z, (extents?.height ?? Infinity) - chunk.originZ);
@@ -37,9 +52,7 @@ export function buildPatch(
       drop = skirt ? Math.max(100, chunk.maxElevation - chunk.minElevation + 10) : 0;
     const index = positions.length / 3;
     positions.push(x - patch.x, h - drop, z - patch.z);
-    coarse.push(
-      (patch.depth === 0 ? h : parentHeight(samples, sx, sz, (2 * step) / chunk.spacing)) - drop,
-    );
+    coarse.push(coarseAt((px, pz) => sampleHeight(samples, px, pz), sx, sz) - drop);
     const tint = Math.max(0, Math.min(1, h / 2500));
     colors.push(0.19 + tint * 0.34, 0.31 + tint * 0.27, 0.13 + tint * 0.4);
     return index;
@@ -72,23 +85,44 @@ export function buildPatch(
   geometry.setAttribute('coarseHeight', new Float32BufferAttribute(coarse, 1));
   geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
   geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-  // Skirt triangles must not pull surface edge normals sideways into visible bevels.
-  const normals = geometry.getAttribute('normal');
-  for (let i = 0; i < row * row; i++) {
-    const x = (patch.x + positions[i * 3]!) / chunk.spacing;
-    const z = (patch.z + positions[i * 3 + 2]!) / chunk.spacing;
+  // Use the same source-gradient field for parent and child vertices. Interpolate
+  // parent normals on the parent's actual triangle, not a different bilinear face.
+  const normalAt = (x: number, z: number): number[] => {
     const x0 = Math.max(0, x - 1),
-      x1 = Math.min(255, x + 1),
-      z0 = Math.max(0, z - 1),
+      x1 = Math.min(255, x + 1);
+    const z0 = Math.max(0, z - 1),
       z1 = Math.min(255, z + 1);
     const dx =
       (sampleHeight(samples, x1, z) - sampleHeight(samples, x0, z)) / ((x1 - x0) * chunk.spacing);
     const dz =
       (sampleHeight(samples, x, z1) - sampleHeight(samples, x, z0)) / ((z1 - z0) * chunk.spacing);
     const length = Math.hypot(dx, 1, dz);
-    normals.setXYZ(i, -dx / length, 1 / length, -dz / length);
+    return [-dx / length, 1 / length, -dz / length];
+  };
+  const normals: number[] = [],
+    coarseNormals: number[] = [];
+  for (let i = 0; i < positions.length / 3; i++) {
+    const x = (patch.x + positions[i * 3]!) / chunk.spacing;
+    const z = (patch.z + positions[i * 3 + 2]!) / chunk.spacing;
+    const n = normalAt(x, z);
+    normals.push(...n);
+    for (let axis = 0; axis < 3; axis++)
+      coarseNormals.push(coarseAt((px, pz) => normalAt(px, pz)[axis]!, x, z));
   }
+  geometry.setAttribute('normal', new Float32BufferAttribute(normals, 3));
+  geometry.setAttribute('coarseNormal', new Float32BufferAttribute(coarseNormals, 3));
+  const coarseColors: number[] = [];
+  for (let i = 0; i < coarse.length; i++) {
+    const x = (patch.x + positions[i * 3]!) / chunk.spacing;
+    const z = (patch.z + positions[i * 3 + 2]!) / chunk.spacing;
+    const tint = coarseAt(
+      (px, pz) => Math.max(0, Math.min(1, sampleHeight(samples, px, pz) / 2500)),
+      x,
+      z,
+    );
+    coarseColors.push(0.19 + tint * 0.34, 0.31 + tint * 0.27, 0.13 + tint * 0.4);
+  }
+  geometry.setAttribute('coarseColor', new Float32BufferAttribute(coarseColors, 3));
   geometry.computeBoundingSphere();
   const bytes =
     Object.values(geometry.attributes).reduce((sum, a) => sum + a.array.byteLength, 0) +

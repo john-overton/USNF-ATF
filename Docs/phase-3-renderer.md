@@ -216,3 +216,66 @@ Final packaged depth-fix verification: broad sea striping is removed in the
 Odesa screenshot, while coast and 30m detail runs remain ~60fps at1440p. See
 [phase 3 baseline](baselines/phase-3.md) for exact results, startup stalls,
 remaining fine edge artifacts and formal acceptance gaps.
+
+## 2026-09-09 source transitions and mesh boundary polish
+
+Linux verification is deferred at the user's request. This change addresses the
+Mac renderer; packaged visual/performance evidence is recorded separately in the
+phase 3 baseline after rebuilding.
+
+Independent 30/100m source levels now use an 800ms smoothstep screen-door fade.
+Selection must stay on the candidate level for 400ms and every incoming chunk
+must decode before the fade starts. The 400ms is temporal debounce, **not spatial
+hysteresis**. Only one fade runs at a time; both patch hierarchies stay resident
+and their topology stays fixed during the fade. Camera position, floating origin,
+and per-patch height morphs continue updating. Complementary deterministic
+screen-space masks write opaque depth, avoiding conventional alpha-blending
+ordering and coincident-depth interference. Transitional stipple and silhouette
+coverage differences still require screenshot acceptance; this is not geometric
+resampling of the independent source grids.
+
+Each hierarchy is capped at 1000 patches by reducing its maximum quadtree depth
+when necessary. Both complete hierarchies fit inside the unchanged 96MiB geometry
+LRU, including the added parent-normal/color attributes. Retained outgoing entries
+are refreshed before incoming allocation so inactive entries are evicted first.
+Source data stays under the existing 32MiB cache; at most two 25-chunk sets are
+needed by a fade. Once the fade finishes outgoing geometry becomes inactive LRU
+storage. This is bounded residency, not a claim about native driver allocations.
+
+A confirmed mesh pop came from using distance to each vertex in the shader but
+distance to the patch square for CPU selection: a far parent corner had already
+morphed toward the grandparent while a newly selected child only matched the
+unmorphed parent. A synthetic sinusoid reproduced a 5.31253m jump. `patchMorph`
+now uses exactly the square-distance/altitude metric used by `selectPatches`;
+at the mathematical split boundary the parent is unmorphed and all children
+fully match its triangle heights. Morph normals and tint now interpolate parent
+triangle attributes as well, including nonlinear tint clamping at each parent
+vertex. Normal normalization/raster interpolation can still differ slightly
+between triangulations. Skirts continue bridging neighboring patch morph levels.
+The selection timer remains 200ms; this does not promise continuous topology or
+eliminate all transient errors when a fast camera crosses thresholds between ticks.
+
+The same regression review found a separate 8.95776m jump at clipped theater
+boundaries: parent samples used unclipped grid corners while rendered vertices
+clamped to the theater. Parent triangle sampling now clamps both its corners and
+interpolation widths to the actual theater boundary, for height, normal and tint.
+Never loosen seam tolerances to hide a topology/interpolation mismatch.
+
+Diagnostics add `transitionActive`, `transitionProgress`, `transitionFrom`,
+`transitionTo`, `transitionsCompleted`, `outgoingPatches`, and
+`geometryCacheBytes`. The panel shows the transition and completion count. A real
+Ukraine route starts x470475/y1293.3447/z49725/yawπ/pitch−0.2, holds E for about
+4 seconds, settles, then Q for about 4 seconds and settles: it crosses 0→1→0.
+The packaged smoke tool owns automated flight/capture reproduction. Geometry
+residency and the transient frame cost must be sampled during the fade, not only
+once it settles. Fast lateral motion can outrun retained coverage, especially
+while hierarchies are frozen; source boundaries and silhouettes remain explicit
+visual stress cases.
+
+Before implementation commit: `bunx tsc -p engine/tsconfig.json`,
+`bunx eslint engine/src/terrain engine/src/ui/TerrainViewer.tsx`, and
+`bun test engine/src/terrain` pass: **20 tests / 4507 expectations**. New
+regressions cover incomplete coverage, candidate debounce, bidirectional fade
+completion, parent triangle normals, bounded full-tile fallback, and both
+numerically reproduced parent/child height defects. These tests do not compile
+GPU shaders or establish screenshot/performance acceptance.

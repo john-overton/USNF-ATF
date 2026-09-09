@@ -8,7 +8,6 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   Scene,
-  Vector3,
   WebGLRenderer,
 } from 'three';
 import type { TerrainChunk, TheaterManifest } from '../data';
@@ -20,6 +19,8 @@ import { WaterLayer } from './water';
 import { decodeChunk } from './chunk';
 import {
   floatingOrigin,
+  patchMorph,
+  type Patch,
   selectPatches,
   selectSourceChunks,
   viewDistance,
@@ -27,6 +28,7 @@ import {
 } from './lod';
 import { parseManifest, safeRelativePath } from './manifest';
 import { buildPatch } from './mesh';
+import { SourceTransition } from './transition';
 
 export interface TerrainDiagnostics {
   status: 'loading' | 'ready' | 'error';
@@ -51,6 +53,13 @@ export interface TerrainDiagnostics {
   pitch: number;
   origin: { x: number; z: number };
   sourceLod: number;
+  transitionActive: boolean;
+  transitionProgress: number;
+  transitionFrom: number;
+  transitionTo: number;
+  transitionsCompleted: number;
+  geometryCacheBytes: number;
+  outgoingPatches: number;
   depthBuffer: 'logarithmic';
   patches: number;
   width: number;
@@ -67,7 +76,10 @@ declare global {
 interface PatchResource {
   mesh: Mesh;
   material: MeshStandardMaterial;
-  cameraUniform: { value: Vector3 };
+  morphUniform: { value: number };
+  patch: Patch;
+  fadeUniform: { value: number };
+  outgoingUniform: { value: boolean };
   chunk: TerrainChunk;
   x: number;
   z: number;
@@ -110,6 +122,8 @@ export function startTerrainViewer(
     p.mesh.geometry.dispose();
     p.material.dispose();
   });
+  const transition = new SourceTransition();
+  const outgoing = new Set<string>();
   const visible = new Set<string>(),
     pending = new Set<string>(),
     failed = new Set<string>();
@@ -149,6 +163,13 @@ export function startTerrainViewer(
     pitch,
     origin: { x: 0, z: 0 },
     sourceLod: 0,
+    transitionActive: false,
+    transitionProgress: 1,
+    transitionFrom: -1,
+    transitionTo: -1,
+    transitionsCompleted: 0,
+    geometryCacheBytes: 0,
+    outgoingPatches: 0,
     depthBuffer: 'logarithmic',
     patches: 0,
     width: 0,
@@ -283,17 +304,33 @@ export function startTerrainViewer(
     const selection = selectSourceChunks(manifest, world);
     desired = selection.chunks;
     pump();
-    // Preserve previous coverage until a complete new source set is available.
-    if (desired.every((c) => data.get(c.path))) {
+    // A stable complete set starts one transition at a time. Freeze both patch
+    // hierarchies during the fade so topology churn cannot interrupt the blend.
+    const loaded = desired.every((c) => data.get(c.path));
+    if (transition.consider(selection.lod, loaded, now)) {
+      if (transition.active) for (const key of visible) outgoing.add(key);
       displayed = desired;
       d.sourceLod = selection.lod;
-      if (d.status !== 'error') d.status = water?.pending ? 'loading' : 'ready';
+    } else if (!transition.active && selection.lod === transition.to && loaded) {
+      displayed = desired;
     } else if (!displayed.length) displayed = desired.filter((c) => data.get(c.path));
+    if (d.status !== 'error')
+      d.status = loaded && !transition.active && !water?.pending ? 'ready' : 'loading';
+    if (transition.active && [...visible].some((key) => !outgoing.has(key))) return;
+    // Touch retained outgoing resources before allocations, keeping inactive LRU
+    // entries first in the eviction queue. Each active hierarchy is capped below.
+    for (const key of outgoing) patches.get(key);
+    let maxDepth = 4;
+    while (
+      maxDepth > 0 &&
+      displayed.reduce((sum, chunk) => sum + selectPatches(chunk, world, maxDepth).length, 0) > 1000
+    )
+      maxDepth--;
     const nextVisible = new Set<string>();
     for (const chunk of displayed) {
       const samples = data.get(chunk.path);
       if (!samples) continue;
-      for (const patch of selectPatches(chunk, world)) {
+      for (const patch of selectPatches(chunk, world, maxDepth)) {
         if (
           chunk.originX + patch.x >= manifest.extents.width ||
           chunk.originZ + patch.z >= manifest.extents.height
@@ -309,24 +346,48 @@ export function startTerrainViewer(
               roughness: 1,
               side: DoubleSide,
             });
-          const cameraUniform = { value: new Vector3() };
+          const morphUniform = { value: 0 };
+          const fadeUniform = { value: 1 };
+          const outgoingUniform = { value: false };
           material.onBeforeCompile = (shader) => {
-            shader.uniforms.terrainCamera = cameraUniform;
-            shader.uniforms.terrainSpan = { value: patch.span };
+            shader.uniforms.terrainMorph = morphUniform;
+            shader.uniforms.sourceFade = fadeUniform;
+            shader.uniforms.sourceOutgoing = outgoingUniform;
             shader.vertexShader =
-              'attribute float coarseHeight;\nuniform vec3 terrainCamera;\nuniform float terrainSpan;\n' +
+              'attribute float coarseHeight;\nattribute vec3 coarseNormal;\nattribute vec3 coarseColor;\nuniform float terrainMorph;\n' +
               shader.vertexShader;
             shader.vertexShader = shader.vertexShader.replace(
               '#include <begin_vertex>',
-              '#include <begin_vertex>\nfloat terrainDistance=distance(position,terrainCamera);\nfloat terrainMorph=smoothstep(terrainSpan*2.0,terrainSpan*2.8,terrainDistance);\ntransformed.y=mix(position.y,coarseHeight,terrainMorph);',
+              '#include <begin_vertex>\ntransformed.y=mix(position.y,coarseHeight,terrainMorph);',
+            );
+            shader.vertexShader = shader.vertexShader.replace(
+              '#include <beginnormal_vertex>',
+              '#include <beginnormal_vertex>\nobjectNormal=normalize(mix(normal,coarseNormal,terrainMorph));',
+            );
+            shader.vertexShader = shader.vertexShader.replace(
+              '#include <color_vertex>',
+              '#include <color_vertex>\nvColor=mix(color,coarseColor,terrainMorph);',
+            );
+            shader.fragmentShader =
+              'uniform float sourceFade;\nuniform bool sourceOutgoing;\n' + shader.fragmentShader;
+            shader.fragmentShader = shader.fragmentShader.replace(
+              '#include <clipping_planes_fragment>',
+              `#include <clipping_planes_fragment>
+              // Complementary screen-space masks: depth-writing opaque surfaces,
+              // no coincident alpha blend or dependence on source-grid nesting.
+              float sourceNoise=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
+              if(sourceOutgoing ? sourceNoise<sourceFade : sourceNoise>=sourceFade) discard;`,
             );
           };
-          material.customProgramCacheKey = () => 'terrain-height-morph-v1';
+          material.customProgramCacheKey = () => 'terrain-normal-source-morph-v3';
           const mesh = new Mesh(built.geometry, material);
           resource = {
             mesh,
             material,
-            cameraUniform,
+            morphUniform,
+            patch,
+            fadeUniform,
+            outgoingUniform,
             chunk,
             x: patch.x,
             z: patch.z,
@@ -342,7 +403,7 @@ export function startTerrainViewer(
     for (const key of visible)
       if (!nextVisible.has(key)) {
         const p = patches.get(key);
-        if (p) p.mesh.visible = false;
+        if (p && !outgoing.has(key)) p.mesh.visible = false;
       }
     visible.clear();
     for (const key of nextVisible) visible.add(key);
@@ -368,25 +429,31 @@ export function startTerrainViewer(
       world.x = Math.max(0, Math.min(manifest.extents.width, world.x));
       world.z = Math.max(0, Math.min(manifest.extents.height, world.z));
     }
+    if (transition.update(now)) {
+      for (const key of outgoing) {
+        const p = patches.get(key);
+        if (p) p.mesh.visible = false;
+      }
+      outgoing.clear();
+      lastSelect = -Infinity;
+    }
     select(now);
     d.origin = floatingOrigin(world);
     camera.position.set(world.x - d.origin.x, world.y, world.z - d.origin.z);
     camera.rotation.set(pitch, yaw, 0, 'YXZ');
     d.yaw = yaw;
     d.pitch = pitch;
-    for (const key of visible) {
+    for (const key of new Set([...visible, ...outgoing])) {
       const p = patches.get(key);
       if (!p) continue;
+      p.fadeUniform.value = transition.active ? transition.progress : 1;
+      p.outgoingUniform.value = outgoing.has(key);
       p.mesh.position.set(
         p.chunk.originX + p.x - d.origin.x,
         0,
         p.chunk.originZ + p.z - d.origin.z,
       );
-      p.cameraUniform.value.set(
-        world.x - p.chunk.originX - p.x,
-        world.y,
-        world.z - p.chunk.originZ - p.z,
-      );
+      p.morphUniform.value = patchMorph(p.chunk, p.patch, world);
     }
     water?.rebase(d.origin);
     d.waterCacheBytes = water?.bytes ?? 0;
@@ -404,7 +471,14 @@ export function startTerrainViewer(
     d.loadedChunks = data.size;
     d.pendingChunks = pending.size;
     d.cacheBytes = data.bytes + patches.bytes + d.waterCacheBytes;
-    d.patches = visible.size;
+    d.patches = visible.size + outgoing.size;
+    d.geometryCacheBytes = patches.bytes;
+    d.outgoingPatches = outgoing.size;
+    d.transitionActive = transition.active;
+    d.transitionProgress = transition.progress;
+    d.transitionFrom = transition.from;
+    d.transitionTo = transition.to;
+    d.transitionsCompleted = transition.completed;
     if (now - lastStats >= 500) {
       d.frameMs = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length;
       const sorted = [...frameTimes].sort((a, b) => a - b);

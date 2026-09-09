@@ -125,6 +125,13 @@ export function TerrainViewer() {
               <dd>
                 {stats.sourceLod} / {stats.patches}
               </dd>
+              <dt>Source transition</dt>
+              <dd>
+                {stats.transitionActive
+                  ? `${stats.transitionFrom} → ${stats.transitionTo} (${Math.round(stats.transitionProgress * 100)}%)`
+                  : 'Stable'}{' '}
+                · {stats.transitionsCompleted} completed
+              </dd>
               <dt>Chunks cached / loading</dt>
               <dd>
                 {stats.loadedChunks} / {stats.pendingChunks}

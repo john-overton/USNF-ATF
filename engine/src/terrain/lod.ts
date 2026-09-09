@@ -32,15 +32,27 @@ export function distanceToSquare(
     Math.max(z - camera.z, 0, camera.z - z - span),
   );
 }
+/** The exact selection metric also drives morphs, including at far patch corners. */
+export function patchDistance(
+  chunk: TerrainChunk,
+  patch: { x: number; z: number; span: number },
+  camera: WorldPosition,
+): number {
+  return Math.hypot(
+    distanceToSquare(chunk.originX + patch.x, chunk.originZ + patch.z, patch.span, camera),
+    Math.max(0, camera.y - chunk.maxElevation),
+  );
+}
+export function patchMorph(chunk: TerrainChunk, patch: Patch, camera: WorldPosition): number {
+  const t = Math.max(0, Math.min(1, (patchDistance(chunk, patch, camera) / patch.span - 2) / 0.8));
+  return t * t * (3 - 2 * t);
+}
 /** Distance-driven dyadic mesh hierarchy within one independently sampled source tile. */
-export function selectPatches(chunk: TerrainChunk, camera: WorldPosition): Patch[] {
+export function selectPatches(chunk: TerrainChunk, camera: WorldPosition, maxDepth = 4): Patch[] {
   const result: Patch[] = [];
   const visit = (x: number, z: number, span: number, depth: number, key: string): void => {
-    const distance = Math.hypot(
-      distanceToSquare(chunk.originX + x, chunk.originZ + z, span, camera),
-      Math.max(0, camera.y - chunk.maxElevation),
-    );
-    if (depth < 4 && distance < span * 1.4) {
+    const distance = patchDistance(chunk, { x, z, span }, camera);
+    if (depth < maxDepth && distance < span * 1.4) {
       const half = span / 2;
       for (let j = 0; j < 2; j++)
         for (let i = 0; i < 2; i++)
