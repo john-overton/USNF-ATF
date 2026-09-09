@@ -82,3 +82,15 @@ synthetic integration tests cover finest-source selection, missing data, bounded
 cache disposal, hole-aware water contact, invalid deck rejection and axis deadzone
 behavior (18 expectations). The full flight model and maneuver harness have
 separate tests. No packaged takeoff/landing acceptance is implied by these checks.
+
+
+Integration review follow-up: recognized key releases now clear held controls
+before checking whether the event target is a form. Moving focus into an input,
+select or button also clears held keys, preventing a stuck elevator/throttle while
+editing the manifest. A synthetic regression reproduces release over a form.
+Async `FlightLayer.create` no longer publishes global diagnostics from its
+constructor: the viewer explicitly activates a layer only after accepting its
+load result. A delayed-old-load/new-load regression verifies that disposing the
+outdated layer cannot remove the accepted layer's diagnostics. Five adapter tests
+now pass (29 expectations), with TypeScript and scoped ESLint clean. Packaged
+checks must rebuild after this follow-up.

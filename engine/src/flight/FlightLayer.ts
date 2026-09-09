@@ -141,6 +141,9 @@ export class FlightLayer {
       this.deck.add(stripe);
     }
     scene.add(this.aircraft, this.deck);
+  }
+  /** Publish only after the viewer accepts this asynchronous result. */
+  activate(): void {
     window.__flightDiagnostics = this.snapshot;
   }
   private initialState(): FlightState {

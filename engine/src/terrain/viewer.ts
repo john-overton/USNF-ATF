@@ -300,6 +300,7 @@ export function startTerrainViewer(
         return;
       }
       flight = layer;
+      flight.activate();
       Object.assign(world, flight.pose().camera);
     }
   })().catch(fail);
