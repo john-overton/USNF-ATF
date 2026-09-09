@@ -170,6 +170,29 @@ def encode(values):
     return gzip.compress(raw,compresslevel=9,mtime=0),low,scale,high
 
 
+def detail_samples(source,x,z,cache):
+    """Use canonical shared-edge queries, independent of GDAL warp partitioning."""
+    xs=np.arange(SIZE)*30+x;zs=np.arange(SIZE)*30+z
+    values=source.sample(xs,zs)
+    for edge,coordinate in [('west',x),('east',x+7650),('south',z),('north',z+7650)]:
+        vertical=edge in ('west','east')
+        key=('vertical' if vertical else 'horizontal',coordinate,z if vertical else x)
+        if key not in cache:
+            cache[key]=source.sample(np.array([coordinate]) if vertical else xs,
+                                     zs if vertical else np.array([coordinate])).reshape(-1)
+        if edge=='west':values[:,0]=cache[key]
+        elif edge=='east':values[:,-1]=cache[key]
+        elif edge=='south':values[0,:]=cache[key]
+        else:values[-1,:]=cache[key]
+    for row in [0,-1]:
+        for col in [0,-1]:
+            key=('corner',float(xs[col]),float(zs[row]))
+            if key not in cache:
+                cache[key]=float(source.sample(np.array([xs[col]]),np.array([zs[row]]))[0,0])
+            values[row,col]=cache[key]
+    return values
+
+
 def build(config, output, source):
     output.mkdir(parents=True, exist_ok=True)
     started=time.monotonic()
@@ -223,6 +246,7 @@ def build(config, output, source):
             values=source.sample(np.arange(851)*30+x*25500,np.arange(851)*30+y*25500)
             if float(np.std(values))>=config.get('roughnessThreshold',80):
                 detail_regions.add((x,y))
+    edge_cache={}
     for lod,spacing in enumerate(SPACINGS):
         filtered_base = uniform_filter(base,size=round(spacing/100),mode="nearest") if lod>1 else base
         span=255*spacing
@@ -234,7 +258,7 @@ def build(config, output, source):
                              for b in range(int(y*span//25500),int(((y+1)*span-1)//25500)+1)}
                     if not covered & detail_regions:
                         continue
-                    values=source.sample(np.arange(SIZE)*spacing+x*span,np.arange(SIZE)*spacing+y*span)
+                    values=detail_samples(source,x*span,y*span,edge_cache)
                 else:
                     xs=np.clip((np.arange(SIZE)*spacing+x*span)/100,0,base.shape[1]-1)
                     zs=np.clip((np.arange(SIZE)*spacing+y*span)/100,0,base.shape[0]-1)

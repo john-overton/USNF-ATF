@@ -11,7 +11,7 @@ import numpy as np
 import rasterio
 from rasterio.transform import from_origin, Affine
 
-from pipeline.core import SyntheticSource, RasterSource, build, encode, probe, dump
+from pipeline.core import SyntheticSource, RasterSource, build, encode, probe, dump, detail_samples
 
 
 class PipelineTests(unittest.TestCase):
@@ -133,10 +133,11 @@ class PipelineTests(unittest.TestCase):
         config=json.loads(Path('theaters/ukraine.json').read_text())
         source=RasterSource(root,config)
         try:
-            xs=np.arange(256)*30+60*7650
-            south=source.sample(xs,np.arange(256)*30+5*7650)
-            north=source.sample(xs,np.arange(256)*30+6*7650)
-            np.testing.assert_array_equal(south[-1,:],north[0,:])
+            for x,y in [(60,5),(62,12)]:
+                cache={}
+                south=detail_samples(source,x*7650,y*7650,cache)
+                north=detail_samples(source,x*7650,(y+1)*7650,cache)
+                np.testing.assert_array_equal(south[-1,:],north[0,:])
         finally:source.close()
 
     def test_real_raster_warp_void_and_valid_zero_land(self):
