@@ -263,7 +263,7 @@ try {
       if (capture) {
         while (Date.now() < captureUntil) {
           const state = await evaluate('window.__terrainDiagnostics()');
-          if (state.sourceTransitionActive) {
+          if (state.transitionActive) {
             const shot = await send('Page.captureScreenshot', { format: 'png' });
             const stem = `transition-${code}-${String(captureIndex++).padStart(3, '0')}`;
             await Bun.write(path.join(out, `${stem}.png`), Buffer.from(shot.data, 'base64'));
@@ -280,7 +280,7 @@ try {
         const state = await evaluate('window.__terrainDiagnostics()');
         if (state.error) throw new Error(state.error);
         return state.pendingChunks === 0 &&
-          !state.sourceTransitionActive &&
+          !state.transitionActive &&
           state.waterBatchesPending === 0
           ? state
           : undefined;
@@ -295,9 +295,13 @@ try {
         p95FrameMs: intervals[Math.floor(intervals.length * 0.95)],
         p99FrameMs: intervals[Math.floor(intervals.length * 0.99)],
       });
+      await Bun.write(
+        path.join(out, 'transition-flight.json'),
+        JSON.stringify({ capturePerturbsTiming: capture, stages }, null, 2) + '\n',
+      );
       if (
         end.sourceLod === start.sourceLod ||
-        !samples.some((sample) => sample.sourceTransitionActive) ||
+        !samples.some((sample) => sample.transitionActive) ||
         samples.some(
           (sample) => sample.error || sample.patches === 0 || sample.waterBatchesOmitted > 0,
         )
