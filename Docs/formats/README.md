@@ -26,7 +26,7 @@ over the whole disc (ESA-embedded LIBs, root LIBs, and loose ESA files).
 | M | partial | [mission.md](mission.md) plain text | 209 / 5,001,327 | 247 / 7,546,660 |
 | MT | decoded | [mission.md](mission.md) plain text | 178 / 282,619 | 172 / 229,947 |
 | T2 | partial | [t2.md](t2.md) header and cell grid; elevation units open | 11 / 1,463,944 | 4 / 580,526 |
-| HUD | identified | Win32 PE plug-in, not decoded ([object-types.md](object-types.md)) | 16 / 65,536 | 37 / 170,496 |
+| HUD | identified | PL/PE-like i386 plug-in; original practice HUD ([hud.md](hud.md)) | 16 / 65,536 | 37 / 170,496 |
 | MNU / LAY / DLG | unknown | UI | 10+8+76 / 511,000 | 12+20+88 / 856,064 |
 | 5K / 8K / 11K | unknown | audio | 594+1+213 / 60,682,679 | 781+1+255 / 83,581,983 |
 | XMI | unknown | music (XMIDI) | 104 / 495,528 | 102 / 534,492 |
