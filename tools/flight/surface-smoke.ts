@@ -6,7 +6,11 @@ const preview = await Bun.build({ entrypoints: ['tools/flight/aircraft-preview.t
 if (!preview.success) throw new Error(String(preview.logs));
 const previewScript = await preview.outputs[0]!.text();
 
+const idIndex = process.argv.indexOf('--id');
+const selected = idIndex >= 0 ? process.argv[idIndex + 1] : undefined;
+if (idIndex >= 0 && selected !== 'a4e' && selected !== 'x31') throw new Error('--id must be a4e or x31');
 for (const id of ['a4e', 'x31'] as const) {
+  if (selected && selected !== id) continue;
   const session = await openDesktop({
     binary: 'shell/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron',
     app: 'shell', terrain: 'extracted/terrain/ukraine',

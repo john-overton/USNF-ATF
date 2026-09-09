@@ -1,5 +1,87 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: fixed-wing surfaces, A-4 hook and X-31 presentation scale
+
+Product source **976d43e** (following initial rig commit **1f5beb0**), isolated
+`/tmp/usnf-surfaces-verification-20260909`. Apple M3 arm64, macOS 26.6.2 (25G83),
+Bun 1.4.2, Node 22.14.0, Python 3.14.6, Electron 44.2.0. Existing dependencies,
+local media and ignored extraction outputs were symlinked from the main checkout.
+The other agent's environment changes were excluded. No new installer packaging,
+Linux, Windows, x64-launch or performance acceptance is claimed; Linux remains
+deferred and Windows launch remains phase 9.
+
+Commands:
+
+```sh
+PYTHONPATH=tools/retail python3 -m retail.sh_static extracted/atf-gold/ATF_2.LIB/A4.SH --pal extracted/atf-gold/ATF_2.LIB/PALETTE.PAL --out extracted/aircraft-surfaces/a4e.json --name 'A-4E Skyhawk' --length-metres 12.22
+PYTHONPATH=tools/retail python3 -m retail.sh_static extracted/atf-gold/ATF_2.LIB/F31.SH --pal extracted/atf-gold/ATF_2.LIB/PALETTE.PAL --out extracted/aircraft-surfaces/x31.json --name 'X-31 EFM' --wingspan-metres 7.26
+bun run typecheck
+bun run lint
+bun test
+python3 -m unittest discover -s tools/retail/tests -p test_sh_static.py
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/surface-smoke.ts
+bun tools/flight/surface-smoke.ts --id x31
+```
+
+Final typecheck/lint pass. All five changed engine TS files pass explicit
+Prettier checks. The combined `bun run check` still stops at the pre-existing
+`CLAUDE.MD` formatting warning; it is outside this aircraft change. Standalone
+Bun suite: **145 pass, 0 fail**, 24,054 expectations. Static-export Python suite:
+**15 pass, 0 skips**, including actual local A4/F31 neutral mesh/UV conservation
+and existing F14 regression tests. The full slow media suite was not rerun for
+this visual-only change; its earlier 79-test result is recorded below.
+
+Verified exports have **482 A4 triangles / 9 moving groups** and **398 F31
+triangles / 6 moving material groups** (five logical surfaces; rudder is split
+by material). Neutral face geometry, scalar triangle area, area vector, UV area,
+colors and textures are conserved. Independent review found a maximum 0.4061
+native-square-unit change when clipping nonplanar A4 quads before triangulation
+(face 0x3b5d); the converter now retains the original fan triangles before clipping,
+and the regression tests catch that error. No SH opcode semantics were changed.
+
+Electron flight tests drive actual keyboard handlers and verify pitch/roll/yaw,
+flaps, A4 lateral brakes and hook, then device/surface neutral return. Hook tip
+height is checked near authored wheel-contact height, with the arm staying under
+the fuselage rather than behind the tail. Separate top/side/oblique inspector
+screenshots use the same runtime model/hinge/hook code; the inspector omits gear
+and does not establish flight behavior. Inspected A4 stowed/deployed views show
+the attached belly mount, upward stow and lower deployment. X31 inspection shows
+moving original canards/elevons/rudder and preserved proportions.
+
+A4 hook: mount local (0,-0.86,2.24)m, arm 3.15m plus shoe, stowed -0.18rad,
+deployed +0.4rad. Position, dimensions and timing are authored. No carrier
+arresting force is added; F14 hook presentation is preserved.
+
+All four retail F31 variants share 62 native units of wingspan and 22 of canard
+span. No dropped probe line or aspect-ratio deformation was found. Calibrating
+to local F31.INF's 7.26m wingspan gives 14.988m overall length and 2.576m canard
+span (old 13.21m whole-length calibration gave 6.399m / 2.270m). The whole mesh
+is 13.46% larger; canards are not independently stretched. This is presentation
+calibration, not a recovered native unit or nose-probe convention. Native X31
+vectoring/nozzle-paddle schedules and a definite dorsal brake panel remain open.
+
+Earlier verification failures: the preview bundler initially could not resolve
+Three from the tools folder; it now resolves the engine's installed dependency.
+A type-only Group import fixed lint. Test predicates initially returned false,
+which `openDesktop.poll` treats as a completed value; they now return undefined
+while pending. The earlier aircraft dropdown smoke received the same correction.
+Intermittent Electron `sandboxed_renderer.bundle.js` null-startupData errors
+recurred at process startup, including after an initial-document readiness guard;
+that guard is not claimed to fix the underlying Electron issue. Both aircraft
+passed in a combined run before the final inspector framing adjustment; a later
+final-source A4 run passed but the next X31 process hit the same startup error.
+The `--id x31` rerun passes, including inspector captures, without repeating the
+passed A4 run. Both final per-aircraft reports have zero renderer errors.
+The optional single-aircraft test switch is a test-only follow-up to product
+976d43e. Reports/images live under `extracted/aircraft-surfaces/smoke-{a4e,x31}/`.
+
+Updated models were copied to the canonical ignored `extracted/flight` paths and
+installed into local app data with `install-aircraft.ts --id a4e|x31`; old exports
+are retained as `extracted/aircraft-surfaces/{a4e,x31}-before.json`. Next: reload
+practice flight and compare the surfaces and A4 H toggle. See
+[aircraft setup](../phase-4-aircraft.md) for limits and repeatable commands.
+
 ## 2026-09-09: A-4E / X-31 selection and retail flight profiles
 
 Source **2a1bf9590e76bff406c0c8f9871fe1612934b5b3**, isolated detached worktree

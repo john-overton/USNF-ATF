@@ -202,3 +202,29 @@ Mac Electron chase screenshots show distinct recognizable A-4 and X-31 exteriors
 This does not validate full SH control flow, native animation or thrust-vectoring
 semantics. Non-F14 exports state their static limitation without claiming the
 F-14 authored rig. See [aircraft setup](../phase-4-aircraft.md).
+
+
+## 2026-09-09: authored A4/F31 surface partitions and scale comparison
+
+A4/F31 exports now partition selected existing triangles into a visual rig.
+The source's fan triangulation is retained before any clipping: four nonplanar
+A4 faces changed slightly when cut as quads (largest scalar-area difference
+0.4061 native square units). The regression checks per-source-face scalar area,
+area vector, UV area, palette/texture identity and bounds. Final exports contain
+482 A4 / 398 F31 triangles versus the earlier static 371 / 350.
+
+F31 articulated parts near forward=54 supply the canards; rear articulated
+parts remain static nozzle paddles. Wing trailing strips and the fin are
+partitioned for elevons/rudder with authored hinges. A4 uses separate elevator,
+aileron, flap, rudder and lateral-brake regions. No SH opcode semantics changed.
+Original coordinates/UVs are conserved in neutral; hinge axes and control mixing
+are presentation choices, not recovered SH/native animation laws.
+
+F31/F31E/F31V/F31F share 62 native units of wingspan and 22 of canard span.
+The original 13.21 m length calibration undersized the model relative to local
+F31.INF dimensions; no aspect-ratio corruption was found. The new optional
+wingspan-based uniform scale records its reference and resulting span/length.
+At 7.26 m wingspan, F31 is 14.988 m long with 2.576 m canard span. Nose/probe
+interpretation and native unit scale remain uncertain. Different retail skins
+do not fix the small source canard proportions. Measurements remain ignored in
+`extracted/x31-review/measurements.json`; see [setup](../phase-4-aircraft.md).

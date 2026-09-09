@@ -13,8 +13,31 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics | Polished packaged coast/detail ~60 fps at 1440p; current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness, indexed exact water queries | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and 11-case harness, indexed exact water queries | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: A-4E / X-31 surface rigs, Skyhawk hook and X-31 scale
+
+Added authored movement to the imported A-4 elevators, ailerons, flaps, rudder
+and lateral speed brakes, plus X-31 canards, elevons and rudder. Fixed-wing rigs
+keep source textures and neutral shape; triangulation precedes clipping because
+independent review found small neutral-shape changes when clipping nonplanar A-4
+quads first. Actual-source area/UV conservation tests now cover that case.
+
+Replaced the A-4's scaled F-14 hook placement with its own belly mount, longer
+arm/shoe, upward stow and shallower deployment. X-31 calibration now uses the
+7.26 m wingspan from its local reference entry, making the whole aircraft 13.46%
+larger. All four retail variants have the same small canard/wing proportions;
+no decoder shortening was found, so canards are not independently stretched.
+
+Installed the verified 482/398-triangle exports locally. Mac Electron checks
+exercise movement, neutral return and hook placement, with separate orthographic
+inspection views. Exact source, test results and earlier verification failures
+are in the phase 4 baseline. Native animation schedules, X-31 vectoring/paddles,
+visual X-31 brakes and carrier arresting force remain unimplemented. These are
+visual changes; flight physics and the other agent's environment work are intact.
+Next: reload the practice view and exercise pitch/roll, F/B and the A-4 H toggle;
+[aircraft setup](phase-4-aircraft.md) contains repeatable conversion/test commands.
 
 ## 2026-09-09: selectable A-4E and X-31 with their own flight profiles
 
