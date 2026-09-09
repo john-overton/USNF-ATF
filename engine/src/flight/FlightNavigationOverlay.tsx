@@ -5,6 +5,7 @@ import type { FlightDiagnostics } from './FlightLayer';
 import { FlightHud } from './FlightHud';
 import { flightHudReadout } from './hud';
 import { waypointGuidance } from './navigation';
+import type { MapWaypoint } from '../terrain/navigation-map';
 
 /** Map loading is independent of contact physics and survives helper minimization. */
 export function FlightNavigationOverlay({
@@ -12,11 +13,13 @@ export function FlightNavigationOverlay({
   root,
   manifestPath,
   onFlightFocus,
+  onTeleport,
 }: {
   flight: FlightDiagnostics;
   root: FsRoot;
   manifestPath: string;
   onFlightFocus: () => void;
+  onTeleport: (waypoint: MapWaypoint) => Promise<void>;
 }) {
   const map = useNavigationMap(getPlatform(), root, manifestPath);
   const heading = flightHudReadout(flight.state, flight.telemetry).heading;
@@ -40,6 +43,7 @@ export function FlightNavigationOverlay({
         aircraft={{ x: flight.position.x, z: flight.position.z, headingDegrees: heading }}
         selectedWaypointId={selectedId}
         onFlightFocus={onFlightFocus}
+        onTeleport={onTeleport}
       />
     </>
   );

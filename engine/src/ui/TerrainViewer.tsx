@@ -3,6 +3,8 @@ import { getPlatform } from '../platform';
 import { FlightNavigationOverlay } from '../flight/FlightNavigationOverlay';
 import type { FsRoot } from '../platform/Platform';
 import { startTerrainViewer, type TerrainDiagnostics } from '../terrain/viewer';
+import { ExplorerNavigationOverlay } from './ExplorerNavigationOverlay';
+import type { MapWaypoint } from '../terrain/navigation-map';
 
 export function TerrainViewer() {
   const params = new URLSearchParams(window.location.search);
@@ -16,6 +18,10 @@ export function TerrainViewer() {
   const [rootPath, setRootPath] = useState('');
   const canvas = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<ReturnType<typeof startTerrainViewer> | null>(null);
+  const teleport = async (waypoint: MapWaypoint) => {
+    if (!viewerRef.current) throw new Error('Terrain viewer is not ready');
+    await viewerRef.current.teleportToWaypoint(waypoint);
+  };
   useEffect(() => {
     let active = true;
     void getPlatform()
@@ -72,6 +78,17 @@ export function TerrainViewer() {
           root={request.root}
           manifestPath={request.path}
           onFlightFocus={() => canvas.current?.focus()}
+          onTeleport={teleport}
+        />
+      )}
+      {!flightMode && stats?.name && (
+        <ExplorerNavigationOverlay
+          key={request.generation}
+          stats={stats}
+          root={request.root}
+          manifestPath={request.path}
+          onControlsFocus={() => canvas.current?.focus()}
+          onTeleport={teleport}
         />
       )}
       <main

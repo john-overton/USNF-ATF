@@ -260,9 +260,12 @@ export async function buildNavigationMap(
     }
   }
   const coastWater = rasterizeWater(grid, largest ? [largest] : []);
+  const colored = colorNavigationMap(grid, heights, water, coastWater);
+  if (manifest.id !== 'ukraine')
+    colored.waypoints = colored.waypoints.filter((point) => point.id !== 1);
   return {
     ...grid,
-    ...colorNavigationMap(grid, heights, water, coastWater),
+    ...colored,
     sourceLod,
     name: manifest.name,
   };
