@@ -100,7 +100,17 @@ export function TerrainMap({
       );
   }, [data]);
   const point = data ? worldToMap(data, aircraft.x, aircraft.z) : undefined;
-  const viewport = data ? navigationViewport(data, aircraft, zoom) : undefined;
+  const northViewport = data ? navigationViewport(data, aircraft, zoom) : undefined;
+  // Ownship stays centered when rotating near theater edges. The full raster
+  // supplies covered corners; the hatch marks actual space outside the theater.
+  const viewport =
+    northViewport && point && orientation === 'heading-up'
+      ? {
+          ...northViewport,
+          x: point.x - northViewport.width / 2,
+          y: point.y - northViewport.height / 2,
+        }
+      : northViewport;
   const outside =
     data && point && (point.x < 0 || point.y < 0 || point.x > data.width || point.y > data.height);
   return (
