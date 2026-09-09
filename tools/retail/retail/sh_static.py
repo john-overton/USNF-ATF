@@ -119,7 +119,7 @@ def _project(data: bytes, name: str = '') -> dict:
                 raise sh.SHError(f'unresolved static vertex at {primitive.addr:x}')
             polygons.append({'vertices': [slots[i] for i in primitive.indices],
                              'color': primitive.color, 'uvs': primitive.uvs,
-                             'texture': texture, 'part': part, 'addr': primitive.addr})
+                             'texture': texture, 'part': part, 'addr': primitive.addr, 'subtype': primitive.subtype})
         # Nearest LOD: do not take distance/far-model links. Plane ordering and
         # state conditional links are not needed in a double-sided static mesh.
         off += length
@@ -154,10 +154,16 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
     palette = load_pal(str(palette_path))
     groups = {}
     for polygon in model['polygons']:
-        key = (polygon['part'], polygon['texture'] if polygon['uvs'] else '')
+        component = polygon['part']
+        if source.stem.upper() == 'F14' and polygon['subtype'] == 0x44:
+            # Observed neutral F-14: the two special textured rear nozzle disks.
+            # Keep them separate so authored engine state can darken an idle nozzle.
+            x = sum(v[0] for v in polygon['vertices']) / len(polygon['vertices'])
+            component = 'exhaust-left' if x < 0 else 'exhaust-right'
+        key = (component, polygon['texture'] if polygon['uvs'] else '')
         if key not in groups:
             groups[key] = {'name': key[0], 'positions': [], 'colors': [], 'pivot': convert(model['parts'].get(key[0], center))}
-            if key[0] != 'body' and source.stem.upper() == 'F14':
+            if key[0].startswith('part-') and source.stem.upper() == 'F14':
                 groups[key]['name'] = 'wing-left' if model['parts'][key[0]][0] < 0 else 'wing-right'
             groups[key]['name'] += '-textured' if key[1] else '-color'
             if key[1]:
@@ -175,7 +181,9 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
                 group['colors'].extend(c / 255 for c in rgb)
                 if key[1]:
                     u, v = polygon['uvs'][index]
-                    # Retail UVs are integer atlas pixels (8-bit or 16-bit).
+                    # Preserve the projection's V convention. The loader uses DataTexture
+                    # flipY=false; special 0x44 exhaust material is separately named.
+                    # Original material/UV dispatch beyond this projection is unproven.
                     group['uvs'].extend((u / group['texture']['width'], 1 - v / group['texture']['height']))
     result = {'version': 1, 'name': 'F-14 Tomcat', 'positions': [], 'colors': [],
               'parts': list(groups.values()),
@@ -187,7 +195,8 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
                               'Static neutral pose; original x86 animation and renderer are not executed.',
                               '19.1 m length is a presentation scale, not decoded retail units.',
                               'Neutral projection includes wings; gear and hook animation are not recovered.',
-                              'Texture UV orientation requires packaged visual review.']}
+                              'Special exhaust disks are separated for authored engine-state presentation.',
+                              'Original texture dispatch is partial; DataTexture uses flipY=false.']}
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, separators=(',', ':')) + '\n')
     return result

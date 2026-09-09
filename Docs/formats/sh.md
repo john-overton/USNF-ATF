@@ -45,10 +45,17 @@ Confirmed export corrections and bounded interpretations:
   on the high tail fins would incorrectly lower the belly into the runway.
 - Palette faces retain colors; textured faces carry atlas pixel UVs and decoded
   PIC RGBA. Meshes split by component and textured/untextured material. Texture
-  orientation is a separate packaged visual acceptance item.
+  orientation/material dispatch is only partially understood. The exported V
+  convention currently uses `DataTexture.flipY=false`. A packaged flip-Y
+  experiment misapplied atlas art; this does not establish every UV subtype.
+  F-14 subtype `0x44` specifically identifies the two rear nozzle disks, now
+  separated as `exhaust-left-textured` and `exhaust-right-textured`. Their baked
+  hot-core art must not masquerade as a stopped engine: the flight adapter uses
+  authored dark material when not in afterburner. Authentic material dispatch
+  and heat animation remain unrecovered.
 
-The local export contains **186 resolved polygons / 326 triangles**, six meshes
-(body and two wings, each split by material), and the locally decoded 256×411
+The local export contains **186 resolved polygons / 326 triangles**, eight meshes
+(body and two wings split by material, plus separate exhaust disks), and the locally decoded 256×411
 atlas. The standalone oblique preview shows a recognizable fuselage, nose,
 canopy silhouette, twin tails, stabilizers and wings. Parser success, this shape
 recognition, packaged texture review and original game parity remain distinct.
@@ -61,9 +68,9 @@ matching per-vertex sRGB `colors`, optional `uvs` and
 from its vertices. Root arrays may be empty. `source` records input hashes and
 projection scope; `limitations` states what is not recovered.
 
-Nine synthetic regressions cover shared-buffer replacement, structured scope
+Ten synthetic regressions cover shared-buffer replacement, structured scope
 and LOD isolation, translated parts, missing indices, controlled truncation,
-opaque-code rejection, target bounds, and the optional-UV/vertical-origin export contract. No fixture contains retail geometry.
+opaque-code rejection, target bounds, and the optional-UV/vertical-origin export contract and separated special exhaust material. No fixture contains retail geometry.
 The neutral projection does **not** recover original gear/hook animation,
 wing-sweep scheduling, textures' original shading, or flight coefficients.
 Flight-test gear/hook animation may be original adapter geometry and must be

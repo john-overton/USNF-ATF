@@ -3,6 +3,8 @@ import struct
 import unittest
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from _paths import TOOLS_RETAIL  # noqa: F401
 from retail.sh import SHError
@@ -92,6 +94,23 @@ class StaticShapeTest(unittest.TestCase):
             self.assertAlmostEqual(min(part['positions'][1::3]), -3.82)
             self.assertAlmostEqual(max(part['positions'][1::3]), 9.55)
             self.assertEqual(len(part['positions']), len(part['colors']))
+
+    def test_special_textured_nozzle_is_separate_from_body(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, palette = root / 'F14.SH', root / 'PALETTE.PAL'
+            texture_record = b'\xe2\0' + b'_f14.PIC'.ljust(14, b'\0')
+            face = bytes([0xfc, 0x44, 3, 0, 0]) + bytes(9) + bytes([3, 0, 1, 2, 1, 2, 3, 4, 5, 6])
+            source.write_bytes(image(texture_record + table([(-10, 0, 0), (-5, 0, 0), (-5, 10, 0)]) + face + b'\0'))
+            palette.write_bytes(bytes(768))
+            (root / '_F14.PIC').write_bytes(b'synthetic')
+            texture = SimpleNamespace(width=32, height=64, pixels=bytes(32 * 64), palette=None)
+            with patch('retail.sh_static.parse_pic', return_value=texture):
+                result = export(source, palette, root / 'mesh.json')
+            part = result['parts'][0]
+            self.assertEqual(part['name'], 'exhaust-left-textured')
+            self.assertEqual(part['uvs'][:2], [1 / 32, 1 - 2 / 64])
+            self.assertEqual(len(part['texture']['rgba']), 32 * 64 * 4)
 
     def test_out_of_range_part_target_rejected(self):
         code = bytes([0xc4, 0]) + struct.pack('<hhhhhhh', 0, 0, 0, 0, 0, 0, 500)
