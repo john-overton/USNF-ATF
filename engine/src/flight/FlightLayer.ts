@@ -36,6 +36,7 @@ import { FlightAudio } from './FlightAudio';
 import { createFuelState, setFuelFraction, stepFuel, type FuelState } from './FuelSystem';
 import { RetailAircraft } from './RetailAircraft';
 import { surfaceAngle } from './ControlSurfaces';
+import { waypointDestination, type TeleportWaypoint } from '../terrain/teleport';
 
 export interface FlightDiagnostics {
   state: FlightState;
@@ -120,6 +121,8 @@ export class FlightLayer {
   private takeoffs = 0;
   private landings = 0;
   private waiting = false;
+  private disposed = false;
+  private teleportRequest = 0;
   private airborneArmed = this.approach || this.airborneStart;
   private readonly environment;
   private readonly snapshot = (): FlightDiagnostics => this.diagnostics();
@@ -307,6 +310,35 @@ export class FlightLayer {
     this.resetFuelFraction = this.fuel.fuelKg / this.fuel.capacityKg;
     this.updateFuelMass();
   }
+  async teleportToWaypoint(point: TeleportWaypoint): Promise<void> {
+    const request = ++this.teleportRequest;
+    if (this.disposed) throw new Error('Flight has been closed');
+    const destination = waypointDestination(this.ground.manifest, point);
+    // A failed optional jump must not poison contact at the current flight position.
+    await this.ground.ensure(point.x, point.z, false);
+    if (this.disposed || request !== this.teleportRequest)
+      throw new Error('Waypoint teleport was superseded');
+    const surface = this.ground.sample(point.x, point.z);
+    if (!surface) throw new Error('Waypoint ground contact data is unavailable');
+    destination.position.y = Math.max(destination.position.y, surface.height + 1000);
+    this.state = createFlightState({
+      position: destination.position,
+      yawRad: destination.yaw,
+      airspeed: Math.max(150, Math.min(250, this.telemetry.airspeed)),
+    });
+    this.previous = this.state;
+    this.clock.reset();
+    this.alpha = 0;
+    this.waiting = false;
+    this.airborneArmed = true;
+    this.input.waypointIndex = point.id - 1;
+    this.telemetry = (this.useRetail ? sampleTelemetry : sampleAssistedTelemetry)(
+      this.state,
+      this.environment,
+      this.definition,
+    );
+    this.ground.prefetch(point.x, point.z, this.state.velocity.x, this.state.velocity.z);
+  }
   private updateFuelMass(): void {
     if (this.useRetail && this.profile) {
       // Fuel refilling respects maximum takeoff weight with the selected payload.
@@ -319,6 +351,7 @@ export class FlightLayer {
   }
   advance(seconds: number): void {
     if (this.input.resetRequested) {
+      this.teleportRequest++;
       this.fuel = createFuelState(this.fuel.capacityKg, this.resetFuelFraction);
       this.updateFuelMass();
       this.state = this.initialState();
@@ -582,6 +615,8 @@ export class FlightLayer {
     };
   }
   dispose(): void {
+    this.disposed = true;
+    this.teleportRequest++;
     this.input.dispose();
     this.audio.dispose();
     this.model?.dispose();

@@ -184,6 +184,41 @@ test('discarded asynchronous flight layer cannot replace accepted diagnostics', 
     discarded.dispose();
     expect(window.__flightDiagnostics).toBe(snapshot);
     expect(window.__flightDiagnostics?.().landings).toBe(0);
+    accepted.setFuelFraction(0.25);
+    const before = accepted.diagnostics();
+    const destination = { id: 2, x: 290000, z: 390000, elevationM: 0 };
+    await accepted.teleportToWaypoint(destination);
+    const jumped = accepted.diagnostics();
+    expect(jumped.position).toEqual({ x: 290000, y: 1110, z: 390000 });
+    expect(jumped.airspeed).toBeCloseTo(150);
+    expect(jumped.waypointIndex).toBe(1);
+    for (const key of [
+      'fuelMassKg',
+      'massKg',
+      'flightModelId',
+      'cameraMode',
+      'engineRunning',
+      'gearDown',
+      'hookDown',
+      'flapsDown',
+      'airbrakeDown',
+      'systems',
+    ] as const)
+      expect(jumped[key]).toEqual(before[key]);
+    const oldJump = accepted.teleportToWaypoint({ ...destination, x: 291000 });
+    const newJump = accepted.teleportToWaypoint({ ...destination, id: 3, x: 292000 });
+    expect(await oldJump.catch(String)).toContain('superseded');
+    await newJump;
+    expect(accepted.diagnostics().position.x).toBe(292000);
+    expect(accepted.diagnostics().waypointIndex).toBe(2);
+    expect(await accepted.teleportToWaypoint({ ...destination, x: 1 }).catch(String)).toContain(
+      'coverage',
+    );
+    expect(accepted.diagnostics().position.x).toBe(292000);
+    const closingJump = accepted.teleportToWaypoint(destination);
+    accepted.dispose();
+    expect(await closingJump.catch(String)).toContain('superseded');
+    accepted = undefined;
   } finally {
     release();
     accepted?.dispose();

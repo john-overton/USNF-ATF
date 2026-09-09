@@ -30,6 +30,7 @@ import {
 import { parseManifest, safeRelativePath } from './manifest';
 import { buildPatch } from './mesh';
 import { SourceTransition } from './transition';
+import { waypointDestination, type TeleportWaypoint } from './teleport';
 
 export interface TerrainDiagnostics {
   flight?: FlightDiagnostics;
@@ -94,7 +95,11 @@ export function startTerrainViewer(
   root: FsRoot,
   manifestPath: string,
   update: (d: TerrainDiagnostics) => void,
-): { dispose(): void; setFuelFraction(fraction: number): void } {
+): {
+  dispose(): void;
+  setFuelFraction(fraction: number): void;
+  teleportToWaypoint(point: TeleportWaypoint): Promise<void>;
+} {
   const flightMode = new URLSearchParams(window.location.search).get('mode') === 'flight';
   let flight: FlightLayer | undefined;
   const renderer = new WebGLRenderer({
@@ -138,6 +143,7 @@ export function startTerrainViewer(
     manifest: TheaterManifest | undefined,
     folder = '';
   let disposed = false,
+    teleportRequest = 0,
     raf = 0,
     last = performance.now(),
     lastSelect = -Infinity,
@@ -534,11 +540,38 @@ export function startTerrainViewer(
   }
   raf = requestAnimationFrame(frame);
   return {
+    async teleportToWaypoint(point: TeleportWaypoint): Promise<void> {
+      const request = ++teleportRequest;
+      if (disposed || !manifest || (flightMode && !flight))
+        throw new Error('Terrain viewer is not ready');
+      if (flight) {
+        await flight.teleportToWaypoint(point);
+        if (disposed || request !== teleportRequest)
+          throw new Error('Waypoint teleport was superseded');
+        Object.assign(world, flight.pose().camera);
+        d.flight = flight.diagnostics();
+      } else {
+        const destination = waypointDestination(manifest, point);
+        const bytes = await platform.fs.readBytes(root, folder + destination.chunk.path);
+        await decodeChunk(bytes, destination.chunk);
+        if (disposed || request !== teleportRequest)
+          throw new Error('Waypoint teleport was superseded');
+        Object.assign(world, destination.position);
+        yaw = destination.yaw;
+        pitch = -0.45;
+        d.yaw = yaw;
+        d.pitch = pitch;
+        keys.clear();
+      }
+      lastSelect = -Infinity;
+      update(diagnostics());
+    },
     setFuelFraction(fraction: number) {
       flight?.setFuelFraction(fraction);
     },
     dispose() {
       disposed = true;
+      teleportRequest++;
       cancelAnimationFrame(raf);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKey);

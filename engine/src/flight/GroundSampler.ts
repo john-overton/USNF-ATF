@@ -93,7 +93,7 @@ export class GroundSampler {
       if (chunk) return chunk;
     }
   }
-  async ensure(x: number, z: number): Promise<void> {
+  async ensure(x: number, z: number, reportError = true): Promise<void> {
     const chunk = this.sourceAt(x, z);
     if (!chunk)
       throw new Error('Flight requires complete 100m or finer ground coverage at this position');
@@ -106,16 +106,17 @@ export class GroundSampler {
         .then((samples) => {
           if (!this.disposed) this.data.put(chunk.path, samples, samples.byteLength);
         })
-        .catch((error: unknown) => {
-          this.error = String(error);
-          throw error;
-        })
         .finally(() => {
           this.pending.delete(chunk.path);
         });
       this.pending.set(chunk.path, request);
     }
-    await request;
+    try {
+      await request;
+    } catch (error) {
+      if (reportError && !this.disposed) this.error = String(error);
+      throw error;
+    }
   }
   prefetch(x: number, z: number, vx: number, vz: number): void {
     for (const seconds of [0, 3, 6]) {
