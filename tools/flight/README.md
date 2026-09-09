@@ -119,3 +119,17 @@ range input, military/AB consumption windows, engine-off zero burn, empty-tank
 cutoff, live refill and manual restart. It verifies experimental mass loss equals
 burned fuel while assisted handling mass stays 9,000 kg. The tool never directly
 writes flight state. Screenshots and exact packaged-source evidence stay ignored.
+
+## Navigation and map acceptance
+
+```sh
+bun tools/flight/navigation-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --out extracted/flight-navigation
+```
+
+This short real-renderer test uses trusted CDP bracket keys, actual form focus
+and product buttons. It checks all three HUD/map destinations, both wrap
+directions, ignored key repeat, form-focus protection, helper minimization,
+live aircraft movement, 1×–16× zoom and its NM scale, focus recovery after zoom,
+and map/HUD separation at 1280×720. Screenshots also cover 2560×1440 and16×zoom.
+It does not fly the entire inter-waypoint route or claim native USNF navigation
+parity. The product map loads the locally installed heightmap and water polygons.

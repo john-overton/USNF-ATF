@@ -13,8 +13,42 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe and codec comparison | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, diagnostics | Packaged coast/detail ~60 fps at 1440p; 0↔1 and 1↔2 fades plus 24km fast lateral flights pass. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, F2/F3 chase, practice starts and 11-case harness | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; local retail F-14 exterior; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, zoomable regional map, F2/F3 chase, practice starts and 11-case harness | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. Authentic F-14 dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: practice navigation and MFD terrain map
+
+Implemented the handoff's navigation pass in66d73e3/2b5d2c9, with waypoint
+readability polishcf238d9. `[ / ]` select strip, mountains and coast; the HUD
+shows horizontal NM range, grid bearing and a steering cue. The top-right map
+uses regional height colors and actual water polygons. The user's follow-up
+adds −/+ zoom1×–16×, a visible NM scale and MFD-style border. Map controls restore
+flight focus, and the map survives helper minimization. The preserved assisted
+physics and both experimental force backends are unchanged.
+
+Destinations are derived from installed Ukraine coverage. Mountain and coast
+positions were independently sampled from finer30/100m terrain and checked dry;
+straight routes have no missing coverage at≤1km samples. This is coverage
+verification, not an entire route flight. The map loads a bounded overview once,
+using validated coarse chunks; zoom magnifies it rather than loading finer map
+terrain. Water holes remain dry and missing samples are excluded from percentiles.
+
+Full check at2b5d2c9 passes117tests/5,101expectations. Independent review found no
+blocking defects. Mac packaged acceptance and source-specific measurements are
+in [baseline](baselines/phase-4.md). The initial native run passed functional
+checks but screenshots showed waypoint text over the chase aircraft at1440p;
+cf238d9 moves it above the heading tape without enlarging the HUD. This is why
+DOM assertions and screenshot review are both needed.
+
+Lessons: use world theater coordinates, never floating-origin offsets, for map
+markers; keep map water classification separate from elevation; return focus
+after MFD buttons or flight keys remain intentionally suppressed; scale bars must
+measure the current viewport. Coarse peak heights differ from fine contact data
+(1350m overview vs1467m at the mountain destination), so an overview must not be
+presented as a landing chart. A95th-percentile white threshold describes land
+area, not the top5% of the numerical height range. See
+[implementation notes](phase-4-navigation.md) and updated[handoff](handoff.md).
+Linux remains deferred; human flight-feel/controller gates stay open.
 
 ## 2026-09-09: resumed fuel acceptance passes; navigation handoff recorded
 

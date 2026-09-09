@@ -1,102 +1,92 @@
 # Development handoff — 2026-09-09
 
-The checkpoint was committed/pushed as ac3a142. The user then resumed fuel
-acceptance, which now passes. Ready for compaction and the navigation/map pass. Mac Apple M3, Bun1.4.2/Electron44.2.0.
-Linux testing is explicitly deferred. All agents have finished their owned work.
+Navigation/map development is implemented and committed locally after the pushed
+ac3a142 checkpoint. Latest product source is **cf238d9** (map/input integration
+2b5d2c9, then waypoint-text placement polish). Mac Apple M3, Bun 1.4.2,
+Electron 44.2.0. Linux testing remains explicitly deferred.
 
-## User requirements to preserve
+## Preserve these decisions
 
-- Keep the liked assisted flight model as the default; do not overwrite its feel.
-  `engine/src/sim/flight/assisted-flight.ts` is f70e10c's implementation, unchanged
-  except a provenance comment. Nominal handling mass remains9,000kg even as fuel
-  burns. Fuel exhaustion still cuts engine thrust, as newly requested.
-- Three in-app options: preserved assisted, PT-envelope fit, recovered-native-
-  envelope hybrid. Switching restarts the preset and carries current fuel load.
-  The latter two use actual PT mass/thrust/data and are opt-in. Neither is a full
-  native USNF flight integrator.
-- HUD is25% narrower/shorter, pitch ticks have2× screen spacing, thin retro text;
-  −/+ collapses/restores helper. Ground attitude support fixes parked rotation.
-- Live fuel slider, throttle/AB burn, empty cutoff and T restart after refilling.
-  Experimental mass changes with fuel; default handling mass stays fixed.
-- Keep local retail conversions under ignored extracted/ and app data, never in
-  bundles. Full manual is already in Docs/reference per explicit user request.
+- Keep the liked assisted flight model as the default. Its physics source is
+  unchanged from the previous checkpoint; handling mass stays 9,000 kg while
+  fuel burns. Exhaustion still cuts engine thrust.
+- PT-envelope fit and recovered-native-envelope hybrid remain separate opt-in
+  models, not a full native USNF integrator. Switching restarts the preset and
+  carries fuel. Experimental mass changes with fuel; payload adds mass only.
+- Preserve the smaller thin retro HUD, wider pitch spacing, F2/F3 chase modes,
+  live fuel controls and minimized helper behavior.
+- Retail conversions remain ignored in extracted/ and installed app data, never
+  in bundles. The full manual in Docs/reference is the user-authorized exception.
 
-## Current source and evidence
+## Completed navigation/map request
 
-Latest product package: **8b6a2d4**, `build/mac/mac-arm64/USNF-ATF.app`, built24.6s.
-The final checkpoint includes later docs, a native-power comment and test-tool
-window labeling/disconnect handling; these are not changes to the product binary.
-`bun run check`:110pass/5,045expects. Both14-case fixed-reference headless modes
-pass at8b6a2d4 (`extracted/flight-harness/fuel-era-{retail,recovered}.json`).
-240native envelope cases,3,200power/fuel/slew cases and18clock cases match actual
-local x86 execution. See Docs/formats/native-flight-code.md and native-power.md.
+- `[ / ]` wrap through 1 practice strip, 2 mountains, 3 coastline. Repeats and
+  keys entered in forms are ignored. R selects waypoint 1 again.
+- HUD shows selected destination, horizontal NM distance, north-referenced grid
+  bearing and heading-tape diamond/edge steering chevron. Within 100 m it says
+  ARRIVED; no automatic sequencing or autopilot. Text sits above the heading tape
+  so the chase aircraft does not obscure it.
+- Top-right north-up map stays visible with the helper minimized. It has an
+  aircraft heading marker, numbered destinations, MFD-style border, −/+ zoom
+  (1×–16×) and a visible NM distance scale. Zoom follows the aircraft and clamps
+  at theater edges; buttons return keyboard focus to flight.
+- Regional height colors: blue actual polygon water, green → yellow → red →
+  brown land, white at the regional valid-land 95th percentile. Dry holes and
+  below-sea-level dry land remain land. Missing terrain is dark, not zero height.
+- Map is a bounded 512-pixel overview from coarsest installed terrain, generated
+  once per load. Zoom enlarges that overview rather than streaming finer map
+  data. At high zoom offscreen destinations remain available in HUD guidance.
+- Coordinates are derived from installed data. Current mountain destination is
+  east500483.325/north72926.215m, verified against 30m terrain at1467.421m;
+  coast east275731.777/north309799.333m, verified against100m terrain at2.934m.
+  Both are dry. Strip→mountains382.8km and strip→coast83.3km have no missing
+  30/100m source coverage in ≤1km route samples. No entire route flight claimed.
 
-**Fuel acceptance completed:** `extracted/flight-fuel-resume/report.json` passes
-for preserved assisted and recovered-envelope modes against product source
-8b6a2d4, using the test tools at ac3a142. Both measured 0.9071847400 kg/s military,
-4.5359237000 kg/s AB and zero engine-off burn. Live adjustment, empty-tank thrust
-cutoff, refill without auto-start and manual T restart all pass. Experimental
-mass decreases exactly with consumed fuel; assisted mass stays 9,000 kg. No
-renderer errors. Empty/refilled screenshots and the orange automated-test banner
-were visually checked. This supersedes the interrupted fuel run only; retain its
-old report as history. No product code changes or rebuild were needed.
+Details and lessons: [phase-4-navigation.md](phase-4-navigation.md),
+[progress.md](progress.md), [baseline](baselines/phase-4.md).
 
-The separate final aero/approach runs listed below remain unrun at8b6a2d4; earlier
-4a76cc5 acceptance and fixed-reference headless evidence remain correctly scoped.
-They were not part of this resumed fuel-only request.
+## Evidence and reproduction
 
-## Reproduce fuel acceptance / remaining broader checks
-
-The local PT profile is installed and available at extracted/flight/f14-flight.json.
-It contains native integer envelopes and rates. Rebuild only if product source
-changes; otherwise use the existing named8b6a2d4 package.
+`bun run check` at2b5d2c9: **117 pass / 5,101 expectations**, type/lint/format
+pass. Sourcecf238d9 only moves the waypoint label; focused HUD/navigation checks
+pass5tests/81expectations. Independent code review found no blocking defects.
+The exact packaged navigation runs and visual checks are in the phase4 baseline;
+latest package is rebuilt fromcf238d9 in23.2s, not the old8b6a2d4 fuel package.
+`extracted/flight-navigation-settled/report.json` passes with toolc31fe2a, no
+renderer errors; settled1440p and the earlier720p/16×views were visually reviewed.
 
 ```sh
-bun tools/flight/fuel-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 8b6a2d4 --out extracted/flight-fuel-resume
-bun tools/flight/aero-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 8b6a2d4 --flight-model recovered-envelope --out extracted/flight-fuel-native-aero
-bun tools/flight/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit 8b6a2d4 --flight-profile extracted/flight/f14-flight.json --flight-model recovered-envelope --aircraft extracted/flight/f14.json --audio extracted/flight/audio/f14.json --scenario approach --out extracted/flight-fuel-native-approach
+bun tools/flight/navigation-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit cf238d9 --out extracted/flight-navigation-settled
 ```
 
-Run GPU sessions serially. Inspect screenshots and actual diagnostics. If the
-slider fails, it uses React range input through viewer.setFuelFraction, not a
-writable debug-state hook. The fuel tool dispatches the actual range input event.
+Earlier completed fuel evidence remains correctly scoped to runtime8b6a2d4 and
+toolac3a142: `extracted/flight-fuel-resume/report.json`. Both assisted and recovered
+modes pass military0.9071847400kg/s, AB4.5359237000kg/s, zero off burn, empty cutoff,
+refill without automatic restart and T restart; experimental mass follows burn,
+assisted stays9,000kg. It was not rerun for this UI-only change. Older native
+oracle evidence is240envelope,3,200power and18clock cases; no native routines were
+changed or re-oracled here. Fixed-reference headless suites at8b6a2d4 each pass14.
 
-## Next user-requested development: navigation HUD and terrain map
+## Remaining phase4 work
 
-Recorded for the next pass, not implemented in this fuel-acceptance task:
+Navigation request is complete. Human route flight, physical gamepad and USNF
+feel comparison remain open. The broader final recovered-mode aero/approach
+reruns listed in prior handoff were not part of this navigation pass; use the
+actual current build hash if running them, never label the new package8b6a2d4.
+Run GPU acceptance sessions serially; automated windows have orange labels.
+Do not call phase4 fully accepted while these documented human gates remain.
 
-- Add selected-waypoint guidance to the HUD. Use **[** for previous and **]**
-  for next waypoint, preserving the existing flight controls and form-focus guards.
-- Waypoint 1: the current practice landing strip.
-- Waypoint 2: a mountain destination inside the available Ukraine theater.
-- Waypoint 3: a coastline destination inside the available Ukraine theater.
-  Choose the mountain/coast coordinates from the installed dataset; verify they
-  are reachable and covered before hard-coding destinations. No exact coordinates
-  have been selected yet.
-- Add a top-down map in the **top-right corner** so users can see their aircraft's
-  location. Aircraft heading and the selected waypoint would help orient it.
-- Updated user color direction: **blue water**, then **green → yellow → red →
-  brown** as land elevation rises, with **white for the highest roughly 5% of
-  land elevations**. Render from the existing regional heightmap and scale colors
-  to its valid land elevations. A regional 95th-percentile white threshold is a
-  reasonable starting interpretation; tune intermediate stops for readability.
-  This is an elevation map, not aircraft-relative clearance or danger coloring.
-  Exact palette/thresholds remain flexible, as the user described a visual intent.
-- Reuse the actual water mask/classification; elevation alone must not turn dry
-  low ground into water. Use the theater's coordinate transform consistently for
-  aircraft, waypoint, terrain and water positions. Keep the map useful while the
-  helper panel is minimized and avoid covering essential HUD guidance.
+## Next native development
 
-## Next native work
+USNF.SMS supplies3,440symbols. Envelope routines483150/4830b0 are translated;
+native flap low-speed reduction is25% forabs(G)≤1. Clock is256ticks/s; F14fuel is
+2lb/s military and10lb/s AB with fixed-point quantization. Remake integrates
+fuel at120Hz rather than native5second batches.
 
-USNF.SMS supplies3,440symbols. Envelope routines at483150/4830b0 are translated;
-native flap low-speed reduction is25% forabs(G)≤1. Native clock is256ticks/s;
-F-14 fuel is2lb/s military and10lb/sAB with native fixed-point quantization.
-Remake fuel integrates120Hz instead of native5-second batches.
-
-Power helpers are extracted, but only fuel is wired. Resolve `_COBv` adjusted
+Only fuel from the recovered power helpers is wired. Resolve `_COBv` adjusted
 forward bound / `_FMUpdatePlaneFields`, native full weight, force/vector/state
-adapters and scheduling/wrap before integrating the rest. Oracle-test isolated
-routines against local x86, then trajectories. Keep recovered routines separate
-from the preserved default. Fitted high-G drag transitions and original atmosphere,
-alpha response/post-stall/ground support remain fidelity gaps.
+adapters and scheduling/wrap before integrating other power helpers. Oracle-test
+isolated routines against local x86, then trajectories. Keep all native work
+separate from preserved assisted. Fitted high-G drag transitions and original
+atmosphere, alpha response, post-stall and ground support remain fidelity gaps.
+See Docs/formats/native-flight-code.md and native-power.md.

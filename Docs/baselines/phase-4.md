@@ -1,5 +1,64 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09: navigation HUD and zoomable MFD map
+
+Machine: same Apple M3/macOS arm64, Bun1.4.2, Electron44.2.0. Product source
+**cf238d9**, following navigation/map integration**2b5d2c9**. Mac arm64+x64
+DMG/ZIP build passes in23.2s (initial2b5d2c9 build26.2s); only arm64 launched.
+Full check at2b5d2c9:117tests/5,101expectations plus type/lint/format pass.
+The one-line HUD placement polishcf238d9 passes focused5tests/81expectations.
+Initial development checks caught explicit-undefined optional props and a
+nullish-coalescing lint rule; both were corrected before the accepted full check.
+
+`extracted/flight-navigation/report.json` passes on2b5d2c9;
+`extracted/flight-navigation-final/report.json` passes oncf238d9. Both use the
+actual packaged Electron app and trusted CDP keys/buttons. No renderer errors.
+The first screenshots revealed the waypoint line over the aircraft at1440p;
+cf238d9 moves it above the heading tape. Final1440p/720p screenshots confirm
+readable placement and map separation. Initial1440p capture caught a transient
+cold terrain fade; subsequent toolc31fe2a waits for streaming/transition settling
+before visual capture, without changing product behavior. The resulting
+`extracted/flight-navigation-settled/report.json` passes oncf238d9 with toolc31fe2a;
+the settled1440p screenshot was visually reviewed.
+
+| Acceptance | Result |
+|---|---|
+| Waypoints1→2→3→1 and reverse wrap | Pass, HUD and map agree |
+| Key repeat / text-field focus | Selection does not change |
+| Minimize helper | Map remains, canvas regains focus |
+| Map zoom1/2/4/8/16× and back | Pass, bounded controls |
+| Visible scale at those zooms | 100/50/20/10/5NM |
+| Zoom click followed by bracket key | Flight focus restored; selection changes |
+| Aircraft marker | Tracks actual changing position; north-up coordinate tests pass |
+| 1280×720 map/HUD rectangles | No overlap |
+| Missing/corrupt/cancelled map data | Focused tests reject bad bytes and queued reads; missing samples excluded |
+
+Destination verification from the installed Ukraine dataset is recorded in
+`extracted/flight-navigation-destination-evidence.json`, with exact source chunk
+paths/hashes. OverviewLOD4 map is512×512pixels, generated from2700m source; its
+valid-land white threshold is254.251m, minimum−15.394m, sampled peak1350.171m.
+Negative dry terrain remains land. Water polygons retain their dry holes.
+
+| Destination | East / north metres | Finer terrain check | Distance from strip |
+|---|---|---|---|
+| 1 Practice strip | 289000 /392000 | 100m ground108.139m; existing deck111m | 0 |
+| 2 Mountains | 500483.325 /72926.215 | 30m ground1467.421m, dry | 382.797km |
+| 3 Coastline | 275731.777 /309799.333 | 100m ground2.934m, dry | 83.265km |
+
+GroundSampler.sourceAt checks at≤1km intervals find no missing30/100m coverage:
+384samples to mountains,85to coast. These checks establish sampled manifest
+coverage, not a completed flight or guaranteed clearance. Overview heights are
+not fine contact heights. Zoom enlarges the same overview; small water features
+can be lost at map resolution. No new native-flight parity claim, performance
+baseline or full-route flight is made. Fuel/physics were unchanged and their
+older measurements below retain original source attribution. Linux deferred.
+
+```sh
+bun run check
+bun run build
+bun tools/flight/navigation-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit cf238d9 --out extracted/flight-navigation-settled
+```
+
 ## 2026-09-09: completed packaged fuel acceptance
 
 Resumed run on the same Apple M3/macOS arm64, Electron44.2.0, Bun1.4.2, 2560×1440
