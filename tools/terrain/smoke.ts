@@ -97,6 +97,10 @@ try {
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(String(event.data));
     if (message.method === 'Runtime.exceptionThrown') runtimeErrors.push(message.params);
+    if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error')
+      runtimeErrors.push({
+        consoleError: message.params.args.map((a: any) => a.value ?? a.description),
+      });
     const request = pending.get(message.id);
     if (!request) return;
     pending.delete(message.id);
@@ -372,5 +376,9 @@ try {
   await proc.exited;
   await Promise.allSettled(drains);
   await Bun.write(path.join(out, 'electron.log'), logs.join(''));
+  await Bun.write(
+    path.join(out, 'runtime-errors.json'),
+    JSON.stringify(runtimeErrors, null, 2) + '\n',
+  );
   await rm(profile, { recursive: true, force: true });
 }
