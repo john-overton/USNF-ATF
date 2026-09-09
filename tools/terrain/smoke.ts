@@ -252,14 +252,15 @@ try {
         `window.dispatchEvent(new KeyboardEvent('keydown', {code:'${code}',bubbles:true}))`,
       );
       const sampling = evaluate(`new Promise(resolve => {
-        const samples=[]; const begin=performance.now(); let last=begin;
+        const samples=[]; const begin=performance.now(); let last=begin, released=false;
         function frame(now) {
           const d=window.__terrainDiagnostics();
-          samples.push({elapsedMs:now-begin,frameMs:now-last,...d}); last=now;
-          if(now-begin < 4000) requestAnimationFrame(frame); else resolve(samples);
+          samples.push({...d,elapsedMs:now-begin,rafFrameMs:now-last,moving:!released}); last=now;
+          if(!released && now-begin>=4000) { window.dispatchEvent(new KeyboardEvent('keyup',{code:'${code}',bubbles:true})); released=true; }
+          if(now-begin < 6000) requestAnimationFrame(frame); else resolve(samples);
         } requestAnimationFrame(frame);
       })`);
-      const captureUntil = Date.now() + 4000;
+      const captureUntil = Date.now() + 6000;
       if (capture) {
         while (Date.now() < captureUntil) {
           const state = await evaluate('window.__terrainDiagnostics()');
@@ -279,13 +280,15 @@ try {
       const end = await poll(async () => {
         const state = await evaluate('window.__terrainDiagnostics()');
         if (state.error) throw new Error(state.error);
-        return state.pendingChunks === 0 &&
+        return state.sourceLod !== start.sourceLod &&
+          state.transitionsCompleted > start.transitionsCompleted &&
+          state.pendingChunks === 0 &&
           !state.transitionActive &&
           state.waterBatchesPending === 0
           ? state
           : undefined;
       }, 'source transition settlement');
-      const intervals = samples.map((sample) => sample.frameMs).sort((a, b) => a - b);
+      const intervals = samples.map((sample) => sample.rafFrameMs).sort((a, b) => a - b);
       stages.push({
         code,
         start,

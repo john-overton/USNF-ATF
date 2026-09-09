@@ -92,8 +92,10 @@ bun tools/terrain/smoke.ts \
   --seconds 15 --transition-flight
 ```
 
-The route holds E for four seconds, waits for loading/transition settlement,
-then holds Q for four seconds and settles again. `transition-flight.json`
+The route holds E for four seconds, samples two more seconds while stationary,
+then waits for confirmed completion of the new source level. It repeats with Q.
+Each leg records six seconds of frame cadence, including its stationary tail;
+per-frame `moving` and `rafFrameMs` fields distinguish the actual input interval. `transition-flight.json`
 records per-frame diagnostics and each leg's mean/p95/p99 frame intervals.
 Both legs must change source level, expose an active transition, and keep
 terrain visible without errors or omitted water. These route assertions are
