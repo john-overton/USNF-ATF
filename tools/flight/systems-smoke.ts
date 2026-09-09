@@ -13,7 +13,7 @@ function option(name: string, fallback?: string): string {
 const session = await openDesktop({
   binary: option('--binary'),
   ...(args.includes('--app') ? { app: option('--app') } : {}),
-  aircraft: option('--aircraft', 'extracted/aircraft/f14.json'),
+  aircraft: option('--aircraft', 'extracted/flight/f14.json'),
   terrain: option('--terrain', 'extracted/terrain/ukraine'),
   out: option('--out', 'extracted/flight-systems-smoke'),
   query: { mode: 'flight', flightStart: 'airborne' },
@@ -144,6 +144,17 @@ try {
     'gear and hook completed animation',
   );
   await save('gear-up-hook-down', extended);
+  await tap('Digit6');
+  const swept = await until(
+    (d) =>
+      d.airspeed > 180 &&
+      d.animation.wingSweepRad > 0 &&
+      d.animation.wingLeftRotation > 0 &&
+      Math.abs(d.animation.wingLeftRotation - d.animation.wingSweepRad) < 1e-6,
+    'airspeed-driven wing sweep reaches scene geometry',
+  );
+  await save('wings-swept', swept);
+  await tap('Digit3');
   await tap('KeyG');
   await tap('KeyH');
   const restored = await until(
@@ -154,6 +165,11 @@ try {
       Math.abs(d.animation.gearRotation) < 1e-6 &&
       Math.abs(d.animation.hookRotation) < 1e-6,
     'reverse animation complete',
+  );
+  assert(
+    Math.abs(restored.animation.wingSweepRad) < 1e-9 &&
+      Math.abs(restored.animation.wingLeftRotation) < 1e-9,
+    'Gear extension did not restore unswept wings',
   );
   await save('gear-down-hook-up', restored);
   await tap('F2');
@@ -177,6 +193,16 @@ try {
   assert(
     upright.audio.contextState === 'running' && !upright.audio.error,
     `Audio context not running: ${JSON.stringify(upright.audio)}`,
+  );
+  await tap('KeyM');
+  checkpoints['audio-muted'] = await until(
+    (d) => d.audio.muted === true && d.audio.contextState === 'running',
+    'M mute',
+  );
+  await tap('KeyM');
+  checkpoints['audio-unmuted'] = await until(
+    (d) => d.audio.muted === false && d.audio.contextState === 'running',
+    'M unmute',
   );
   assert(session.errors.length === 0, 'Renderer console error or exception');
 } catch (error) {
