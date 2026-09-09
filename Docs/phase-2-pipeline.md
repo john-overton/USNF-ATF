@@ -152,3 +152,13 @@ A synthetic ring test verifies the island remains a hole. Builds now print
 elapsed progress for base, mask, polygonization, roughness, and chunk rows.
 `build-info.json` records producer commit, whether pipeline source was dirty,
 and elapsed generation time; a dirty build must not be attributed solely to HEAD.
+
+A second full probe found a different 50.8 mm decoded edge mismatch after fixed
+warp scales corrected the first reproducer. Fixed scales alone were insufficient.
+Detail generation now queries each global shared edge with an identical narrow
+warp footprint and caches it; shared corners use a canonical single-point query.
+Both neighbours receive the exact same unquantized border. This retains the
+strict combined half-step seam tolerance rather than hiding errors by widening
+it. The local-media regression covers both observed failing tile pairs. Interior
+samples remain normal bilinear warps; canonical borders remove request-dependent
+partition differences at the mesh joins.
