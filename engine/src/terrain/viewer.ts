@@ -8,8 +8,6 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   Scene,
-  Shape,
-  ShapeGeometry,
   Vector3,
   WebGLRenderer,
 } from 'three';
@@ -17,6 +15,8 @@ import type { TerrainChunk, TheaterManifest } from '../data';
 import type { FsRoot, Platform } from '../platform/Platform';
 import { probeWebGL2 } from '../render/glProbe';
 import { ByteCache } from './cache';
+import { initialCamera } from './camera';
+import { WaterLayer } from './water';
 import { decodeChunk } from './chunk';
 import {
   floatingOrigin,
@@ -40,6 +40,10 @@ export interface TerrainDiagnostics {
   loadedChunks: number;
   pendingChunks: number;
   cacheBytes: number;
+  waterCacheBytes: number;
+  waterBatches: number;
+  waterBatchesPending: number;
+  waterBatchesOmitted: number;
   uploadBytesTotal: number;
   uploadBytesPerSecond: number;
   camera: WorldPosition;
@@ -104,7 +108,8 @@ export function startTerrainViewer(
   const visible = new Set<string>(),
     pending = new Set<string>(),
     failed = new Set<string>();
-  const water: Mesh<ShapeGeometry, MeshStandardMaterial>[] = [];
+  let water: WaterLayer | undefined;
+  let reportedWaterBytes = 0;
   let desired: TerrainChunk[] = [],
     displayed: TerrainChunk[] = [],
     manifest: TheaterManifest | undefined,
@@ -128,6 +133,10 @@ export function startTerrainViewer(
     loadedChunks: 0,
     pendingChunks: 0,
     cacheBytes: 0,
+    waterCacheBytes: 0,
+    waterBatches: 0,
+    waterBatchesPending: 0,
+    waterBatchesOmitted: 0,
     uploadBytesTotal: 0,
     uploadBytesPerSecond: 0,
     camera: world,
@@ -245,40 +254,18 @@ export function startTerrainViewer(
     d.name = m.name;
     d.source = m.source;
     d.attribution = m.attribution;
-    world.x = m.extents.width * 0.5;
-    world.z = m.extents.height * 0.35;
-    world.y = Math.max(2000, Math.min(12000, m.extents.width * 0.08));
-    for (const body of m.waterBodies) {
-      const shape = new Shape();
-      const [waterX, waterZ] = body.polygon[0]!;
-      body.polygon.forEach(([x, z], i) => {
-        if (i === 0) shape.moveTo(x - waterX, waterZ - z);
-        else shape.lineTo(x - waterX, waterZ - z);
-      });
-      shape.closePath();
-      const geometry = new ShapeGeometry(shape);
-      geometry.rotateX(-Math.PI / 2);
-      const mesh = new Mesh(
-        geometry,
-        new MeshStandardMaterial({
-          color: 0x285e82,
-          roughness: 0.35,
-          metalness: 0.25,
-          side: DoubleSide,
-        }),
-      );
-      mesh.position.y = body.elevation + 0.2;
-      mesh.userData.originX = waterX;
-      mesh.userData.originZ = waterZ;
-      water.push(mesh);
-      scene.add(mesh);
-    }
+    const pose = initialCamera(m, window.location.search);
+    Object.assign(world, pose.position);
+    yaw = pose.yaw;
+    pitch = pose.pitch;
+    water = new WaterLayer(scene, m.waterBodies);
   })().catch(fail);
 
   function select(now: number): void {
     if (!manifest || now - lastSelect < 200) return;
     lastSelect = now;
     const horizon = viewDistance(world);
+    water?.select(world, horizon);
     if (scene.fog instanceof Fog) {
       scene.fog.near = horizon * 0.65;
       scene.fog.far = horizon;
@@ -292,7 +279,7 @@ export function startTerrainViewer(
     if (desired.every((c) => data.get(c.path))) {
       displayed = desired;
       d.sourceLod = selection.lod;
-      if (d.status !== 'error') d.status = 'ready';
+      if (d.status !== 'error') d.status = water?.pending ? 'loading' : 'ready';
     } else if (!displayed.length) displayed = desired.filter((c) => data.get(c.path));
     const nextVisible = new Set<string>();
     for (const chunk of displayed) {
@@ -391,10 +378,14 @@ export function startTerrainViewer(
         world.z - p.chunk.originZ - p.z,
       );
     }
-    for (const mesh of water) {
-      mesh.position.x = (mesh.userData.originX as number) - d.origin.x;
-      mesh.position.z = (mesh.userData.originZ as number) - d.origin.z;
-    }
+    water?.rebase(d.origin);
+    d.waterCacheBytes = water?.bytes ?? 0;
+    d.waterBatches = water?.count ?? 0;
+    d.waterBatchesPending = water?.pending ?? 0;
+    d.waterBatchesOmitted = water?.omitted ?? 0;
+    const waterBytes = water?.uploadedBytes ?? 0;
+    d.uploadBytesTotal += waterBytes - reportedWaterBytes;
+    reportedWaterBytes = waterBytes;
     renderer.render(scene, camera);
     d.frames++;
     d.triangles = renderer.info.render.triangles;
@@ -402,7 +393,7 @@ export function startTerrainViewer(
     d.cpuMs = performance.now() - start;
     d.loadedChunks = data.size;
     d.pendingChunks = pending.size;
-    d.cacheBytes = data.bytes + patches.bytes;
+    d.cacheBytes = data.bytes + patches.bytes + d.waterCacheBytes;
     d.patches = visible.size;
     if (now - lastStats >= 500) {
       d.frameMs = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length;
@@ -428,10 +419,7 @@ export function startTerrainViewer(
       canvas.removeEventListener('pointerdown', down);
       data.clear();
       patches.clear();
-      for (const mesh of water) {
-        mesh.geometry.dispose();
-        mesh.material.dispose();
-      }
+      water?.dispose();
       renderer.dispose();
       if (window.__terrainDiagnostics === diagnostics) delete window.__terrainDiagnostics;
     },

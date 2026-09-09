@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import type { TerrainChunk, TheaterManifest } from '../data';
+import { Scene } from 'three';
+import { initialCamera } from './camera';
+import { waterBatches, nearbyWater, waterGeometry, WaterLayer, WATER_CACHE_BYTES } from './water';
+import type { TerrainChunk, TheaterManifest, WaterBody } from '../data';
 import { ByteCache } from './cache';
 import { decodeChunk, sampleHeight } from './chunk';
 import { floatingOrigin, selectPatches, selectSourceChunks } from './lod';
@@ -178,4 +181,82 @@ test('byte cache LRU refresh, eviction, replacement and disposal stay within bud
   cache.clear();
   expect(cache.bytes).toBe(0);
   expect(cache.size).toBe(0);
+});
+
+test('camera query accepts reproducible poses, clamps extents and refuses invalid inputs', () => {
+  const pose = initialCamera(manifest, '?x=-10&z=999999&y=1&yaw=3.14&pitch=-2');
+  expect(pose).toEqual({ position: { x: 0, z: 7650, y: 25 }, yaw: 3.14, pitch: -1.5 });
+  expect(initialCamera(manifest, '?x=123&z=456&y=789&yaw=0.4&pitch=-0.3').position).toEqual({
+    x: 123,
+    z: 456,
+    y: 789,
+  });
+  for (const query of ['?x=NaN', '?y=Infinity', '?yaw=no', '?pitch='])
+    expect(() => initialCamera(manifest, query)).toThrow('finite');
+});
+test('water holes preserve dry islands through validation and triangulation', () => {
+  const body: WaterBody = {
+    id: 'lake',
+    elevation: 3,
+    polygon: [
+      [0, 0],
+      [100, 0],
+      [100, 100],
+      [0, 100],
+    ],
+    holes: [
+      [
+        [25, 25],
+        [75, 25],
+        [75, 75],
+        [25, 75],
+      ],
+    ],
+  };
+  expect(
+    parseManifest(JSON.stringify({ ...manifest, waterBodies: [body] })).waterBodies[0]!.holes,
+  ).toEqual(body.holes);
+  const geometry = waterGeometry(waterBatches([body])[0]!);
+  const p = geometry.getAttribute('position'),
+    indices = geometry.getIndex()!;
+  let area = 0;
+  for (let i = 0; i < indices.count; i += 3) {
+    const a = indices.getX(i),
+      b = indices.getX(i + 1),
+      c = indices.getX(i + 2);
+    area +=
+      Math.abs(
+        (p.getX(b) - p.getX(a)) * (p.getZ(c) - p.getZ(a)) -
+          (p.getZ(b) - p.getZ(a)) * (p.getX(c) - p.getX(a)),
+      ) / 2;
+  }
+  expect(area).toBe(7500);
+  geometry.dispose();
+});
+test('water batching culls remote geometry, builds lazily and disposes departed coverage', () => {
+  const bodies: WaterBody[] = Array.from({ length: 400 }, (_, i) => ({
+    id: String(i),
+    elevation: 0,
+    polygon: [
+      [i * 1000, 0],
+      [i * 1000 + 100, 0],
+      [i * 1000 + 100, 100],
+      [i * 1000, 100],
+    ],
+  }));
+  const batches = waterBatches(bodies);
+  expect(batches.length).toBeLessThan(bodies.length);
+  const near = nearbyWater(batches, { x: 0, y: 100, z: 0 }, 12000);
+  expect(near.batches.length).toBe(1);
+  expect(near.omitted).toBe(0);
+  const scene = new Scene(),
+    layer = new WaterLayer(scene, bodies);
+  layer.select({ x: 0, y: 100, z: 0 }, 12000);
+  expect(layer.count).toBe(1);
+  expect(layer.bytes).toBeGreaterThan(0);
+  expect(layer.bytes).toBeLessThanOrEqual(WATER_CACHE_BYTES);
+  layer.select({ x: 10000000, y: 100, z: 0 }, 12000);
+  expect(layer.bytes).toBe(0);
+  expect(scene.children).toHaveLength(0);
+  layer.dispose();
 });

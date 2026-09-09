@@ -119,18 +119,33 @@ export function parseManifest(text: string): TheaterManifest {
   });
   if (!chunks.length || lods.some((l) => !chunks.some((c) => c.lod === l)))
     throw new Error('LOD has no chunks');
+  let waterPoints = 0;
+  const ring = (value: unknown): readonly (readonly [number, number])[] => {
+    const points = array(value, 100000).map((pair) => {
+      const a = array(pair, 2);
+      if (a.length !== 2) throw new Error('Water coordinate must be [x,z]');
+      const x = finite(a[0]),
+        z = finite(a[1]);
+      if (x < 0 || z < 0 || x > width || z > height) throw new Error('Water outside theater');
+      return [x, z] as const;
+    });
+    if (points.length < 3) throw new Error('Water polygon needs three points');
+    waterPoints += points.length;
+    if (waterPoints > 500000) throw new Error('Water exceeds vertex budget');
+    return points;
+  };
   const waterBodies = array(m.waterBodies, 10000).map((value) => {
     const w = object(value),
-      polygon = array(w.polygon, 10000).map((pair) => {
-        const a = array(pair, 2);
-        if (a.length !== 2) throw new Error('Water coordinate must be [x,z]');
-        const x = finite(a[0]),
-          z = finite(a[1]);
-        if (x < 0 || z < 0 || x > width || z > height) throw new Error('Water outside theater');
-        return [x, z] as const;
-      });
-    if (polygon.length < 3) throw new Error('Water polygon needs three points');
-    return { id: string(w.id), elevation: finite(w.elevation), polygon };
+      polygon = ring(w.polygon);
+    const holes = w.holes === undefined ? undefined : array(w.holes, 10000).map(ring);
+    if (polygon.length + (holes?.reduce((sum, h) => sum + h.length, 0) ?? 0) > 100000)
+      throw new Error('Water body exceeds vertex budget');
+    return {
+      id: string(w.id),
+      elevation: finite(w.elevation),
+      polygon,
+      ...(holes ? { holes } : {}),
+    };
   });
   return {
     schemaVersion: 1,

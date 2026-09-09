@@ -102,3 +102,42 @@ spacing cannot be assumed to be a factor of two or three. Gzip output must be
 bounded during decompression, not checked only after an unbounded allocation.
 A passing math/decoder suite does not validate the shader or a real camera flight;
 packaged rendering and recorded screenshots/performance remain required.
+
+## 2026-09-08 follow-up: reproducible cameras and bounded water
+
+The first fresh packaged fixture rerun after `e0615fa` was reported by the parent
+smoke runner at 60.08 fps / 2560×1440; the bevel grid was absent in
+`extracted/terrain-smoke-fixture-fixed/terrain.png`. This is a synthetic smoke,
+not real Ukraine or Linux acceptance.
+
+Camera URL parameters `x`, `y`, `z`, `yaw`, `pitch` now accept finite projected
+meters/radians. Omitted values retain the default pose. x/z clamp to theater
+extents, altitude to 25–100000 m, pitch to ±1.5 radians; yaw wraps at 2π. Example:
+`?root=appData&manifest=terrains/ukraine/manifest.json&x=25000&z=25000&y=2500&yaw=3.14&pitch=-0.4`.
+These parameters let the smoke tool repeat coast and mountain viewpoints without
+measuring a long transit first. Invalid/nonfinite values show an explicit error.
+
+Water geometry is now created lazily by visible horizon, rather than allocating
+all theater polygons on manifest load. Spatial batches combine up to 64 nearby
+bodies per draw, normally <=1 MiB estimated geometry per batch (a single large
+body can exceed that). Selection has a 16 MiB water-buffer budget and 128-batch
+draw cap. Four missing batches are triangulated per selection tick; departed
+coverage is disposed. Cache and geometry-upload estimates include water. The
+panel and automation report omitted batches explicitly rather than silently
+claiming complete water coverage; `waterBatchesPending` distinguishes not-yet-built
+selected batches, and startup `ready` waits for those as well as chunks.
+
+The v1 development contract accepts optional `holes` arrays of coordinate rings.
+Three.js triangulates exterior plus holes, preserving dry islands. Runtime bounds
+are 10000 bodies, 100000 points per body including holes, and 500000 total water
+points. Spatial culling uses exterior bounds; a very long connected coast can
+therefore remain resident over a broad region. Future work can tile large bodies
+if measured complexity or memory demands it. The source-LOD switch remains
+discrete; independent 30/100 m source grids need a coverage-aware resampling or
+transition design rather than assuming nested vertices.
+
+Verification for this follow-up: `bunx tsc -p engine/tsconfig.json` and scoped
+ESLint pass; `bun test engine/src/terrain`: 15 pass, 0 fail, 4467 expectations.
+New tests validate query rejection/clamping, a water polygon with a dry hole
+(triangle area 7500 of 10000 m²), and spatial batching, culling, allocation bounds
+and disposal. Packaged smoke must rebuild after this follow-up commit.

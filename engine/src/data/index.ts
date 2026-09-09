@@ -26,6 +26,7 @@ export interface WaterBody {
   readonly id: string;
   readonly elevation: number;
   readonly polygon: readonly (readonly [number, number])[];
+  readonly holes?: readonly (readonly (readonly [number, number])[])[];
 }
 export interface TheaterManifest {
   readonly schemaVersion: 1;

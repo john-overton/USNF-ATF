@@ -133,6 +133,10 @@ export function TerrainViewer() {
               <dd>{(stats.cacheBytes / 1048576).toFixed(1)} MiB</dd>
               <dt>Geometry created (upload estimate)</dt>
               <dd>{(stats.uploadBytesPerSecond / 1048576).toFixed(2)} MiB/s</dd>
+              <dt>Water batches / omitted by budget</dt>
+              <dd>
+                {stats.waterBatches} / {stats.waterBatchesOmitted}
+              </dd>
               <dt>GPU DRAM bandwidth</dt>
               <dd>Unavailable in WebGL2</dd>
               <dt>World east / north / altitude</dt>
