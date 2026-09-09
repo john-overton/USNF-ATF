@@ -76,6 +76,10 @@ try {
   assert(evidence.map.markers.length === 3, 'Missing map destinations');
   assert(evidence.map.markers.some((m: any) => m.id === '1' && m.selected === 'true'), 'Map selection disagrees with HUD');
   assert(evidence.map.colors.length > 5, 'Elevation map lacks terrain colors');
+  await session.poll(async () => {
+    const d = await session.evaluate('window.__terrainDiagnostics?.()');
+    return d?.loadedChunks > 0 && d.pendingChunks === 0 && !d.transitionActive ? true : undefined;
+  }, 'terrain settled before visual capture');
   await session.capture('navigation-1440p');
   async function zoomSnapshot() {
     return session.evaluate(`(() => {
