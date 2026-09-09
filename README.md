@@ -82,6 +82,8 @@ Run `bun run dev:electron`, then choose **Practice runway** or **Final approach*
 These are practice starts over the installed Ukraine terrain and a fictional runway.
 The **Aircraft** dropdown selects the locally converted F-14, A-4E or X-31;
 missing imports use an explicitly identified original placeholder.
+[Full aircraft-port helper and checklist](Docs/aircraft-porting.md) covers repeatable
+conversion, scale, flight profiles, animation and acceptance for future aircraft.
 [A-4E/X-31 setup and flight profiles](Docs/phase-4-aircraft.md) documents ATF-GOLD
 exteriors and the separate experimental per-aircraft flight-data mode. [F-14 setup](Docs/phase-4-f14.md) keeps retail assets outside the app bundle.
 

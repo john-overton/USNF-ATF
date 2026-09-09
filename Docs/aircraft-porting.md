@@ -1,0 +1,241 @@
+# Aircraft port helper and acceptance guide
+
+Use this workflow to bring a locally owned retail aircraft into practice flight.
+A complete development port includes source attribution, exterior/texture scale,
+a flight profile, aircraft systems, a visual rig, audio, runtime selection, and
+recorded acceptance. A successful export alone proves only that the supported
+conversion completed. Native game-flight parity is a separate milestone.
+
+## Repeat an existing port
+
+The helper has reviewed recipes for **f14**, **a4e**, and **x31**. It runs the SH,
+PT and audio converters, validates their output with the engine parsers, checks
+profile identity and the selected scale, and writes a unique complete bundle.
+It does not automatically identify or rig an arbitrary new aircraft.
+
+```sh
+bun tools/flight/port-aircraft.ts --list
+bun tools/flight/port-aircraft.ts --aircraft x31 --dry-run
+bun tools/flight/port-aircraft.ts --aircraft x31
+bun tools/flight/port-aircraft.ts --aircraft a4e --install "$HOME/Library/Application Support/USNF-ATF/data"
+```
+
+Run from the checkout; `--source-root` defaults to repo-relative `extracted/`.
+That directory should contain extracted `atf-gold/ATF_2.LIB/` and/or
+`usnf97/USNF_2.LIB/` directories. Use `--source-root /path/to/extracted` for another
+local extraction and `--python /path/to/python3` if necessary. Python 3.11+ and
+Bun are required. The toolkit uses standard-library Python; no new packages are
+needed. See [retail extraction](../tools/retail/README.md) for disc handling.
+
+Each successful run creates:
+
+```text
+extracted/aircraft-ports/<id>/<timestamp-and-id>/
+  <id>.json                 # geometry, textures, authored rig and provenance
+  <id>-flight.json          # converted PT facts and confidence metadata
+  audio/<id>.json           # PT-selected PCM and source hashes
+  port-report.json          # dimensions, moving groups, checks, hashes and limits
+```
+
+Existing bundles are retained. A failed conversion/validation removes only its
+private staging directory; it does not install a partial conversion. `--dry-run`
+prints the recipe and argument arrays without writing files or installing.
+`--install` is optional and uses the existing validated installer after the
+bundle is ready. Installation is atomic per file, not transactional across the
+three files; an I/O failure can leave a mixed installed set. The report records
+installation failure and the validated bundle remains available for a retry.
+The helper rejects output directories redirected through symlinks, keeping all
+converted bytes inside the checkout's ignored extraction tree.
+
+The report records the source commit/working-tree state, tool versions, executed
+and reproduction commands, source/output hashes, dimensions, moving groups, PT
+mass/thrust/G rows and recipe caveats. Its visual/runtime acceptance starts as
+**pending**. Review it and record separate evidence in `Docs/baselines/phase-4.md`;
+do not turn those fields into “passed” just because the converter exited zero.
+
+## Start a new aircraft with an evidence sheet
+
+Copy [the port worksheet](templates/aircraft-port.md) into a new original-work
+Markdown note under `Docs/`. Put derived previews, meshes, JSON, PCM, debug dumps
+and detailed retail coordinate dumps under `extracted/`, never in `Docs/` or
+`engine/public/`. Keep original discs/installs in `gameassets/`. No retail-derived
+bytes may be committed or bundled.
+
+Prefer ATF-GOLD art, but compare actual variants rather than assuming every newer
+asset is better. Model, PT, cockpit and audio may legitimately come from different
+games; record the origin and reason separately for each. Keep the established
+USNF97 F-14 baseline unless changing it is explicitly intended.
+
+Check the PT's aircraft name, shape reference, sound references and game variant.
+Filenames need not match the user-facing aircraft: ATF-GOLD's X-31 uses `F31.SH`
+and `F31.PT`. A4.SH supplies the Skyhawk exterior, while USNF97 A4E.PT supplies
+its current flight/audio data. ATF-GOLD A4E.PTS is an executable module, not a
+BRF PT record. Matching an extension or finding a similarly named file is not
+proof that the correct aircraft/configuration was selected.
+
+## Scale and shape: inspect before resizing
+
+| Check | Why it matters |
+|---|---|
+| Full length versus fuselage length | A probe, hook, nozzle paddle or pitot can extend the bounding box. A fuselage-only reference applied to all vertices undersizes the aircraft. |
+| Wingspan in the exported pose | F-14 sweep/folding changes the relevant span. Prefer a dimension whose pose and endpoints are identifiable. |
+| Uniform scale and axis conversion | Source vertices are X/right, forward, up; export becomes X/right, Y/up, Z/aft. Preserve ratios and handedness. |
+| Vertical origin and center | Bounding-box centering can lower the fuselage because the fin is tall. Current exports preserve the native vertical origin. |
+| Extents of every component | Check canards, tailplane, fin, probe, tanks and weapons separately; a misplaced articulated transform can masquerade as a scale problem. |
+| Camera perspective | Chase foreshortening can make a correct fuselage look short. Inspect top, side, front and oblique views at known scale. |
+| Texture alignment | Correct geometry does not establish correct UV dispatch, palette overlay, transparency or special exhaust materials. |
+
+Choose **one** documented calibration: `--length-metres` or `--wingspan-metres`.
+Record the source/reference dimension, whether probes are included, the model
+pose and resulting length/span/height. Recheck gear, hook, nozzle/flame positions,
+wing pivots and chase framing after scaling. Keep `aircraft-catalog.ts`
+presentation dimensions consistent with the installed conversion.
+
+X-31 example: all four retail variants share the same small canard/wing ratio.
+Using 13.21 m for the whole exported model gave only 6.399 m of wingspan. The
+local reference's 7.26 m wingspan yields a 14.988 m mesh with 2.576 m canards.
+That is a justified **presentation calibration**, not proof of native units or
+an excuse to stretch the canards independently. Their remaining difference from
+the reference's 2.64 m span stays documented. See [SH findings](formats/sh.md).
+
+## Flight profile and aircraft capabilities
+
+Extend `retail.flight` only after inspecting the new PT variant and its field
+layout. Its filename/labelling/type-size/G-range guards are deliberate; do not
+remove them wholesale to make an unfamiliar aircraft parse. Update source-game
+validation and profile-to-aircraft identity together.
+
+Record empty mass, internal fuel, maximum takeoff mass, total-engine military
+and maximum thrust, G polygons, device fields, and fuel rates with units and
+confidence. Check empty+fuel+payload bounds, malformed polygons, finite force
+fits throughout the useful altitude range, burner transitions, fuel depletion,
+and live mass changes. Verify which fields describe game configuration rather
+than real-world prototype specifications.
+
+For aircraft without afterburners, retain raw `aftThrust=0` and use military
+thrust as the fitter's effective maximum. Otherwise the fit receives zero thrust.
+Also disable the burner command, effect and audio layer; do not just hide flames.
+Keep engine count, hook availability, wing sweep, flaps/brakes and fuel behavior
+consistent with the selected aircraft. Optional devices should not inherit
+F-14 behavior accidentally.
+
+The **preserved assisted** force/control code stays unchanged and remains the
+default comparison model. Retail mass/thrust/envelope fitting is opt-in through
+the flight-model selector. The shared 52.5 m² area currently normalizes that fit;
+it is not a claim that all aircraft share a real wing area. Angular assistance,
+stall/poststall behavior, device scaling and ground support remain original
+unless separately recovered and verified. Some higher-G fits use an explicit
+fallback; finite output is not proof that every sustained-G boundary matches.
+
+Do not add a `native` block to a new profile merely because its points convert.
+Recovered helper parity requires actual local x86 execution for the applicable
+game/aircraft/caller assumptions. Isolated helper parity still is not full flight
+parity. X-31 vectoring/paddle laws and ATF fuel-time convention reuse are examples
+of limitations that must remain explicit. See [flight dynamics](formats/flight-dynamics.md)
+and [native flight](formats/native-flight-code.md).
+
+## Moving surfaces, gear, hook and engine presentation
+
+Map each control to an actual visible surface: elevator/taileron, aileron/elevon,
+canard, rudder, flap, spoiler or airbrake. Record which source articulated parts
+can be reused and which static faces need partitioning. For unrecognized source
+branches, investigate the decoder rather than inventing missing geometry.
+
+Triangulate source faces with the export's original fan **before clipping**.
+Nonplanar A-4 quads otherwise change shape in neutral. Preserve winding, colors,
+UV interpolation and material identity. Conserve per-face scalar area, area
+vectors and bounds, and retain each source face's identity in tests. Do not
+leave the original fixed polygon underneath its moving replacement.
+
+Author hinges in the correct coordinate space. Export pivots in metres;
+`rotationAxis` is in renderer X/up/aft coordinates. Confirm a chosen axis lies
+on the intended hinge, survives scale conversion, and moves both textured and
+colored parts together. Preserve nested hierarchy for swept wings and attached
+flaps. Do not name a fixed X-31 wing `wing-left` if that triggers F-14 sweep.
+
+Check deflection signs with visible trailing-edge motion: conventional elevator
+trailing edge up for pitch-up, canard trailing edge down for pitch-up, opposing
+ailerons for roll, rudder toward the yaw command, flaps down, and lateral brakes
+outward. These are current authored mixes, not recovered native schedules.
+Check combined commands, bounded travel, neutral return, and reversals mid-travel.
+Surface movement is visual unless the selected physics backend implements its
+force effect; a moving vectoring paddle would not itself create vector thrust.
+
+Fit gear support height, nose/main spacing, wheel rotation, retraction clearance,
+hook mount/arm/shoe, stowed/deployed angles and engine nozzle/flame positions to
+the aircraft. Check hook attachment from the side in both poses and its tip
+against wheel-contact height. The A-4's former scaled F-14 mount is the failure
+example. Hook animation is not carrier arresting force. Maintain the terrain
+floating origin, 120 Hz simulation and missing-ground semantics.
+
+## Audio, runtime wiring and repeatable verification
+
+Import the selected aircraft's PT sound references; filenames can contain `&`.
+Use argument arrays when invoking tools. Verify clip roles, source hashes,
+encoding/rates, engine start/stop, loop transitions, throttle/burner mixing and
+mute. The manifest parser passing while Web Audio is gesture-locked proves
+loading only. Use a trusted input and an audible/captured mix for sound acceptance.
+
+When adding an ID, update these linked components deliberately:
+
+| Component | Files |
+|---|---|
+| Catalog, names, capabilities, presentation scale, accepted profile identity | `engine/src/flight/aircraft-catalog.ts` |
+| Reviewed conversion recipe | `tools/flight/aircraft-recipes.ts` |
+| PT variant decoding/export and validation | `tools/retail/retail/pt.py`, `flight.py`; `engine/src/data/retail-flight.ts` |
+| Static source projection / authored rig | `tools/retail/retail/sh_static.py` |
+| Surface mixing / special device geometry | `engine/src/flight/ControlSurfaces.ts`, `AircraftHook.ts`, `FlightLayer.ts` |
+| Model/audio parsing and selected paths | `RetailAircraft.ts`, `FlightAudio.ts`, `FlightLayer.ts` |
+| Selection UI and test coverage | `engine/src/ui/TerrainViewer.tsx`, `tools/flight/` |
+
+Catalog and recipe records are typed together, but metadata alone does not
+implement a decoder, rig or flight model. Unsupported aircraft must fail clearly.
+Preserve per-ID paths (`aircraft/<id>.json`, `aircraft/<id>-flight.json`,
+`audio/<id>.json`), reject cross-aircraft profiles, and identify missing imports
+as placeholders. Check aircraft/model switching, practice-start links, reset,
+fuel/payload retention and partial/malformed installs.
+
+Run relevant Python and Bun tests, fresh-source desktop checks and manual
+inspection. `bun run check` does not run Python, launch Electron or rebuild a
+packaged app. `bun run harness` currently tests the original placeholder; it
+cannot certify a newly imported aircraft's handling. Existing scripts have
+specific scopes—extend their expected IDs/capabilities instead of using F-14
+assertions for another plane.
+
+```sh
+bun run check
+python3 -m unittest discover -s tools/retail/tests
+bun run harness --output extracted/flight-harness/report.json
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/aircraft-smoke.ts
+bun tools/flight/surface-smoke.ts --id x31
+```
+
+The last two scripts currently use the canonical `extracted/flight/` and
+`extracted/aircraft-surfaces/` paths respectively, not the helper's dated bundle.
+Copy the reviewed bundle's corresponding JSON to those ignored test paths, or
+extend the test's input arguments. The general maneuver smoke accepts explicit
+bundle paths. For example, after building a fresh Mac package with `bun run build`
+(replace the placeholders with the tested commit and bundle directory):
+
+```sh
+bun tools/flight/smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --scenario takeoff --aircraft-id x31 --aircraft <bundle>/x31.json --flight-profile <bundle>/x31-flight.json --audio <bundle>/audio/x31.json --out extracted/x31-takeoff
+```
+
+For an unpackaged build, pass its Electron binary with `--binary` and add
+`--app shell`. The F-14 systems/retail scripts have separate expectations; see
+[flight tools](../tools/flight/README.md).
+
+Test ground clearance, taxi/rotation, takeoff, cruise/turn/stall/recovery and
+approach/landing, devices in intermediate/final poses, missing terrain and
+render-rate independence. Add per-aircraft assertions where meaningful; do not
+call a short advancing-flight smoke a complete maneuver acceptance. Inspect
+actual images and sound separately from parser/telemetry success.
+
+Record commit, date, machine/tool versions, exact commands, dataset identity,
+source/output hashes, failures/skips, screenshots and remaining gaps. Use an
+isolated checkout for acceptance when another agent is changing shared runtime
+files. Never bundle or commit retail inputs/outputs with the code. Update the
+progress snapshot/log, relevant format notes and phase baseline. Commit only
+the port's work; pushing/publishing requires separate authorization. Mac is the
+current acceptance platform, Linux is deferred, and Windows launch is phase 9.

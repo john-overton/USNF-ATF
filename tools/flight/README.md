@@ -1,5 +1,8 @@
 # Packaged flight acceptance
 
+For the complete development workflow and one-command conversion helper, see
+[Aircraft porting](../../Docs/aircraft-porting.md).
+
 These tests launch the real Electron renderer in an isolated profile with the
 locally generated Ukraine theater. Nothing is installed into normal app data.
 The virtual standard gamepad drives the product input adapter; the test does

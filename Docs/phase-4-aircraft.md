@@ -1,5 +1,8 @@
 # A-4E and X-31 practice flight
 
+For the complete development workflow and one-command conversion helper, see
+[Aircraft porting](aircraft-porting.md).
+
 The sim helper's **Aircraft** dropdown selects F-14, A-4E Skyhawk or X-31 EFM.
 Switching restarts the current practice flight and preserves fuel fraction. The
 preserved assisted model remains the default. Select **Retail PT envelope fit

@@ -1,5 +1,8 @@
 # retail: phase 0 format toolkit
 
+For the complete development workflow and one-command conversion helper, see
+[Aircraft porting](../../Docs/aircraft-porting.md).
+
 Pure standard-library Python (3.11+). No third-party dependencies.
 
 Run from the repo root without installing:
