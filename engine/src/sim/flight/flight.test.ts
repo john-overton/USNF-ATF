@@ -291,3 +291,137 @@ test('deployed devices produce sustained speed and energy differences at fixed t
   expect(gear.airspeed).toBeLessThan(clean.airspeed - 2);
   expect(gear.specificEnergy).toBeLessThan(clean.specificEnergy);
 });
+
+// Entirely synthetic import profile, with rectangular speed/altitude polygons.
+function retailAircraft() {
+  const rectangle = (min: number, max: number) => [
+    { speedMps: min, altitudeM: 0 },
+    { speedMps: max, altitudeM: 0 },
+    { speedMps: max, altitudeM: 12000 },
+    { speedMps: min, altitudeM: 12000 },
+  ];
+  return parseAircraftDefinition({
+    ...structuredClone(PLACEHOLDER_AIRCRAFT),
+    massKg: 10000,
+    retail: {
+      schemaVersion: 1,
+      source: { game: 'usnf97', file: 'SYNTHETIC.PT', sha256: '0'.repeat(64) },
+      name: 'Synthetic envelope fixture',
+      emptyMassKg: 8000,
+      fuelCapacityKg: 2000,
+      maxTakeoffMassKg: 20000,
+      militaryThrustN: 60000,
+      afterburnerThrustN: 100000,
+      envelopes: [
+        { g: 1, points: rectangle(60, 400) },
+        { g: 3, points: rectangle(110, 350) },
+      ],
+      rawFields: {},
+    },
+  });
+}
+
+test('imported mass changes acceleration without recalibrating drag to hide the weight change', () => {
+  const heavy = retailAircraft(),
+    light = { ...heavy, massKg: 5000 };
+  const state = createFlightState({ position: { x: 0, y: 1000, z: 0 }, airspeed: 150 });
+  const controls = { ...NEUTRAL_CONTROLS, throttle: 1 };
+  const full = stepFlight(state, controls, flat, heavy),
+    half = stepFlight(state, controls, flat, light);
+  const fullAcceleration = state.velocity.z - full.state.velocity.z;
+  const halfAcceleration = state.velocity.z - half.state.velocity.z;
+  expect(fullAcceleration).toBeGreaterThan(0);
+  expect(halfAcceleration / fullAcceleration).toBeCloseTo(2, 10);
+  // Imported forces must not read the placeholder polar or engine table.
+  const poisoned = structuredClone(heavy);
+  poisoned.aero.lift = poisoned.aero.lift.map((row) => row.map(() => 0));
+  poisoned.aero.drag = poisoned.aero.drag.map((row) => row.map(() => 9));
+  poisoned.engine.thrustN = poisoned.engine.thrustN.map((row) => row.map(() => 0));
+  expect(stepFlight(state, controls, flat, poisoned)).toEqual(full);
+});
+
+test('retail-envelope fit balances maximum AB near its upper speed while military power cannot', () => {
+  const def = retailAircraft();
+  const env: FlightEnvironment = {
+    sampleGround: () => ({ height: -100, normal: { x: 0, y: 1, z: 0 }, kind: 'land' }),
+  };
+  const acceleration = (speed: number, multiplier: number) => {
+    // Synthetic 1G min speed is60m/s: CL/CLmax=(60/speed)^2.
+    const state = createFlightState({
+      position: { x: 0, y: 0, z: 0 },
+      pitchRad: def.stallAlphaRad * (60 / speed) ** 2,
+    });
+    state.velocity = { x: 0, y: 0, z: -speed };
+    const next = stepFlight(
+      state,
+      { ...NEUTRAL_CONTROLS, throttle: 1, thrustMultiplier: multiplier },
+      env,
+      def,
+    );
+    return (state.velocity.z - next.state.velocity.z) * 120;
+  };
+  const burnerRatio = def.retail!.afterburnerThrustN / def.retail!.militaryThrustN;
+  expect(Math.abs(acceleration(400, burnerRatio))).toBeLessThan(0.01);
+  expect(acceleration(400, 1)).toBeLessThan(-3.9);
+  expect(acceleration(350, burnerRatio)).toBeGreaterThan(1);
+  expect(acceleration(450, burnerRatio)).toBeLessThan(-1);
+  expect(acceleration(200, 1)).toBeGreaterThan(0);
+  expect(acceleration(350, 1)).toBeLessThan(0);
+});
+
+test('native lower speed bounds set reference-weight lift and preserve continuous post-stall behavior', () => {
+  const def = retailAircraft();
+  const at = (speed: number, alpha: number) => {
+    const state = createFlightState({ position: { x: 0, y: 1000, z: 0 }, pitchRad: alpha });
+    state.velocity = { x: 0, y: 0, z: -speed };
+    return sampleTelemetry(state, flat, def);
+  };
+  expect(at(60, def.stallAlphaRad).loadFactor).toBeCloseTo(1, 10);
+  expect(at(30, def.stallAlphaRad).loadFactor).toBeCloseTo(0.25, 10);
+  expect(at(0, def.stallAlphaRad).loadFactor).toBe(0);
+  const before = at(60, def.stallAlphaRad - 1e-7),
+    after = at(60, def.stallAlphaRad + 1e-7);
+  expect(before.stalled).toBe(false);
+  expect(after.stalled).toBe(true);
+  expect(Math.abs(before.loadFactor - after.loadFactor)).toBeLessThan(1e-5);
+  expect(at(60, 1).loadFactor).toBeLessThan(at(60, def.stallAlphaRad).loadFactor);
+});
+
+test('imported device fields modify the fitted polar rather than trainer coefficients', () => {
+  const def = retailAircraft();
+  def.retail!.rawFields = {
+    flapsLift: { value: 64 },
+    flapsDrag: { value: 128 },
+    gearDrag: { value: 64 },
+    airBrakesDrag: { value: 512 },
+  };
+  const state = createFlightState({
+    position: { x: 0, y: 1000, z: 0 },
+    pitchRad: def.stallAlphaRad,
+  });
+  state.velocity = { x: 0, y: 0, z: -60 };
+  const clean = sampleTelemetry(state, flat, def),
+    flapped = sampleTelemetry(state, flat, def, { flaps: 1 });
+  expect(flapped.loadFactor / clean.loadFactor).toBeCloseTo(1.25, 10);
+  state.attitude = attitudeFromEuler(0, 0, 0);
+  const baseline = stepFlight(state, NEUTRAL_CONTROLS, flat, def).state.velocity.z;
+  const gear =
+    stepFlight(state, { ...NEUTRAL_CONTROLS, gearFraction: 1 }, flat, def).state.velocity.z -
+    baseline;
+  const brakes =
+    stepFlight(state, { ...NEUTRAL_CONTROLS, airbrake: 1 }, flat, def).state.velocity.z - baseline;
+  expect(gear).toBeGreaterThan(0);
+  expect(brakes / gear).toBeCloseTo(8, 9);
+});
+
+test('imported envelope ceiling extrapolation stays finite and never switches to trainer aero', () => {
+  const def = retailAircraft();
+  const sample = (height: number) => {
+    const state = createFlightState({ position: { x: 0, y: height, z: 0 }, pitchRad: 0.1 });
+    state.velocity = { x: 0, y: 0, z: -150 };
+    return sampleTelemetry(state, flat, def);
+  };
+  expect(Math.abs(sample(12000.01).loadFactor - sample(11999.99).loadFactor)).toBeLessThan(0.0001);
+  expect(Number.isFinite(sample(30000).loadFactor)).toBe(true);
+  expect(sample(30000).loadFactor).toBeLessThan(sample(12000).loadFactor);
+});

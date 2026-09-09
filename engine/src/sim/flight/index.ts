@@ -1,4 +1,5 @@
 import rawAircraft from '../../data/placeholder-aircraft.json';
+import { fitEnvelopeAero } from './retail-envelope';
 import { parseAircraftDefinition, type AircraftDefinition } from '../../data/aircraft';
 export type { AircraftDefinition } from '../../data/aircraft';
 
@@ -158,6 +159,64 @@ export function lookupTable(
     (values[i + 1]![j]! * (1 - b) + values[i + 1]![j + 1]! * b) * a
   );
 }
+/** PT names and 8.8 scaling are research evidence; treating these as relative
+ * polar modifiers is an inference, not the recovered native device force law. */
+function retailDeviceFactor(def: AircraftDefinition, name: string): number | undefined {
+  const raw = def.retail?.rawFields[name];
+  if (!raw || typeof raw !== 'object' || !('value' in raw)) return undefined;
+  const value = raw.value;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 4096
+    ? value / 256
+    : undefined;
+}
+/** Original altitude lapse; PT thrust gives sea-level static force, not a
+ * recovered native thrust-vs-altitude/Mach integration law. */
+function retailThrustLapse(altitudeM: number): number {
+  return Math.exp((-Math.max(0, altitudeM) / 8500) * 0.7);
+}
+function retailAeroFit(def: AircraftDefinition, altitudeM: number) {
+  if (!def.retail) return undefined;
+  const profile = def.retail;
+  const altitudes = profile.envelopes
+    .find((envelope) => envelope.g === 1)!
+    .points.map((point) => point.altitudeM);
+  const minimum = Math.min(...altitudes),
+    maximum = Math.max(...altitudes);
+  // Beyond native coverage, continue the nearest fitted coefficients. This is
+  // an explicit extrapolation; never silently substitute the trainer polar.
+  const epsilon = Math.min(1, (maximum - minimum) / 4);
+  const fitAltitude = clamp(altitudeM, minimum, maximum - epsilon);
+  const fitAt = (height: number) =>
+    fitEnvelopeAero(profile, {
+      massKg: profile.emptyMassKg + profile.fuelCapacityKg,
+      wingAreaM2: def.wingAreaM2,
+      altitudeM: height,
+      thrustAtSpeed: () => profile.afterburnerThrustN * retailThrustLapse(height),
+    });
+  // A valid triangular envelope can have a zero-width lower tip as well.
+  return fitAt(fitAltitude) ?? fitAt(clamp(fitAltitude, minimum + epsilon, maximum - epsilon));
+}
+function liftCoefficient(
+  alpha: number,
+  mach: number,
+  def: AircraftDefinition,
+  clMax?: number,
+): number {
+  if (clMax === undefined)
+    return lookupTable(def.aero.alphaRad, def.aero.mach, def.aero.lift, alpha, mach);
+  const magnitude = Math.abs(alpha);
+  const lift =
+    magnitude <= def.stallAlphaRad
+      ? (clMax * magnitude) / def.stallAlphaRad
+      : clMax *
+        Math.cos(
+          Math.min(
+            Math.PI / 2,
+            (((magnitude - def.stallAlphaRad) / (Math.PI / 2 - def.stallAlphaRad)) * Math.PI) / 2,
+          ),
+        );
+  return Math.sign(alpha) * lift;
+}
 function aerodynamics(state: FlightState, env: FlightEnvironment, def: AircraftDefinition) {
   const wind = env.wind ?? { x: 0, y: 0, z: 0 },
     air = add(state.velocity, scale(wind, -1)),
@@ -168,19 +227,49 @@ function aerodynamics(state: FlightState, env: FlightEnvironment, def: AircraftD
   const rho = 1.225 * Math.exp(-Math.max(0, state.position.y) / 8500),
     mach = speed / 340.3;
   const qArea = 0.5 * rho * speed * speed * def.wingAreaM2;
-  const cl = lookupTable(def.aero.alphaRad, def.aero.mach, def.aero.lift, alpha, mach);
-  const cd = lookupTable(def.aero.alphaRad, def.aero.mach, def.aero.drag, alpha, mach);
+  const fit = retailAeroFit(def, state.position.y);
+  if (def.retail && !fit)
+    throw new Error('Imported flight envelope cannot be fitted at this altitude');
+  const cl = liftCoefficient(alpha, mach, def, fit?.clMax);
+  const separated = clamp(
+    (Math.abs(alpha) - def.stallAlphaRad) / (Math.PI / 2 - def.stallAlphaRad),
+    0,
+    1,
+  );
+  const cd = fit
+    ? fit.cd0 + fit.inducedDragK * cl ** 2 + 1.8 * separated ** 2 * Math.sin(alpha) ** 2
+    : lookupTable(def.aero.alphaRad, def.aero.mach, def.aero.drag, alpha, mach);
   const forward = rotate(state.attitude, { x: 0, y: 0, z: -1 }),
     up = rotate(state.attitude, { x: 0, y: 1, z: 0 }),
     right = rotate(state.attitude, { x: 1, y: 0, z: 0 });
   const direction = unit(air),
     liftDirection = unit(add(up, scale(direction, -dot(up, direction))));
-  return { speed, alpha, beta, mach, qArea, cl, cd, forward, up, right, direction, liftDirection };
+  return {
+    speed,
+    alpha,
+    beta,
+    mach,
+    qArea,
+    cl,
+    cd,
+    forward,
+    up,
+    right,
+    direction,
+    liftDirection,
+    fit,
+    flapLiftMax: fit ? (retailDeviceFactor(def, 'flapsLift') ?? 0.2 / fit.clMax) * fit.clMax : 0.2,
+  };
 }
 /** Original camber approximation: flaps still increase lift at the clean stall
  * angle, then lose effectiveness in separated flow. Native force law unported. */
-function flapLiftCoefficient(alpha: number, flap: number, stallAlpha: number): number {
-  return flap * 0.2 * clamp((0.6 - Math.abs(alpha)) / (0.6 - stallAlpha), 0, 1);
+function flapLiftCoefficient(
+  alpha: number,
+  flap: number,
+  stallAlpha: number,
+  maximum = 0.2,
+): number {
+  return flap * maximum * clamp((stallAlpha + 0.32 - Math.abs(alpha)) / 0.32, 0, 1);
 }
 export function sampleTelemetry(
   state: FlightState,
@@ -197,7 +286,12 @@ export function sampleTelemetry(
     loadFactor:
       (a.qArea *
         (a.cl +
-          flapLiftCoefficient(a.alpha, clamp(controls.flaps ?? 0, 0, 1), def.stallAlphaRad))) /
+          flapLiftCoefficient(
+            a.alpha,
+            clamp(controls.flaps ?? 0, 0, 1),
+            def.stallAlphaRad,
+            a.flapLiftMax,
+          ))) /
       (def.massKg * G),
     specificEnergy: 0.5 * dot(state.velocity, state.velocity) + G * state.position.y,
     stalled: a.speed > 5 && Math.abs(a.alpha) > def.stallAlphaRad,
@@ -244,7 +338,7 @@ export function stepFlight(
   const wantedCL = clamp(
     (def.massKg * G) / (Math.max(1, a.qArea) * Math.max(0.4, Math.abs(a.up.y))),
     0,
-    1.3,
+    a.fit ? a.fit.clMax + flap * a.flapLiftMax : 1.3,
   );
   let trimAlpha = 0;
   for (let i = 0; i <= 80; i++) {
@@ -252,8 +346,8 @@ export function stepFlight(
     const minimumAlpha = -0.08 * flap;
     trimAlpha = minimumAlpha + ((def.stallAlphaRad - minimumAlpha) * i) / 80;
     if (
-      lookupTable(def.aero.alphaRad, def.aero.mach, def.aero.lift, trimAlpha, a.mach) +
-        flapLiftCoefficient(trimAlpha, flap, def.stallAlphaRad) >=
+      liftCoefficient(trimAlpha, a.mach, def, a.fit?.clMax) +
+        flapLiftCoefficient(trimAlpha, flap, def.stallAlphaRad, a.flapLiftMax) >=
       wantedCL
     )
       break;
@@ -336,19 +430,30 @@ export function stepFlight(
   const thrust =
     (controls.thrustMultiplier ?? 1) *
     clamp(controls.throttle, 0, 1) *
-    lookupTable(
-      def.engine.altitudeM,
-      def.engine.mach,
-      def.engine.thrustN,
-      state.position.y,
-      a.mach,
-    );
-  const flapLift = flapLiftCoefficient(a.alpha, flap, def.stallAlphaRad);
+    (def.retail
+      ? def.retail.militaryThrustN * retailThrustLapse(state.position.y)
+      : lookupTable(
+          def.engine.altitudeM,
+          def.engine.mach,
+          def.engine.thrustN,
+          state.position.y,
+          a.mach,
+        ));
+  const flapLift = flapLiftCoefficient(a.alpha, flap, def.stallAlphaRad, a.flapLiftMax);
   // Original increments, not direct conversions of the native PT drag fields.
   // The clean drag table already includes induced drag. Add only the extra
   // lift-squared contribution from flap camber, never a negative drag credit.
-  const extraInducedDrag = 0.06 * Math.max(0, (a.cl + flapLift) ** 2 - a.cl ** 2);
-  const deviceDrag = flap * 0.035 + extraInducedDrag + airbrake * 0.12 + gear * 0.02;
+  const extraInducedDrag =
+    (a.fit?.inducedDragK ?? 0.06) * Math.max(0, (a.cl + flapLift) ** 2 - a.cl ** 2);
+  const deviceDragCoefficient = (field: string, original: number) => {
+    const factor = retailDeviceFactor(def, field);
+    return factor === undefined ? original : factor * a.cd;
+  };
+  const deviceDrag =
+    flap * deviceDragCoefficient('flapsDrag', 0.035) +
+    extraInducedDrag +
+    airbrake * deviceDragCoefficient('airBrakesDrag', 0.12) +
+    gear * deviceDragCoefficient('gearDrag', 0.02);
   // Sideforce is damping perpendicular to airflow, so it cannot manufacture energy.
   const side = unit(add(a.right, scale(a.direction, -dot(a.right, a.direction))));
   const force = add(
