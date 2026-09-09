@@ -38,6 +38,13 @@ for (const mode of ['explorer', 'assisted', 'retail-envelope', 'recovered-envelo
       if(label){label.style.top='auto'; label.style.bottom='12px';}`);
     if (flight) { await tap('KeyT'); await tap('F2'); }
     evidence.before = await read();
+    async function settle() {
+      const initial = await session.evaluate('window.__terrainDiagnostics()');
+      await session.poll(async()=>{
+        const d=await session.evaluate('window.__terrainDiagnostics()');
+        return d.frames>=initial.frames+90 && d.pendingChunks===0 && !d.transitionActive ? true : undefined;
+      },'destination terrain settled');
+    }
     const points = await session.evaluate(`Array.from(document.querySelectorAll('[data-waypoint-id]'),e=>({id:Number(e.dataset.waypointId),x:Number(e.dataset.worldX),z:Number(e.dataset.worldZ)}))`);
     evidence.destinations=[];
     for (const point of points) {
@@ -60,13 +67,11 @@ for (const mode of ['explorer', 'assisted', 'retail-envelope', 'recovered-envelo
       }
       evidence.destinations.push({point,...arrived});
       if(point.id===2) {
-        await session.poll(async()=>{
-          const d=await session.evaluate('window.__terrainDiagnostics?.()');
-          return d?.loadedChunks>0 && d.pendingChunks===0 && !d.transitionActive ? true : undefined;
-        },'destination terrain streamed');
+        await settle();
         await session.capture('mountains');
       }
     }
+    await settle();
     await session.evaluate(`document.querySelector('[aria-label="Zoom map in"]').click()`);
     assert(await session.evaluate(`document.activeElement?.id==='terrain-canvas'`),'Zoom lost control focus');
     await session.evaluate(`document.querySelector('[aria-label="Heading-up map"]').click()`);
