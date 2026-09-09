@@ -3,7 +3,7 @@ import type { RetailFlightProfile } from '../data/retail-flight';
 export const AIRCRAFT = {
   f14: { name: 'F-14 Tomcat', length: 19.1, afterburner: true, hook: true },
   a4e: { name: 'A-4E Skyhawk', length: 12.22, afterburner: false, hook: true },
-  x31: { name: 'X-31 EFM', length: 13.21, afterburner: true, hook: false },
+  x31: { name: 'X-31 EFM', length: 14.99, afterburner: true, hook: false },
 } as const;
 export type AircraftId = keyof typeof AIRCRAFT;
 export function aircraftId(value: string | null): AircraftId {

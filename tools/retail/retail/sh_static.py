@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import struct
 from pathlib import Path
 
@@ -217,18 +218,97 @@ def f14_surfaces(model: dict) -> dict:
     return {**model, 'polygons': polygons, 'parts': pivots, 'rig': rig}
 
 
-def export(source: Path, palette_path: Path, output: Path, length_metres: float = 19.1, name: str | None = None) -> dict:
+def fixed_wing_surfaces(model: dict, aircraft: str) -> dict:
+    """Partition A4/F31 source faces into an authored visual control rig.
+
+    Positions/UVs and neutral silhouette are conserved. Hinges are fitted to
+    inspected native geometry; rotationAxis is in renderer X/up/aft coordinates.
+    Native x86 control-surface schedules are not interpreted here.
+    """
+    polygons, pivots, rig = [], dict(model['parts']), {}
+    for polygon in model['polygons']:
+        vertices = polygon['vertices']
+        lo = [min(v[i] for v in vertices) for i in range(3)]
+        hi = [max(v[i] for v in vertices) for i in range(3)]
+        side = -1 if sum(v[0] for v in vertices) < 0 else 1
+        suffix = 'left' if side < 0 else 'right'
+        candidates = []
+        if aircraft == 'A4':
+            # Horizontal stabilizer: trailing elevator, with fixed center root.
+            if lo[2] == hi[2] == 7 and hi[1] <= -43:
+                candidates = [(f'elevator-{suffix}', [(side, 0, 0, -1.5), (0, -1, 0, -53)],
+                               (side * 2, -53, 7), (1, 0, 0))]
+            # Wings: inboard flaps and distinct outboard trailing ailerons.
+            elif lo[2] >= -8 and hi[2] <= -3 and lo[1] >= -25 and hi[1] <= 14:
+                candidates = [
+                    (f'flap-{suffix}', [(side, 0, 0, -6), (-side, 0, 0, 21), (0, -1, 0, -12)],
+                     (side * 6, -12, -7), (1, 0, 0)),
+                    (f'aileron-{suffix}', [(side, 0, 0, -21), (0, -1, 0, -18)],
+                     (side * 21, -18, -7), (1, 0, 0)),
+                ]
+            # The fin's aft strip. Keep the fixed root and dorsal spine.
+            elif lo[0] >= -1 and hi[0] <= 2 and lo[2] >= 11 and hi[1] <= -33:
+                candidates = [('rudder-center', [(0, -1, -.4, -40.6)],
+                               (0, -47, 16), (0, 1, .4))]
+            # Rear fuselage speed-brake panels, ahead of the tailcone.
+            elif min(abs(v[0]) for v in vertices) >= 4 and max(abs(v[0]) for v in vertices) <= 6 and lo[1] >= -28 and hi[1] <= -11:
+                candidates = [(f'airbrake-{suffix}', [(0, 1, 0, 28), (0, -1, 0, -17),
+                               (0, 0, 1, 5), (0, 0, -1, 2)],
+                               (side * 5.5, -17, -1.5), (0, 1, 0))]
+        elif aircraft == 'F31':
+            if polygon['part'].startswith('part-') and lo[1] > 40:
+                candidates = [(f'canard-{suffix}', [], model['parts'][polygon['part']], (1, 0, 0))]
+            elif polygon['part'] == 'body' and lo[2] >= -6 and hi[2] <= -3 and hi[1] <= 10:
+                candidates = [(f'elevon-{suffix}', [(side, 0, 0, -10), (0, -1, 0, -17)],
+                               (side * 10, -17, -6), (1, 0, 0))]
+            elif lo[0] == hi[0] == 0 and lo[2] >= 8 and hi[1] <= -19:
+                candidates = [('rudder-center', [(0, -1, -.35, -28)],
+                               (0, -32.2, 12), (0, 1, .35))]
+        # Match the export fan before cutting: several retail quads are not
+        # coplanar. Cutting the quad first would subtly reshape its neutral mesh.
+        remaining = [polygon]
+        if candidates:
+            remaining = [{**polygon, 'vertices': [vertices[j] for j in (0, i, i + 1)],
+                          'uvs': [polygon['uvs'][j] for j in (0, i, i + 1)] if polygon['uvs'] else None}
+                         for i in range(1, len(vertices) - 1)]
+        for name, planes, pivot, axis in candidates:
+            outside_pieces = []
+            for piece in remaining:
+                inside = piece
+                for plane in planes:
+                    inside, outside = split_polygon(inside, plane)
+                    if outside:
+                        outside_pieces.append(outside)
+                    if inside is None:
+                        break
+                if inside:
+                    polygons.append({**inside, 'part': name})
+                    pivots[name] = pivot
+                    rig[name] = {'rotationAxis': axis}
+            remaining = outside_pieces
+        polygons.extend(remaining)
+    return {**model, 'polygons': polygons, 'parts': pivots, 'rig': rig}
+
+
+def export(source: Path, palette_path: Path, output: Path, length_metres: float = 19.1, name: str | None = None, wingspan_metres: float | None = None) -> dict:
     data = source.read_bytes()
     model = project(data, source.stem)
     source_polygons = len(model['polygons'])
     if source.stem.upper() == 'F14':
         model = f14_surfaces(model)
+    elif source.stem.upper() in ('A4', 'F31'):
+        model = fixed_wing_surfaces(model, source.stem.upper())
     vertices = [v for p in model['polygons'] for v in p['vertices']]
     lo = [min(v[i] for v in vertices) for i in range(3)]
     hi = [max(v[i] for v in vertices) for i in range(3)]
-    if length_metres <= 0 or hi[1] <= lo[1]:
+    if not math.isfinite(length_metres) or length_metres <= 0 or hi[1] <= lo[1]:
         raise sh.SHError('invalid presentation length or longitudinal bounds')
     scale = length_metres / (hi[1] - lo[1])
+    if wingspan_metres is not None:
+        if not math.isfinite(wingspan_metres) or wingspan_metres <= 0 or hi[0] <= lo[0]:
+            raise sh.SHError('invalid presentation wingspan or lateral bounds')
+        scale = wingspan_metres / (hi[0] - lo[0])
+        length_metres = (hi[1] - lo[1]) * scale
     center = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, 0]
     # Preserve the native vertical origin: bounding-box centering would lower
     # the fuselage because the twin fins extend far above its centerline.
@@ -275,6 +355,8 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
               'source': {'file': source.name, 'sha256': hashlib.sha256(data).hexdigest(),
                          'paletteSha256': hashlib.sha256(palette_path.read_bytes()).hexdigest(),
                          'projection': 'nearest LOD, neutral static state', 'lengthMetres': length_metres,
+                         'scaleReference': 'wingspan' if wingspan_metres is not None else 'length',
+                         'wingspanMetres': (hi[0] - lo[0]) * scale,
                          'polygons': source_polygons, 'partitionPolygons': len(model['polygons']), 'instructions': model['instructions']},
               'limitations': ['Original flight dynamics are not imported.',
                               'Static neutral pose; original x86 animation and renderer are not executed.',
@@ -286,6 +368,8 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
     if source.stem.upper() != 'F14':
         result['limitations'] = [result['limitations'][i] for i in (0, 1, 2, 6)] + [
             'Static exterior only; control surfaces, gear and engine animation are not recovered.']
+    if source.stem.upper() in ('A4', 'F31'):
+        result['limitations'][-1] = 'Retail faces use authored control-surface hinges/mixing; native animation and thrust vectoring are not recovered.'
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, separators=(',', ':')) + '\n')
     return result
@@ -297,9 +381,11 @@ def main():
     parser.add_argument('--pal', required=True, type=Path)
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--name')
-    parser.add_argument('--length-metres', type=float, default=19.1)
+    scale = parser.add_mutually_exclusive_group()
+    scale.add_argument('--length-metres', type=float, default=19.1)
+    scale.add_argument('--wingspan-metres', type=float)
     args = parser.parse_args()
-    result = export(args.source, args.pal, args.out, args.length_metres, args.name)
+    result = export(args.source, args.pal, args.out, args.length_metres, args.name, args.wingspan_metres)
     print(json.dumps({'source': result['source'], 'parts': [(p['name'], len(p['positions']) // 9) for p in result['parts']]}))
 
 

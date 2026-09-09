@@ -42,3 +42,34 @@ test('flaps drop, rudders deflect right, and speedbrake clamshell opens outward'
   expect(surfaceAngle('body-color', { ...neutral, airbrake: 1 })).toBe(0);
   expect(surfaceAngle('flap-right-color', { ...neutral, flap: 2 })).toBe(0.52);
 });
+
+test('fixed-wing pitch, roll and lateral brakes deflect in the intended directions', () => {
+  const aft = new Vector3(0, 0, 1);
+  const x = new Vector3(1, 0, 0);
+  for (const side of ['left', 'right']) {
+    expect(
+      aft.clone().applyAxisAngle(x, surfaceAngle(`elevator-${side}`, { ...neutral, pitch: 1 })).y,
+    ).toBeGreaterThan(0);
+    expect(
+      aft.clone().applyAxisAngle(x, surfaceAngle(`canard-${side}`, { ...neutral, pitch: 1 })).y,
+    ).toBeLessThan(0);
+    expect(
+      aft.clone().applyAxisAngle(x, surfaceAngle(`elevon-${side}`, { ...neutral, flap: 1 })).y,
+    ).toBeLessThan(0);
+  }
+  for (const prefix of ['aileron', 'elevon']) {
+    expect(
+      aft.clone().applyAxisAngle(x, surfaceAngle(`${prefix}-left`, { ...neutral, roll: 1 })).y,
+    ).toBeLessThan(0);
+    expect(
+      aft.clone().applyAxisAngle(x, surfaceAngle(`${prefix}-right`, { ...neutral, roll: 1 })).y,
+    ).toBeGreaterThan(0);
+  }
+  const up = new Vector3(0, 1, 0);
+  expect(
+    aft.clone().applyAxisAngle(up, surfaceAngle('airbrake-left', { ...neutral, airbrake: 1 })).x,
+  ).toBeLessThan(0);
+  expect(
+    aft.clone().applyAxisAngle(up, surfaceAngle('airbrake-right', { ...neutral, airbrake: 1 })).x,
+  ).toBeGreaterThan(0);
+});

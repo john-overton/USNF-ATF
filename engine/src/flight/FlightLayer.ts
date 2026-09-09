@@ -1,3 +1,4 @@
+import { configureAircraftHook } from './AircraftHook';
 import { AIRCRAFT, aircraftId, validateAircraftProfile, type AircraftId } from './aircraft-catalog';
 import {
   BoxGeometry,
@@ -256,11 +257,7 @@ export class FlightLayer {
       this.aircraft.add(pivot);
     }
     // Original moving hook and burner effects supplement imported geometry when needed.
-    const hookArm = new Mesh(new BoxGeometry(0.12, 0.12, 2.4), dark);
-    hookArm.position.z = 1.2;
-    this.hook.position.set(0, -0.6, model ? 6 * presentationScale : 3);
-    this.hook.visible = AIRCRAFT[this.aircraftId].hook;
-    this.hook.add(hookArm);
+    configureAircraftHook(this.hook, this.aircraftId, !!model, dark);
     this.aircraft.add(this.hook);
     for (const x of !AIRCRAFT[this.aircraftId].afterburner
       ? []
@@ -537,7 +534,7 @@ export class FlightLayer {
         );
     }
     this.model?.setAfterburner(this.input.engineRunning && this.systems.afterburnerFraction > 0.1);
-    this.hook.rotation.x = (this.systems.hookFraction * Math.PI) / 4;
+    this.hook.rotation.x = this.systems.hookFraction * Number(this.hook.userData.deployAngle);
     for (const burner of this.burners) {
       burner.visible = this.systems.afterburnerFraction > 0.01 && this.input.engineRunning;
       burner.scale.y = Math.max(0.01, this.systems.afterburnerFraction);
@@ -636,6 +633,9 @@ export class FlightLayer {
         gearRotation: this.gearParts[0]?.rotation.z ?? 0,
         gearVisible: Number(this.gearParts[0]?.visible),
         hookRotation: this.hook.rotation.x,
+        hookPivotY: this.hook.position.y,
+        hookPivotZ: this.hook.position.z,
+        hookArmLength: Number(this.hook.userData.armLength),
         burnerVisible: Number(this.burners[0]?.visible),
         wingLeftRotation: this.model?.parts.get('wing-left-color')?.rotation.y ?? 0,
       },

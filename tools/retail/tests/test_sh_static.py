@@ -1,5 +1,6 @@
 """Synthetic static SH projections; no embedded retail model bytes."""
 import struct
+import math
 import unittest
 import tempfile
 from pathlib import Path
@@ -8,7 +9,7 @@ from unittest.mock import patch
 
 from _paths import REPO, TOOLS_RETAIL  # noqa: F401
 from retail.sh import SHError
-from retail.sh_static import project, export, split_polygon, f14_surfaces
+from retail.sh_static import project, export, split_polygon, f14_surfaces, fixed_wing_surfaces
 
 
 def image(code):
@@ -158,6 +159,52 @@ class StaticShapeTest(unittest.TestCase):
         for side in ('left', 'right'):
             self.assertEqual(rigged['rig'][f'flap-{side}']['parent'], f'wing-{side}-color')
 
+    def test_local_fixed_wing_rigs_preserve_neutral_faces_and_uvs(self):
+        sources = ['A4', 'F31']
+        root = Path(REPO) / 'extracted/atf-gold/ATF_2.LIB'
+        if not all((root / f'{name}.SH').is_file() for name in sources):
+            self.skipTest('local ATF-GOLD A4/F31 shapes unavailable')
+        expected = {
+            'A4': {'elevator-left', 'elevator-right', 'aileron-left', 'aileron-right',
+                   'flap-left', 'flap-right', 'rudder-center', 'airbrake-left', 'airbrake-right'},
+            'F31': {'canard-left', 'canard-right', 'elevon-left', 'elevon-right', 'rudder-center'},
+        }
+        def area_vector(face, field):
+            points = face[field]
+            if field == 'uvs':
+                return [sum(points[i][0] * points[(i + 1) % len(points)][1] -
+                            points[i][1] * points[(i + 1) % len(points)][0]
+                            for i in range(len(points))) / 2]
+            return [sum(points[i][(a + 1) % 3] * points[(i + 1) % len(points)][(a + 2) % 3] -
+                        points[i][(a + 2) % 3] * points[(i + 1) % len(points)][(a + 1) % 3]
+                        for i in range(len(points))) / 2 for a in range(3)]
+        def mesh_area(face):
+            vertices = face['vertices']
+            total = 0
+            for i in range(1, len(vertices) - 1):
+                a = [vertices[i][j] - vertices[0][j] for j in range(3)]
+                b = [vertices[i + 1][j] - vertices[0][j] for j in range(3)]
+                total += math.hypot(*(a[(j+1)%3]*b[(j+2)%3] - a[(j+2)%3]*b[(j+1)%3] for j in range(3))) / 2
+            return total
+        for name in sources:
+            original = project((root / f'{name}.SH').read_bytes())
+            rigged = fixed_wing_surfaces(original, name)
+            self.assertEqual(set(rigged['rig']), expected[name])
+            for face in original['polygons']:
+                pieces = [p for p in rigged['polygons'] if p['addr'] == face['addr']]
+                self.assertTrue(pieces)
+                self.assertAlmostEqual(sum(mesh_area(p) for p in pieces), mesh_area(face), places=6)
+                for field in ('vertices', 'uvs') if face['uvs'] else ('vertices',):
+                    for axis, area in enumerate(area_vector(face, field)):
+                        self.assertAlmostEqual(sum(area_vector(p, field)[axis] for p in pieces), area, places=6)
+                for piece in pieces:
+                    self.assertEqual(piece['texture'], face['texture'])
+                    self.assertEqual(piece['color'], face['color'])
+            for axis in range(3):
+                for fn in (min, max):
+                    self.assertEqual(fn(v[axis] for p in original['polygons'] for v in p['vertices']),
+                                     fn(v[axis] for p in rigged['polygons'] for v in p['vertices']))
+
     def test_non_f14_export_identity_scale_and_no_f14_rig_claim(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -170,6 +217,10 @@ class StaticShapeTest(unittest.TestCase):
             positions = result['parts'][0]['positions']
             self.assertAlmostEqual(max(positions[2::3]) - min(positions[2::3]), 12)
             self.assertFalse(any('taileron' in text for text in result['limitations']))
+            scaled = export(source, palette, root / 'span.json', name='Synthetic jet', wingspan_metres=5)
+            self.assertEqual(scaled['source']['wingspanMetres'], 5)
+            self.assertEqual(scaled['source']['lengthMetres'], 10)
+            self.assertEqual(scaled['source']['scaleReference'], 'wingspan')
 
     def test_out_of_range_part_target_rejected(self):
         code = bytes([0xc4, 0]) + struct.pack('<hhhhhhh', 0, 0, 0, 0, 0, 0, 500)
