@@ -1,3 +1,32 @@
+export type ChaseCameraMode = 'attitude' | 'world-up';
+export interface AircraftCommands {
+  throttle: number;
+  engineRunning: boolean;
+  afterburner: boolean;
+  gearDown: boolean;
+  hookDown: boolean;
+  cameraMode: ChaseCameraMode;
+}
+/** Discrete actions are edge-triggered; browser key repeat must not toggle systems. */
+export function applyPilotAction(
+  state: AircraftCommands & { resetRequested: boolean },
+  event: Pick<KeyboardEvent, 'type' | 'code' | 'repeat'>,
+): void {
+  if (event.type !== 'keydown' || event.repeat) return;
+  const preset = /^Digit([1-6])$/.exec(event.code);
+  if (preset) {
+    const index = Number(preset[1]);
+    state.throttle = Math.min(1, (index - 1) / 4);
+    state.afterburner = index === 6;
+  }
+  if (event.code === 'KeyT') state.engineRunning = !state.engineRunning;
+  if (event.code === 'KeyG') state.gearDown = !state.gearDown;
+  if (event.code === 'KeyH') state.hookDown = !state.hookDown;
+  if (event.code === 'F2') state.cameraMode = 'attitude';
+  if (event.code === 'F3') state.cameraMode = 'world-up';
+  if (event.code === 'KeyR') state.resetRequested = true;
+}
+
 export interface PilotControls {
   pitch: number;
   roll: number;
@@ -20,6 +49,17 @@ const PILOT_KEYS = new Set([
   'KeyS',
   'KeyB',
   'KeyR',
+  'KeyT',
+  'KeyG',
+  'KeyH',
+  'F2',
+  'F3',
+  'Digit1',
+  'Digit2',
+  'Digit3',
+  'Digit4',
+  'Digit5',
+  'Digit6',
 ]);
 /** Releases always clear held state, even after focus moved into a form. */
 export function updateHeldPilotKeys(
@@ -43,21 +83,29 @@ export function updateHeldPilotKeys(
 export class FlightInput {
   private keys = new Set<string>();
   throttle = 0;
+  engineRunning = true;
+  afterburner = false;
+  gearDown = true;
+  hookDown = false;
+  cameraMode: ChaseCameraMode = 'world-up';
   resetRequested = false;
   gamepadConnected = false;
   private key = (event: KeyboardEvent): void => {
     const editing =
       event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement ||
+      (event.target instanceof HTMLElement && event.target.isContentEditable) ||
       event.target instanceof HTMLSelectElement ||
       event.target instanceof HTMLButtonElement;
     if (!updateHeldPilotKeys(this.keys, event, editing)) return;
     if (!editing) event.preventDefault();
-    if (event.type === 'keydown' && event.code === 'KeyR' && !event.repeat)
-      this.resetRequested = true;
+    if (!editing) applyPilotAction(this, event);
   };
   private focus = (event: FocusEvent): void => {
     if (
       event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement ||
+      (event.target instanceof HTMLElement && event.target.isContentEditable) ||
       event.target instanceof HTMLSelectElement ||
       event.target instanceof HTMLButtonElement
     )
@@ -78,6 +126,7 @@ export class FlightInput {
     const up = Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS'));
     const trigger = (pad?.buttons[7]?.value ?? 0) - (pad?.buttons[6]?.value ?? 0);
     this.throttle = Math.max(0, Math.min(1, this.throttle + (up + trigger) * dt * 0.4));
+    if (up + trigger < 0) this.afterburner = false;
     return {
       pitch: Math.max(
         -1,
@@ -112,6 +161,11 @@ export class FlightInput {
   }
   reset(): void {
     this.throttle = 0;
+    this.engineRunning = true;
+    this.afterburner = false;
+    this.gearDown = true;
+    this.hookDown = false;
+    this.cameraMode = 'world-up';
     this.resetRequested = false;
     this.keys.clear();
   }
