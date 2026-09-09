@@ -141,3 +141,20 @@ ESLint pass; `bun test engine/src/terrain`: 15 pass, 0 fail, 4467 expectations.
 New tests validate query rejection/clamping, a water polygon with a dry hole
 (triangle area 7500 of 10000 m²), and spatial batching, culling, allocation bounds
 and disposal. Packaged smoke must rebuild after this follow-up commit.
+
+
+## 2026-09-08 measured water component limit
+
+The full Ukraine source mask produced 33731 disconnected water bodies after
+preserving original exterior/interior rings; the rectangle decomposition had
+produced approximately 80660 separate polygons. The largest measured exterior
+has 16695 points. Raise the runtime body-count guard from 10000 to 50000 to
+accommodate this measured dataset. The 100000-point per-body and 500000-point
+total bounds and 16 MiB/128-batch GPU working-set budgets remain unchanged.
+This is a measured input allowance, not permission to eagerly instantiate one
+mesh per source component. A regression accepts 10001 small bodies and rejects
+50001 bodies and 600000 total vertices. The earlier 10000-body limit above is
+historical, superseded by this entry.
+
+Verification: engine TypeScript and scoped ESLint pass; `bun test
+engine/src/terrain` passes 16 tests / 4470 expectations; `git diff --check` passes.

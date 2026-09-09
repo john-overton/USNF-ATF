@@ -260,3 +260,26 @@ test('water batching culls remote geometry, builds lazily and disposes departed 
   expect(scene.children).toHaveLength(0);
   layer.dispose();
 });
+
+test('measured full-theater water component counts fit while body and vertex caps remain enforced', () => {
+  const body: WaterBody = {
+    id: 'small',
+    elevation: 0,
+    polygon: [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+    ],
+  };
+  const bodies = Array.from({ length: 10001 }, (_, i) => ({ ...body, id: String(i) }));
+  expect(
+    parseManifest(JSON.stringify({ ...manifest, waterBodies: bodies })).waterBodies,
+  ).toHaveLength(10001);
+  expect(() =>
+    parseManifest(JSON.stringify({ ...manifest, waterBodies: Array(50001).fill(body) })),
+  ).toThrow('array size');
+  const large = { ...body, polygon: Array.from({ length: 100000 }, () => [0, 0]) };
+  expect(() =>
+    parseManifest(JSON.stringify({ ...manifest, waterBodies: Array(6).fill(large) })),
+  ).toThrow('vertex budget');
+});

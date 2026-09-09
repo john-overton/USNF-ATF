@@ -134,7 +134,7 @@ export function parseManifest(text: string): TheaterManifest {
     if (waterPoints > 500000) throw new Error('Water exceeds vertex budget');
     return points;
   };
-  const waterBodies = array(m.waterBodies, 10000).map((value) => {
+  const waterBodies = array(m.waterBodies, 50000).map((value) => {
     const w = object(value),
       polygon = ring(w.polygon);
     const holes = w.holes === undefined ? undefined : array(w.holes, 10000).map(ring);
