@@ -112,7 +112,8 @@ export class RetailAircraft {
           UnsignedByteType,
         );
         texture.colorSpace = SRGBColorSpace;
-        texture.flipY = true;
+        // Exported V is already bottom-origin, matching the source SH atlas convention.
+        texture.flipY = false;
         texture.magFilter = NearestFilter;
         texture.needsUpdate = true;
         this.textures.push(texture);
@@ -144,6 +145,7 @@ export class RetailAircraft {
         side: DoubleSide,
         ...(part.uvs && texture ? { map: texture } : {}),
       });
+      material.userData.originalMap = material.map;
       group.add(new Mesh(geometry, material));
       this.group.add(group);
       this.parts.set(part.name, group);
@@ -154,6 +156,21 @@ export class RetailAircraft {
     const text = await platform.fs.readText('appData', 'aircraft/f14.json');
     if (text.length > 64 * 1024 * 1024) throw new Error('Aircraft import exceeds 64 MiB');
     return new RetailAircraft(parseRetailAircraft(JSON.parse(text)));
+  }
+  setAfterburner(lit: boolean): void {
+    for (const [name, group] of this.parts) {
+      if (!name.startsWith('exhaust-')) continue;
+      for (const child of group.children) {
+        if (!(child instanceof Mesh)) continue;
+        const material = child.material as MeshStandardMaterial;
+        const map = material.userData.originalMap as DataTexture | null;
+        if (material.map !== (lit ? map : null)) {
+          material.map = lit ? map : null;
+          material.color.setHex(lit ? 0xffffff : 0x202328);
+          material.needsUpdate = true;
+        }
+      }
+    }
   }
   dispose(): void {
     for (const texture of this.textures) texture.dispose();

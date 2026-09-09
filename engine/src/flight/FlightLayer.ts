@@ -332,6 +332,7 @@ export class FlightLayer {
       if (name.startsWith('wing-left')) part.rotation.y = this.wingSweep();
       if (name.startsWith('wing-right')) part.rotation.y = -this.wingSweep();
     }
+    this.model?.setAfterburner(this.input.engineRunning && this.systems.afterburnerFraction > 0.1);
     this.hook.rotation.x = (this.systems.hookFraction * Math.PI) / 4;
     for (const burner of this.burners) {
       burner.visible = this.systems.afterburnerFraction > 0.01 && this.input.engineRunning;
