@@ -111,3 +111,25 @@ th {
   margin: 0;
   text-align: right;
 }
+
+.terrain-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.terrain-panel-heading h1 {
+  margin: 0;
+}
+.terrain-panel-heading button {
+  min-width: 30px;
+  cursor: pointer;
+}
+.terrain-panel-minimized {
+  width: auto;
+  padding: 8px 12px;
+}
+.terrain-panel-minimized .terrain-panel-heading {
+  margin-bottom: 0;
+}

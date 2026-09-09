@@ -1,5 +1,8 @@
 import { flightEuler, type FlightState, type FlightTelemetry } from '../sim/flight';
 
+// HUD is 75% of its old size; compensate so adjacent five-degree rungs
+// are twice as far apart on screen, not merely inside the SVG viewBox.
+export const HUD_PITCH_PIXELS_PER_DEGREE = 10 / 0.75;
 const DEG = 180 / Math.PI;
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 export const wrapHeading = (degrees: number): number => ((degrees % 360) + 360) % 360;
@@ -37,8 +40,8 @@ export function flightHudReadout(state: FlightState, telemetry: FlightTelemetry)
     path: {
       visible: pathVisible,
       x: clamp(drift * 5, -145, 145),
-      y: clamp(-pathPitch * 5, -145, 145),
-      limited: Math.abs(drift) > 29 || Math.abs(pathPitch) > 29,
+      y: clamp(-pathPitch * HUD_PITCH_PIXELS_PER_DEGREE, -145, 145),
+      limited: Math.abs(drift) > 29 || Math.abs(pathPitch) > 145 / HUD_PITCH_PIXELS_PER_DEGREE,
     },
   };
 }

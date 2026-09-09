@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import type { FlightDiagnostics } from './FlightLayer';
-import { flightHudReadout, wrapHeading } from './hud';
+import { flightHudReadout, wrapHeading, HUD_PITCH_PIXELS_PER_DEGREE } from './hud';
 
 /** Original SVG instruments; the retail HUD is an x86 plug-in, not browser artwork. */
 export function FlightHud({
@@ -40,16 +40,18 @@ export function FlightHud({
         left: '50%',
         top: '50%',
         transform: 'translate(-50%, -50%)',
-        width: 'min(760px, 68vw)',
-        maxHeight: '88vh',
+        width: 'min(570px, 51vw)',
+        maxHeight: '66vh',
         pointerEvents: 'none',
-        color: '#8dff9c',
-        filter: 'drop-shadow(0 1px 2px #001900)',
+        color: '#66ff66',
+        fontWeight: 400,
         overflow: 'visible',
       }}
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1"
+      shapeRendering="crispEdges"
+      textRendering="optimizeSpeed"
     >
       <defs>
         <clipPath id={clip}>
@@ -59,7 +61,7 @@ export function FlightHud({
       <g
         fill="currentColor"
         stroke="none"
-        fontFamily="ui-monospace, monospace"
+        fontFamily="'Courier New', Courier, monospace"
         fontSize="15"
         textAnchor="middle"
       >
@@ -80,7 +82,7 @@ export function FlightHud({
               fill="currentColor"
               stroke="none"
               textAnchor="middle"
-              fontFamily="monospace"
+              fontFamily="'Courier New', Courier, monospace"
               fontSize="14"
             >
               {String(Math.round(wrapHeading(heading) / 10)).padStart(2, '0')}
@@ -95,7 +97,7 @@ export function FlightHud({
         fill="currentColor"
         stroke="none"
         textAnchor="middle"
-        fontFamily="monospace"
+        fontFamily="'Courier New', Courier, monospace"
         fontSize="19"
       >
         {hud.headingText}°
@@ -103,11 +105,11 @@ export function FlightHud({
       <g clipPath={`url(#${clip})`}>
         <g transform={`translate(380 300) rotate(${hud.rollDegrees})`}>
           {Array.from({ length: 37 }, (_, i) => (i - 18) * 5).map((pitch) => {
-            const y = (hud.pitchDegrees - pitch) * 5;
+            const y = (hud.pitchDegrees - pitch) * HUD_PITCH_PIXELS_PER_DEGREE;
             if (Math.abs(y) > 240) return null;
             const width = pitch === 0 ? 125 : 65;
             return (
-              <g key={pitch} transform={`translate(0 ${y})`}>
+              <g key={pitch} data-hud-pitch={pitch} transform={`translate(0 ${y})`}>
                 <path
                   d={`M-${width} 0H-22 M22 0H${width}`}
                   strokeDasharray={pitch < 0 ? '7 5' : undefined}
@@ -123,7 +125,7 @@ export function FlightHud({
                       fill="currentColor"
                       stroke="none"
                       fontSize="13"
-                      fontFamily="monospace"
+                      fontFamily="'Courier New', Courier, monospace"
                       textAnchor="end"
                     >
                       {pitch}
@@ -134,7 +136,7 @@ export function FlightHud({
                       fill="currentColor"
                       stroke="none"
                       fontSize="13"
-                      fontFamily="monospace"
+                      fontFamily="'Courier New', Courier, monospace"
                     >
                       {pitch}
                     </text>
@@ -145,7 +147,7 @@ export function FlightHud({
           })}
         </g>
       </g>
-      <path d="M340 300h24l8 8 8-8 8 8 8-8h24" strokeWidth="2" />
+      <path d="M340 300h24l8 8 8-8 8 8 8-8h24" strokeWidth="1" />
       {hud.path.visible && (
         <g
           data-hud="flight-path"
@@ -162,7 +164,12 @@ export function FlightHud({
         ))}
         <path transform={`rotate(${hud.rollDegrees})`} d="M0-161l-5 8h10z" />
       </g>
-      <g fill="currentColor" stroke="none" fontFamily="ui-monospace, monospace" fontSize="16">
+      <g
+        fill="currentColor"
+        stroke="none"
+        fontFamily="'Courier New', Courier, monospace"
+        fontSize="16"
+      >
         <text x="110" y="225" fontSize="12">
           TAS KT
         </text>
