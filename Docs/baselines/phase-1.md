@@ -112,3 +112,30 @@ output. On Linux the probe script selects the unpacked binary; the AppImage
 acceptance check must also launch the AppImage itself with `--probe`.
 
 Phase 1 remains open pending Linux build, hardware launch, and checks.
+
+## 2026-09-08 phase 1 fixes and packaging follow-up
+
+Implementation: `fe08a61`; live dev-session evidence: `5ae06d5` and
+[phase 1 follow-up](../phase-1-followup.md). The three review defects are fixed:
+deliberate Electron restarts preserve Vite, dev IPC reads live source assets,
+and browser asset writes reject (including stale storage overrides).
+
+- Five new focused tests passed; live Electron checks exercised two shell edits
+  and asset reads through the preload bridge.
+- Integrated check with first terrain renderer `e0615fa`: 29 Bun tests pass,
+  4,505 expectations; typecheck, lint, format clean.
+- `bun run build`: exit 0, 68.3 s; arm64 and x64 DMG/ZIP artifacts produced.
+  Vite renderer 761.02 kB (206.47 kB gzip). This replaces earlier size/timing
+  evidence for this source; it does not imply later changes were packaged.
+- Mounted the arm64 DMG read-only with `hdiutil attach -readonly -nobrowse`,
+  launched its contained app with `--probe`: exit 0, unmasked Apple M3 through
+  ANGLE Metal, `softwareRenderer: false`. Detached the image afterwards.
+  This verifies launching from the disk image, not copying to `/Applications`
+  or Gatekeeper behavior on another Mac. Raw JSON: ignored
+  `extracted/phase1-dmg-probe.json`.
+- Python `.venv` introduced a vendored JavaScript file into ESLint discovery.
+  `4c14ff7` excludes virtualenv contents from lint and Prettier. Gitignore alone
+  is not enough for every development tool.
+
+`bun run probe --fresh` now rebuilds and runs the current unpackaged source.
+Linux hardware, Linux packaging, and Windows execution remain unverified.

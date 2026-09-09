@@ -18,7 +18,8 @@ Manifest JSON schemaVersion 1:
 - attribution: array of strings; source: string (explicitly identifies synthetic fixtures)
 - chunks: array of {lod, x, y, path, originX, originZ, spacing, size, offset, scale,
   minElevation, maxElevation, byteLength, sha256}
-- waterBodies: array of {id, elevation, polygon: array of [x,z] pairs}
+- waterBodies: array of {id, elevation, polygon: array of [x,z] pairs,
+  holes?: array of interior rings (each an array of [x,z] pairs)}
 
 Chunk x/y are integer tile coordinates within each LOD; originX/originZ are
 local southwest sample coordinates. size=256. path is relative to manifest
@@ -34,3 +35,8 @@ Gzip is a provisional transport to measure against alternatives; record size
 before finalizing its use. Browser loading uses Platform.fs assets by default;
 Electron may use appData for externally staged terrain. Renderer can select a
 manifest path/root via its UI or URL without filesystem access outside Platform.
+
+Water rings preserve dry islands explicitly. The initial row-rectangle
+decomposition created 80,660 surfaces in the first Ukraine run; hole rings
+avoid duplicating a water body into thousands of drawables. The renderer loads
+water geometry within the visible horizon and accounts for its memory budget.
