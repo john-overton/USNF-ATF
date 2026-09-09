@@ -292,3 +292,21 @@ No frame timings from that failed-land run are accepted as terrain performance.
 The smoke harness must capture browser console errors as well as uncaught
 exceptions; draw-call/triangle counters alone do not prove a successful shader.
 Fresh packaged screenshot and timing evidence is required after this correction.
+
+The fresh `3f7a6b2` package subsequently renders land correctly. Independent
+visual review of `extracted/terrain-transition-captures/` inspected ascent early,
+midfade and settled frames, plus descent midfade, late and settled frames. The
+land remains continuous without broad missing-tile/sky holes in the visible
+foreground. Expected screen-door stipple is visible along differing silhouettes,
+the distant horizon and lake edges during fades, and disappears after settling.
+Fine dashed patch-boundary lines remain visible in settled frames; this is
+successful source-transition coverage, not a claim of seamless final terrain.
+
+Ascent `transition-KeyE-001.json` reports progress 0.5312943, 136 outgoing patches,
+and 10044160 geometry-cache bytes; descent `transition-KeyQ-003.json` reports
+progress 0.5, 130 outgoing patches, and 11339328 geometry-cache bytes. Screenshot
+HUD text updates every 500ms and CDP capture has latency, so its displayed percent
+can lag the adjacent diagnostics JSON. These captures intentionally interrupt
+rendering and are visual evidence only; use the separate uncaptured flight for
+frame-time acceptance. The root phase 3 baseline records those timing runs and
+accelerated lateral coverage stress separately.
