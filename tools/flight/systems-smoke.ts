@@ -180,6 +180,12 @@ try {
     (d) => d.cameraMode === 'attitude' && Math.abs(d.cameraUp.x) > 0.2,
     'F2 attitude camera',
   );
+  await session.poll(
+    async () =>
+      (await session.evaluate("document.body.innerText.includes('F2 · attitude locked')")) ||
+      undefined,
+    'F2 helper update',
+  );
   await save('f2-attitude', locked);
   await tap('F3');
   const upright = await until((d) => d.cameraMode === 'world-up', 'F3 world-up camera');
@@ -188,6 +194,11 @@ try {
       Math.abs(upright.cameraUp.y - 1) < 1e-9 &&
       Math.abs(upright.cameraUp.z) < 1e-9,
     'F3 camera up follows aircraft bank',
+  );
+  await session.poll(
+    async () =>
+      (await session.evaluate("document.body.innerText.includes('F3 · horizon up')")) || undefined,
+    'F3 helper update',
   );
   await save('f3-world-up', upright);
   assert(

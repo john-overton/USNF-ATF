@@ -172,9 +172,9 @@ export class FlightLayer {
     this.hook.position.set(0, -0.6, model ? 6 : 3);
     this.hook.add(hookArm);
     this.aircraft.add(this.hook);
-    for (const x of [-1.2, 1.2]) {
+    for (const x of model ? [-1.483, 1.424] : [-1.2, 1.2]) {
       const flame = new Mesh(
-        new ConeGeometry(0.55, 4, 12),
+        new ConeGeometry(0.55, 4, 12).translate(0, 2, 0),
         new MeshStandardMaterial({
           color: 0xffaa44,
           emissive: 0xff6600,
@@ -185,7 +185,7 @@ export class FlightLayer {
         }),
       );
       flame.rotation.x = Math.PI / 2;
-      flame.position.set(x, -0.2, model ? 10 : 6);
+      flame.position.set(x, model ? -0.297 : -0.2, model ? 9.075 : 4);
       this.burners.push(flame);
       this.aircraft.add(flame);
     }
