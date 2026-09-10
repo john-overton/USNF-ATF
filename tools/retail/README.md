@@ -44,9 +44,17 @@ PYTHONPATH=tools/retail python3 -m retail.pic extracted/usnf97/USNF_1.LIB --all 
 PYTHONPATH=tools/retail python3 -m retail.fnt extracted/usnf97/USNF_1.LIB --all -o extracted/png/fonts
 PYTHONPATH=tools/retail python3 -m retail.pt extracted/usnf97/USNF_2.LIB/F14.PT
 PYTHONPATH=tools/retail python3 -m retail.mission --theaters extracted/usnf97/USNF_2.LIB
+PYTHONPATH=tools/retail python3 -m retail.mnu extracted/usnf97/USNF_2.LIB/CHOOSEAC.DLG
+PYTHONPATH=tools/retail python3 -m retail.menu --source-root extracted --game usnf97 --out extracted/menu-ports/manual
 mkdir -p extracted/obj
 PYTHONPATH=tools/retail python3 -m retail.sh extracted/usnf97/USNF_2.LIB/F14.SH -o extracted/obj/F14.obj
 ```
+
+`retail.mnu` decodes the `.MNU`/`.DLG` UI tables and prints a dialog's widgets or,
+with `--json`, the whole table; `retail.menu` turns one game's menu media into the
+bundle the engine validates. See [MNU/DLG notes](../../Docs/formats/mnu.md) and
+[menu porting](../../Docs/menu-porting.md), which is the supported route —
+`tools/menu/port-menu.ts` runs the converter, validates it and installs it.
 
 SH is experimental: F-14 currently emits only eight faces from 105 parsed
 polygons. A successful single-file exit does not mean the model is complete.

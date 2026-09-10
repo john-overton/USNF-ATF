@@ -1,14 +1,21 @@
-# Development handoff — 2026-09-09
+# Development handoff — 2026-09-10
 
-Current Mac product package is **ce533a3**, built26.1s, at
-`build/mac/mac-arm64/USNF-ATF.app`. Later commits add acceptance checks/docs,
-not product behavior. Work after the previously pushedac3a142 checkpoint is
-committed locally. Apple M3, Bun1.4.2, Electron44.2.0. Linux testing deferred.
+Current Mac product package is **51298fb**, at
+`build/mac/mac-arm64/USNF-ATF.app`. Everything from `1057085` onward is committed
+locally and unpushed. Apple Silicon, Bun 1.4.2, Electron 44.2.0. Linux testing
+deferred.
+
+The 2026-09-09 sections below are kept as written; where a decision has since
+changed it is corrected in place and labelled, not silently rewritten.
 
 ## Preserve these decisions
 
-- Keep the liked assisted model as the default. Its frozen physics remains
-  unchanged; handling mass stays9,000kg while fuel burns. Empty fuel cuts thrust.
+- **Corrected 2026-09-09 (c6069fe):** the retail PT-envelope fit, not assisted, is
+  now the default for every imported aircraft. Assisted remains selectable and is
+  the fallback when no profile is installed; its frozen physics is unchanged and
+  handling mass stays 9,000 kg while fuel burns. Empty fuel cuts thrust. Two smoke
+  scripts still assert the older default and fail because of it; see the
+  2026-09-10 progress entry.
 - PT-envelope fit and recovered-native-envelope hybrid remain separate opt-in
   models, not a full native integrator. Switching restarts the preset and carries
   fuel; experimental mass follows fuel and payload.
@@ -16,6 +23,27 @@ committed locally. Apple M3, Bun1.4.2, Electron44.2.0. Linux testing deferred.
   minimized helper. Do not disguise a force issue by rotating the exterior model.
 - Retail conversions stay ignored in extracted/ and app data, never bundles.
   The manual in Docs/reference is the user's explicit exception.
+
+## Game shell, 2026-09-10
+
+- The app opens on a **main menu**, not the viewer. `engine/src/sim/mission/params.ts`
+  is the single description of a session and the URL is one serializer of it; every
+  legacy query key must keep parsing, because thirteen Electron scripts deep-link
+  with them. A query — any query — wins over the menu, which is why
+  `teleport-smoke`'s explorer case still lands in the explorer with no `mode` set.
+- `engine/src/ui/Shell.tsx` owns `{screen, mission}`. Menu components under
+  `engine/src/ui/menu/` stay prop-driven and effect-free, because
+  `renderToStaticMarkup` is the only React test tool here. Scaling is CSS alone,
+  never a measured window.
+- Menu geometry comes from the decoded `CHOOSEAC.DLG`, not from eye. The retail
+  artwork and sounds are an **optional** bundle ported from the user's own disc;
+  the app must keep working identically without one, and `menu-smoke` asserts both.
+- Menu audio is constructed only while a menu is on screen. A second `AudioContext`
+  sitting behind a flight took `retail-smoke`'s audio tap once already.
+- What is mocked stays mocked and stays labelled in the UI: opponents fly fixed
+  profiles with no AI, acquisition or damage; stores are weighed but do not affect
+  flight; a station offers only its own default until the hardpoint `flags` mask is
+  decoded.
 
 ## Completed MFD and navigation work
 
