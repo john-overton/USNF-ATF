@@ -90,11 +90,14 @@ test('the loadout screen keeps the retail Fly and Select Plane pair and says wha
     createElement(LoadoutScreen, {
       mission: DEFAULT_MISSION,
       problems: ['Payload mass cannot be negative.'],
+      onMission: () => undefined,
+      onUnrestricted: () => undefined,
       onCommand: () => undefined,
     }),
   );
   expect(commands(markup)).toEqual(['fly', 'select-plane', 'main-menu']);
-  expect(markup).toContain('not adjustable yet');
+  // With no ported hardpoints it says so rather than inventing stations.
+  expect(markup).toContain('data-loadout="unavailable"');
   expect(markup).toContain('role="alert"');
   expect(markup).toContain('Payload mass cannot be negative.');
 });

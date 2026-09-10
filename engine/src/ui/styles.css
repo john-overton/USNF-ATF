@@ -292,3 +292,89 @@ th {
     var(--menu-button-left-disabled), var(--menu-button-middle-disabled),
     var(--menu-button-right-disabled);
 }
+
+/* Loadout screen: stations, the fuel dial and the weight readout. */
+.menu-loadout {
+  position: absolute;
+  inset: 5cqh 1.4cqw 12cqh;
+  overflow: auto;
+  font-size: 1.3cqw;
+}
+.menu-stations {
+  list-style: none;
+  margin: 0 0 1cqw;
+  padding: 0;
+}
+.menu-stations li {
+  display: flex;
+  align-items: center;
+  gap: 1.2cqw;
+  padding: 0.3cqw 0;
+  border-bottom: 1px solid #ffffff14;
+}
+.menu-station-name {
+  min-width: 9cqw;
+  color: #8b97a6;
+}
+.menu-station-weight {
+  margin-left: auto;
+  color: #8b97a6;
+}
+.menu-rocker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5cqw;
+}
+.menu-rocker-step {
+  font: inherit;
+  font-size: 1.1cqw;
+  color: inherit;
+  background: #131922;
+  border: 1px solid #33455a;
+  padding: 0 0.5cqw;
+  cursor: pointer;
+}
+.menu-rocker-step:disabled {
+  color: #4c5764;
+  cursor: default;
+}
+.menu-rocker-value {
+  min-width: 11cqw;
+  text-align: center;
+}
+/* Store names are long and varied; a fixed column keeps the count rockers aligned. */
+.menu-rocker[data-menu-rocker$='-store'] .menu-rocker-value {
+  min-width: 20cqw;
+  text-align: left;
+}
+.menu-dial {
+  display: flex;
+  align-items: center;
+  gap: 1cqw;
+  margin: 0.8cqw 0;
+}
+.menu-dial-input {
+  flex: 1;
+  max-width: 24cqw;
+}
+.menu-weights {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2cqw 1.2cqw;
+  margin: 0.6cqw 0;
+}
+.menu-weights dt {
+  color: #8b97a6;
+}
+.menu-weights dd {
+  margin: 0;
+}
+.menu-weights dd[data-over-weight='true'] {
+  color: #e2705a;
+}
+.menu-penalties,
+.menu-toggle {
+  display: block;
+  margin: 0.6cqw 0;
+  color: #8b97a6;
+}

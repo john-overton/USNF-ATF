@@ -12,6 +12,7 @@ export interface DesktopOptions {
   audio?: string;
   flightProfile?: string;
   cockpit?: string;
+  loadout?: string;
   /** A ported menu bundle directory, copied in as data/menu. */
   menu?: string;
   gun?: string;
@@ -52,7 +53,7 @@ export async function openDesktop(options: DesktopOptions) {
       path.join(profile, `data/aircraft/${id}-flight.json`),
     );
   }
-  for (const [directory, filename, source] of [['cockpits', `${id}.json`, options.cockpit], ['aircraft', `${id}-gun.json`, options.gun]] as const) {
+  for (const [directory, filename, source] of [['cockpits', `${id}.json`, options.cockpit], ['aircraft', `${id}-gun.json`, options.gun], ['aircraft', `${id}-loadout.json`, options.loadout]] as const) {
     if (!source) continue;
     await mkdir(path.join(profile, `data/${directory}`), { recursive: true });
     await cp(path.resolve(source), path.join(profile, `data/${directory}/${filename}`));

@@ -14,8 +14,52 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite, a shared sky highlight rolloff and terrain shading contrast | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
 | 4: flight model | Retail PT-envelope default with preserved assisted comparison/fallback and opt-in recovered-native-envelope backend; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, Default F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers, camera-projected gun pipper using nearer terrain or a 1,000 m base range, thick lower closing-range arc (hidden at/above 1 km) and target-input plumbing; cockpit-only HUD and armed-only reticle; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
-| Game shell | Steps 1–5 of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload, and the menu, aircraft select and debrief screens are drawn at the geometry `retail.mnu` recovers from `CHOOSEAC.DLG`, in original chrome or in the original's own artwork and sounds when a locally ported menu bundle is installed | The loadout screen and the quick fight are steps 6–7; the loadout screen is still only its Fly / Select Plane pair. The bundle carries no retail fonts and no hover or pressed button art, both stated in [menu-porting.md](menu-porting.md). The `.MNU`/`.DLG` widget tables are decoded (`retail.mnu`), so those layouts can be read from the media rather than redrawn; dial and slider positions, tab order and widget state are still unknown. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
+| Game shell | Steps 1–6 of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload, and the menu, aircraft select and debrief screens are drawn at the geometry `retail.mnu` recovers from `CHOOSEAC.DLG`, in original chrome or in the original's own artwork and sounds when a locally ported menu bundle is installed, and a working loadout screen over an aircraft's recovered hardpoints | The quick fight is step 7. Stores are chosen and weighed but do not affect flight, and a station still offers only its own default because the hardpoint compatibility mask is undecoded. The bundle carries no retail fonts and no hover or pressed button art, both stated in [menu-porting.md](menu-porting.md). The `.MNU`/`.DLG` widget tables are decoded (`retail.mnu`), so those layouts can be read from the media rather than redrawn; dial and slider positions, tab order and widget state are still unknown. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
 | 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request. Phase 6/7 groundwork brought forward 2026-09-09: retail AI script parser and VM interpreter, `.SEE` detection model, damage/hit-point model with the recovered performance penalties, swept gun-round hit geometry, and a reusable MFD bezel extracted for a future target page. 2026-09-10: game shell planned end to end in [game-shell-plan.md](game-shell-plan.md), and the aircraft port now exports `.PT` hardpoints and the `.JT`/`.GAS`/`.SEE`/`.ECM` stores they name into a validated engine contract | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned. The new AI and combat modules are pure, unit-tested and verified against all 17 retail AI programs, but NONE of it is wired into the flight loop: no multi-aircraft world, no acquisition, no damage applied from rounds. Nine AI action semantics remain open; parser success is not flown-tactics parity. The loadout data is exported, validated and installable but drives nothing: no loadout screen, stores do not feed mass, and the hardpoint `flags` compatibility mask and `maxWeight` unit are still undecoded |
+
+## 2026-09-10: the loadout screen, on the contract that was waiting for it
+
+Step 6 of [game-shell-plan.md](game-shell-plan.md). The data half of this screen
+landed this morning; this is the screen.
+
+`engine/src/ui/menu/loadout-view.ts` turns an aircraft's recovered hardpoints and
+the player's choices into rows and readouts, and does no arithmetic of its own —
+all of that stays in `data/retail-loadout.ts`. `MenuControls.tsx` adds the rocker
+and the dial, one component per recovered `_Draw*` class, and `LoadoutScreen.tsx`
+composes them: a rack per selectable station with a store rocker and a count
+rocker, a fuel dial over internal fuel, and a weight readout of fuel, stores and
+gross against the maximum.
+
+Measured end to end on a packaged build with the F-14's ported hardpoints
+installed: the screen arrives on the aircraft's own stock loadout at **65,876 lb**
+— the same figure `python3 -m retail.loadout` reported this morning, now reached
+through the UI — emptying the Phoenix rack drops it to 61,976 lb, exactly four
+975 lb missiles, and the fuel dial at 40% reads 6,296 lb. Clicking Fly starts a
+flight whose diagnostics report `fuelFraction` 0.4. That last step is the whole
+point of `MissionParams`: a chosen loadout cannot be written as a URL, so it has
+to survive an in-app transition, and now it does.
+
+What the screen is honest about, on its face and not only in these notes:
+
+- **Stores do not affect flight.** The `.PT` `loadedDrag` family is displayed —
+  drag 60%, G-pull drag 12%, elevator 35%, aileron 35%, rudder 35% for the F-14 —
+  with the words "the flight model does not apply them yet" beside it.
+- **A station offers its own default and an empty rack, and nothing else**, because
+  the hardpoint `flags` compatibility mask is still undecoded. The developer
+  toggle that lifts that is labelled after the original's own menu item, "Load
+  anything anywhere", and defaults off.
+- **An aircraft with no ported hardpoints gets a screen that says so** and points
+  at the porting guide, rather than a screen with invented stations.
+
+Verification: `bun run check` clean at 364 tests, six new covering the view model
+(selectable stations only, the fuel and gross arithmetic including tanks, the
+restricted and unrestricted store lists, the rocker steps, the overweight case)
+and the rendered screen. `tools/flight/loadout-smoke.ts` is new and passes against
+a packaged build; `desktop.ts` gained a `--loadout` copy option alongside the
+existing per-aircraft ones. A screenshot is in `extracted/step6/`.
+
+Next: step 7, `sim/world/entities.ts` and the mocked quick fight — three aircraft
+in the sky on fixed profiles, deterministic from the mission seed, with no AI.
 
 ## 2026-09-10: the original menu artwork and sounds, as an optional bundle
 

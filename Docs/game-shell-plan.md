@@ -543,6 +543,10 @@ Each step ends green on `bun run check` and is committed separately.
 6. **Loadout screen** on the `retail-loadout.ts` contract landed on
    2026-09-10; fuel and stores feed `MissionParams`; weight validation and
    display-only performance penalty. Store icons come from the §4.5 bundle.
+   **Landed 2026-09-10** without the `$*.PIC` store icons: the bundle in step 5
+   carries the button chrome and the backgrounds, and icons wait until a station
+   diagram needs them. The screen arrives on the aircraft's stock loadout, which
+   is what the original does.
 7. **`sim/world/entities.ts`** and the mocked quick fight: three aircraft,
    deterministic spawn, fixed profiles, rendered with the floating origin
    preserved. Gate: `quickfight-smoke.ts` and the determinism test.

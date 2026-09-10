@@ -197,3 +197,19 @@ It then reaches the terrain explorer, presses Esc back to the menu, and flies an
 from Free Flight, checking after each transition that a marker set on `window` survives
 — proof the shell changed screens in place rather than reloading the page. Every other
 script keeps deep-linking through the query string, unchanged.
+
+## Loadout screen
+
+```sh
+bun tools/flight/loadout-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --out extracted/loadout-smoke
+```
+
+This is the check that `MissionParams` was worth building: a chosen loadout cannot
+be written as a URL, so it has to survive an in-app transition into the flight.
+The test launches with no query, walks the menu to the loadout screen, confirms
+the aircraft's ported hardpoints reached it, empties one rack through the real
+rocker and checks the gross weight follows, drives the fuel dial to 40% the way a
+browser would, then clicks Fly and asserts `window.__flightDiagnostics()` reports
+the chosen aircraft and fuel. It needs a ported `f14-loadout.json`
+(`--loadout`, default `extracted/flight/f14-loadout.json`); see
+[Aircraft porting](../../Docs/aircraft-porting.md).

@@ -7,6 +7,7 @@ import { AircraftSelect } from './menu/AircraftSelect';
 import { LoadoutScreen } from './menu/LoadoutScreen';
 import { Debrief } from './menu/Debrief';
 import { loadMenuAssets, type MenuAssets } from './menu/assets';
+import { defaultLoadout, parseRetailLoadout, type RetailLoadout } from '../data/retail-loadout';
 import { UiAudio } from './menu/UiAudio';
 import {
   applyMenuAction,
@@ -61,6 +62,51 @@ export function Shell({ search }: { search: string }) {
       active = false;
     };
   }, []);
+  // The aircraft's ported hardpoints, when one is installed. The loadout screen
+  // says so plainly when there are none rather than pretending to have stations.
+  const [loadout, setLoadout] = useState<{ aircraft: string; data?: RetailLoadout }>();
+  useEffect(() => {
+    let active = true;
+    const aircraft = state.mission.aircraft;
+    void (async () => {
+      const platform = getPlatform();
+      const file = `aircraft/${aircraft}-loadout.json`;
+      try {
+        if (!(await platform.fs.exists('appData', file))) {
+          if (active) setLoadout({ aircraft });
+          return;
+        }
+        const text = await platform.fs.readText('appData', file);
+        if (text.length > 4_000_000) throw new Error('Loadout manifest exceeds its size limit');
+        const data = parseRetailLoadout(JSON.parse(text));
+        if (!active) return;
+        setLoadout({ aircraft, data });
+        // Arrive on the aircraft's own stock loadout, the way the original does,
+        // unless the player has already chosen something for this mission.
+        setState((previous) =>
+          Object.keys(previous.mission.loadout.stations).length === 0
+            ? {
+                ...previous,
+                mission: {
+                  ...previous.mission,
+                  loadout: {
+                    ...previous.mission.loadout,
+                    stations: defaultLoadout(data).stations,
+                  },
+                },
+              }
+            : previous,
+        );
+      } catch {
+        // A bad manifest leaves the screen without stations, never without a screen.
+        if (active) setLoadout({ aircraft });
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [state.mission.aircraft]);
+  const [unrestricted, setUnrestricted] = useState(false);
   const audio = useRef<UiAudio>(null);
   useEffect(() => {
     const service = new UiAudio(assets?.sounds?.sounds ?? {});
@@ -103,8 +149,14 @@ export function Shell({ search }: { search: string }) {
     return (
       <LoadoutScreen
         mission={state.mission}
+        {...(loadout?.aircraft === state.mission.aircraft && loadout.data
+          ? { loadout: loadout.data }
+          : {})}
+        unrestricted={unrestricted}
         problems={validateMission(state.mission)}
         {...(assets ? { assets } : {})}
+        onMission={(mission) => setState((previous) => ({ ...previous, mission }))}
+        onUnrestricted={setUnrestricted}
         onCommand={act}
       />
     );
