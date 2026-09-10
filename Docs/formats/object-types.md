@@ -49,6 +49,41 @@ aircraft (`A4E`, `A7`, `A7V`, `AC130`, `AV8`, `F104`, `F14`, `F18`, `F22`,
 
 ## Other object-type references seen in `.PT` hardpoints
 
-`*.SEE` (sensors: `VIS340.SEE`, `F14R.SEE`), `*.ECM`, `*.GAS` (drop tanks:
-`F250.GAS`), `*.BI` (cockpit definition named by `ctName`, e.g. `f.BI`).
-Not yet opened; they are small and probably the same text language.
+`*.SEE` (sensors: `VIS340.SEE`, `F14R.SEE`), `*.ECM` (countermeasures),
+`*.GAS` (drop tanks: `F250.GAS`). Correction (2026-09-09): these are no
+longer unopened. All three are the same BRF text language, all three are
+the shared `STORE_ITEM` shape, and all three are now decoded —
+layouts, units, value tables and the hardpoint binding rules are in
+[sensors.md](sensors.md). `.OT` files have no hardpoints at all; `.NT`
+files reference `.JT` weapons and, in exactly two USNF'97 cases
+(`GCI.NT` → `GCIR.SEE`, `BUTLER.NT` → `REDCR.SEE`), a `.SEE`.
+
+## Correction (2026-09-09): `ctName` names the AI program, not a cockpit
+
+This file previously described `*.BI` as a "cockpit definition named by
+`ctName`". **That was wrong.** `ctName` (the second `NPC_TYPE` statement,
+present in every `.PT` and `.NT`) selects the object's **AI program**.
+
+- `.AI` is the plaintext source of a scripted behaviour language, and
+  `.BI` is its compiled form: a small Win32 PE that imports the VM's
+  action and sensor entry points. The two are the same program in two
+  representations, not a cockpit and a code module.
+- Observed distribution over all 153 `.PT` files, both discs:
+  `f.BI` 105 (fighters and strike aircraft), `h.BI` 14 (helicopters),
+  `large.BI` 10, `b.BI` 9 (bombers), `liner.BI` 9, `moth.BI` 3,
+  `ac130.BI` 2, `f117.BI` 1. Certain; every `.PT` names exactly one.
+- The behavioural reading is corroborated from the executables: the VM's
+  error strings name the language, and its program-execution entry point
+  is driven by six event call sites (nothing, evade, attack, radar
+  launch, IR launch, hit) that are all skipped for human-flown aircraft.
+
+The cockpit is a genuinely separate mechanism, documented in the
+`.HUD` / `.PTS` section above: `.PT` names its HUD module in `hudName`
+(USNF'97 only) and the HUD plug-in's symbols select the cockpit `.PIC`
+overlays. Nothing in `ctName` touches the cockpit.
+
+The AI VM itself — the language, the opcode shapes recovered so far, the
+skill model, and the engine-side hardcoded skill effects — is documented
+separately in [ai.md](ai.md); [pt.md](pt.md)'s `NPC_TYPE` note carries the
+same correction. See also [damage.md](damage.md) for the
+damage→performance arithmetic recovered from the same binaries.

@@ -23,6 +23,11 @@ over the whole disc (ESA-embedded LIBs, root LIBs, and loose ESA files).
 | OT | decoded | [object-types.md](object-types.md) | 110 / 136,820 | 130 / 249,396 |
 | JT | decoded | [jt.md](jt.md) weapons | 90 / 244,428 | 120 / 551,214 |
 | NT | decoded | [object-types.md](object-types.md) | 64 / 116,558 | 66 / 180,024 |
+| SEE | decoded | [sensors.md](sensors.md) sensors; BRF `STORE_ITEM`, 25 statements | 50 / 23,768 | 43 / 31,530 |
+| ECM | decoded | [sensors.md](sensors.md) countermeasures; 20 statements | 29 / 10,146 | 27 / 15,654 |
+| GAS | decoded | [sensors.md](sensors.md) drop tanks; 5 statements | 4 / 819 | 4 / 967 |
+| AI | partial, in progress | [ai.md](ai.md) plaintext source of the scripted AI VM | 8 / 62,841 | 9 / 81,664 |
+| BI | partial, in progress | [ai.md](ai.md) compiled `.AI`; headerless Win32 PE against the EXE's own export table | 8 / 53,248 | 9 / 70,144 |
 | M | partial | [mission.md](mission.md) plain text | 209 / 5,001,327 | 247 / 7,546,660 |
 | MT | decoded | [mission.md](mission.md) plain text | 178 / 282,619 | 172 / 229,947 |
 | T2 | partial | [t2.md](t2.md) header and cell grid; elevation units open | 11 / 1,463,944 | 4 / 580,526 |
@@ -33,11 +38,21 @@ over the whole disc (ESA-embedded LIBs, root LIBs, and loose ESA files).
 | SEQ | unknown | | 104 / 10,347 | 32 / 6,434 |
 | VDO / FBC / CB8 | unknown | video | 355+355+23 / 542,432,692 | 0+0+35 / 486,496,234 |
 
-Other extensions seen, all unknown: `MM`, `PTS` (PE plug-in, not plane data), `MC`, `AI`, `BI`, `MUS`,
-`SEE`, `CAM`, `HGR`, `ECM`, `BIN`, `GAS`, `INF` (encyclopedia text), `SMS`,
+Other extensions seen, all unknown: `MM`, `PTS` (PE plug-in, not plane data), `MUS`,
+`HGR`, `BIN`, `INF` (encyclopedia text), `SMS`,
 plus the Windows `EXE`/`DLL`/`TXT`/`URL` loose files in the ESA.
+`MC` (19 / 81,920 and 4 / 18,432) and `CAM` (3 / 16,384 and 3 / 26,112) are
+also still unknown, but under active documentation alongside `AI`/`BI`; see
+[ai.md](ai.md). `SEE`, `ECM` and `GAS` moved into the table above once
+[sensors.md](sensors.md) decoded them.
 
 Totals: USNF'97 4,921 files, 777.5 MB; ATF Gold 6,252 files, 843.9 MB.
+
+The `SEE`, `ECM`, `GAS`, `AI`, `BI`, `MC` and `CAM` figures were measured
+on 2026-09-09 over the locally extracted tree rather than by
+`python -m retail stats`; they are uncompressed bytes on the same basis as
+the rest of the table, but regenerate them with the stats command before
+quoting them alongside the older rows.
 
 ## PALETTE.PAL first look
 
@@ -50,3 +65,7 @@ reserved low slots. PIC decoding is implemented; runtime palette gaps remain (se
 - [Flight audio](audio.md): PT-selected raw PCM, inferred rates and local playback.
 
 - [Native ground and gear pitch](native-gear-pitch.md): speed-dependent display offset, terrain slope, F-14 zero field and 1,021 isolated x86 checks.
+
+- [Sensors, countermeasures and drop tanks](sensors.md): `.SEE`/`.ECM`/`.GAS`, the shared `STORE_ITEM` shape, confirmed angle and range units, and how sensors bind to `.PT` hardpoints.
+
+- [Damage model](damage.md): `hitPoints` ranges, `damage[0..4]` as damage inflicted, why there is no per-object armour and no per-aircraft subsystem table, and the damage→performance arithmetic recovered from the executables.

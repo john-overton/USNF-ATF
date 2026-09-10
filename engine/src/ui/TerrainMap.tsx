@@ -8,6 +8,7 @@ import {
   type NavigationMapData,
   type MapWaypoint,
 } from '../terrain/navigation-map';
+import { Mfd, type MfdButtonSlot } from './Mfd';
 import './terrain-map.css';
 
 export interface NavigationMapState {
@@ -45,9 +46,7 @@ export function useNavigationMap(
   return loaded.key === key ? loaded : { status: 'loading' };
 }
 
-function UnusedMfdButton({ label }: { label: string }) {
-  return <button type="button" className="mfd-button mfd-unused" aria-label={label} disabled />;
-}
+type MapOrientation = 'north-up' | 'heading-up';
 
 export function TerrainMap({
   map,
@@ -66,7 +65,7 @@ export function TerrainMap({
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [zoom, setZoom] = useState(1);
-  const [orientation, setOrientation] = useState<'north-up' | 'heading-up'>('north-up');
+  const [orientation, setOrientation] = useState<MapOrientation>('north-up');
   const rotation = orientation === 'heading-up' ? -aircraft.headingDegrees : 0;
   const [teleporting, setTeleporting] = useState<number | null>(null);
   const [teleportError, setTeleportError] = useState('');
@@ -136,59 +135,49 @@ export function TerrainMap({
       : northViewport;
   const outside =
     data && point && (point.x < 0 || point.y < 0 || point.x > data.width || point.y > data.height);
+  // The five-row button grid centres at 10/30/50/70/90%, and the on-screen
+  // `GO n` labels sit at 30/50/70%, so the three waypoints deliberately occupy
+  // the middle three buttons rather than starting at the top.
+  const teleportButtons: MfdButtonSlot[] = Array.from({ length: 5 }, (_, index) => {
+    const waypoint = onTeleport ? data?.waypoints[index - 1] : undefined;
+    return waypoint
+      ? {
+          label: `Teleport to ${waypoint.id} ${waypoint.name}`,
+          disabled: teleporting !== null,
+          data: { 'data-teleport-id': String(waypoint.id) },
+          onClick: () => void teleport(waypoint),
+        }
+      : null;
+  });
+  const orientationButton = (mode: MapOrientation): MfdButtonSlot => ({
+    label: mode === 'north-up' ? 'North-up map' : 'Heading-up map',
+    pressed: orientation === mode,
+    onClick: () => {
+      setOrientation(mode);
+      onFlightFocus?.();
+    },
+  });
+  const zoomButton = (direction: 'in' | 'out'): MfdButtonSlot => ({
+    label: direction === 'out' ? 'Zoom map out' : 'Zoom map in',
+    disabled: direction === 'out' ? zoom <= 1 : zoom >= 16,
+    onClick: () => {
+      setZoom(direction === 'out' ? Math.max(1, zoom / 2) : Math.min(16, zoom * 2));
+      onFlightFocus?.();
+    },
+  });
   return (
-    <aside
-      className="terrain-map"
-      aria-label="Regional navigation map"
-      data-terrain-map={map.status}
-      data-map-orientation={orientation}
-      data-map-rotation={rotation}
+    <Mfd
+      label="Regional navigation map"
+      attributes={{
+        'data-terrain-map': map.status,
+        'data-map-orientation': orientation,
+        'data-map-rotation': String(rotation),
+      }}
+      top={[orientationButton('north-up'), null, null, null, orientationButton('heading-up')]}
+      left={{ buttons: teleportButtons, label: 'Waypoint teleport' }}
+      bottom={[zoomButton('out'), null, null, null, zoomButton('in')]}
     >
-      <div className="mfd-top-buttons">
-        {(['north-up', null, null, null, 'heading-up'] as const).map((mode, index) =>
-          mode ? (
-            <button
-              key={mode}
-              type="button"
-              className="mfd-button"
-              aria-label={mode === 'north-up' ? 'North-up map' : 'Heading-up map'}
-              aria-pressed={orientation === mode}
-              onClick={() => {
-                setOrientation(mode);
-                onFlightFocus?.();
-              }}
-            />
-          ) : (
-            <UnusedMfdButton key={index} label={`Unused top MFD button ${index + 1}`} />
-          ),
-        )}
-      </div>
-      <div className="mfd-side-buttons mfd-left-buttons" aria-label="Waypoint teleport">
-        {Array.from({ length: 5 }, (_, index) => {
-          const waypoint = onTeleport ? data?.waypoints[index - 1] : undefined;
-          return waypoint ? (
-            <button
-              key={index}
-              type="button"
-              className="mfd-button"
-              data-teleport-id={waypoint.id}
-              disabled={teleporting !== null}
-              aria-label={`Teleport to ${waypoint.id} ${waypoint.name}`}
-              onClick={() => void teleport(waypoint)}
-            />
-          ) : (
-            <UnusedMfdButton key={index} label={`Unused left MFD button ${index + 1}`} />
-          );
-        })}
-      </div>
-      <div className="mfd-side-buttons mfd-right-buttons">
-        {Array.from({ length: 5 }, (_, index) => (
-          <UnusedMfdButton key={index} label={`Unused right MFD button ${index + 1}`} />
-        ))}
-      </div>
-      <div className="mfd-dial mfd-left-dial" aria-hidden="true" />
-      <div className="mfd-dial mfd-right-dial" aria-hidden="true" />
-      <div className="mfd-screen">
+      <>
         <div className="terrain-map-title">
           <span className={orientation === 'north-up' ? 'mfd-active' : ''}>N-UP</span>
           <span>MAP</span>
@@ -383,32 +372,7 @@ export function TerrainMap({
             </div>
           </>
         )}
-      </div>
-      <div className="mfd-bottom-buttons">
-        <button
-          type="button"
-          className="mfd-button"
-          aria-label="Zoom map out"
-          disabled={zoom <= 1}
-          onClick={() => {
-            setZoom(Math.max(1, zoom / 2));
-            onFlightFocus?.();
-          }}
-        />
-        {Array.from({ length: 3 }, (_, index) => (
-          <UnusedMfdButton key={index} label={`Unused bottom MFD button ${index + 2}`} />
-        ))}
-        <button
-          type="button"
-          className="mfd-button"
-          aria-label="Zoom map in"
-          disabled={zoom >= 16}
-          onClick={() => {
-            setZoom(Math.min(16, zoom * 2));
-            onFlightFocus?.();
-          }}
-        />
-      </div>
-    </aside>
+      </>
+    </Mfd>
   );
 }

@@ -14,7 +14,76 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite, a shared sky highlight rolloff and terrain shading contrast | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
 | 4: flight model | Retail PT-envelope default with preserved assisted comparison/fallback and opt-in recovered-native-envelope backend; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, Default F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers, camera-projected gun pipper using nearer terrain or a 1,000 m base range, thick lower closing-range arc (hidden at/above 1 km) and target-input plumbing; cockpit-only HUD and armed-only reticle; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
-| 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned |
+| 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request. Phase 6/7 groundwork brought forward 2026-09-09: retail AI script parser and VM interpreter, `.SEE` detection model, damage/hit-point model with the recovered performance penalties, swept gun-round hit geometry, and a reusable MFD bezel extracted for a future target page | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned. The new AI and combat modules are pure, unit-tested and verified against all 17 retail AI programs, but NONE of it is wired into the flight loop: no multi-aircraft world, no acquisition, no damage applied from rounds. Nine AI action semantics remain open; parser success is not flown-tactics parity |
+
+## 2026-09-09: recover the retail AI virtual machine, sensors and damage data
+
+Non-player behaviour in USNF'97 and ATF Gold is a scripted virtual machine the
+executables call "Chuck-Talk", and its programs ship as plaintext `.AI` source.
+That makes the original AI reusable rather than something to approximate. New
+format documentation: [formats/ai.md](formats/ai.md) (language, bytecode opcode
+table, skill model, execution model), [formats/sensors.md](formats/sensors.md)
+(`.SEE`/`.ECM`/`.GAS`) and [formats/damage.md](formats/damage.md). Corrections
+landed in `formats/object-types.md`, `formats/pt.md`, `formats/jt.md` and the
+formats index.
+
+Implemented, all pure and deterministic, none of it yet wired into the flight
+loop:
+
+- `engine/src/sim/ai/program.ts` parses the language; `vm.ts` interprets it with
+  reason-priority preemption, per-action suspension, the recovered 5,000-statement
+  budget and the four persistent scratch slots.
+- `engine/src/sim/combat/sensors.ts` implements the `.SEE` two-zone detection
+  model, the four signature channels, the manual's weather range table and the
+  configuration signature multipliers.
+- `engine/src/sim/combat/damage.ts` implements the single hit-point pool, the
+  weapon hardness table, the recovered damage-to-performance scaling, the
+  low-skill G penalty and structural overload.
+- `engine/src/sim/combat/hits.ts` does swept segment-versus-capsule hit
+  detection for both bodies moving.
+- `engine/src/ui/Mfd.tsx` extracts the shared MFD bezel from `TerrainMap` so a
+  second page can reuse it; `mfd.test.ts` is the first test to render either.
+
+Verification. `bun run check` clean: 313 tests, typecheck, lint and format.
+`bun tools/ai/parse-scripts.ts` parses **all 17 extracted retail programs, 0
+failures** (`F.AI` 424 instructions, 70 labels, 37 sensors) and decodes all 14
+`chance` literals to four in-range per-skill percentages. The tool's independent
+reachability check finds exactly the two dead labels the language analysis
+predicted, `fastlittlejink` and `offset_done`. Retail media is optional: the tool
+skips cleanly without it, and every committed test uses synthetic fixtures.
+
+Findings worth recording as corrections. `.BI` is **not** compiled x86 as this
+repository previously stated: it is a PE container whose `CODE` section holds a
+custom stack bytecode, with x86 only in the import thunks. There is no
+`main.dll` despite every plug-in importing from that name — the host executable
+is `main.dll`, resolved through its own `.SMS` symbol table. `ctName` selects the
+AI program, not a cockpit. Reviewing the sensor and damage data against the media
+also corrected eleven claims in the working research notes, including that `zone1`
+is *not* always inside `zone0` (three IRST files inverted), that `.SEE`
+`allAspect` rather than `dopplerMinRange` is 50 on those files, and that several
+figures quoted as F-14 values (`structureLimit`, the crash limits) are in fact
+constant across all 153 `.PT` files — which strengthens the conclusion that the
+per-subsystem damage model is engine code against a fixed 45-slot layout, not
+per-aircraft data.
+
+Discrepancies deliberately not smoothed over. The manual says damaged AI lose
+thrust; no thrust reduction exists in the recovered code, so none is modelled.
+The `.JT` `chances[0..3]` index is left UNRESOLVED rather than called a skill
+index, because `chances[3]` is 0 in 197 of 210 weapons and ten radar missiles
+have `chances[0]` of 0. Three values in the engine code are original
+approximations and are labelled as such in source: the nose-on signature floor,
+the hull radius as a fraction of length, and the damage coefficients.
+
+Remaining gaps. Nothing is connected to the simulation yet: there is no
+multi-aircraft world, no target acquisition, no damage application from gun
+rounds, and `FlightLayer.setGunTarget` is still uncalled. Nine action-semantic
+questions are open and each names the routine that would settle it; in
+particular our seeded generator reproduces a sequence exactly but is not the
+original's sequence. Parser success is not flown-tactics parity.
+
+Next reproducible step: bind the VM's sensors and actions to real aircraft state
+behind a deterministic harness scenario, so a scripted engagement can be asserted
+headlessly before any renderer or UI work.
 
 ## 2026-09-09: reverse range-bar fill and hide it outside 1 km
 

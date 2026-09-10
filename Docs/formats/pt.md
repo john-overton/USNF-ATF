@@ -96,9 +96,18 @@ The statement counts are identical across all 48 USNF and all 105 ATF files
 
 ## NPC_TYPE
 
-`flags` (dword), `ctName` (ptr, the cockpit `.BI` file), `searchFrequencyT`,
+`flags` (dword), `ctName` (ptr), `searchFrequencyT`,
 `unreadyAttackT`, `attackT` (bytes), `retargetT`, `zoneDist` (words),
 `numHards` (byte), `hards` (ptr).
+
+Correction (2026-09-09): `ctName` names the object's **AI program** (`f.BI`,
+`h.BI`, `large.BI`, …), not a cockpit definition. `.BI` is the compiled form
+of the plaintext `.AI` behaviour script. See
+[object-types.md](object-types.md) for the corrected note and the
+per-program file counts. The engagement timers `searchFrequencyT`,
+`unreadyAttackT`, `attackT` and `retargetT` belong to the detection and
+attack scheduling path, not to the AI script's decision cadence, which is
+event-driven.
 
 ## PLANE_TYPE
 
@@ -190,6 +199,15 @@ higher `hitPoints`. Shared fields (`weight`, `maxTakeoffWeight`, `thrust`,
 
 `.PTS` files are not plane types: they are 4 KB Win32 PE modules (see
 [object-types.md](object-types.md)).
+
+The stores a `:hards` list references are decoded elsewhere:
+[sensors.md](sensors.md) for `.SEE` / `.ECM` / `.GAS` and
+[jt.md](jt.md) for `.JT`. [damage.md](damage.md) covers `hitPoints`,
+`damage[]`, `systemDamage[0..44]` and the structural and crash limits —
+note in particular that `structureWarnLimit` / `structureLimit` and every
+`crash*` field are **the same value in all 153 `.PT` files**, so the F-14
+figures in the table above are fleet-wide constants, not per-aircraft
+tuning.
 
 
 ## 2026-09-09: bounded A-4E and X-31 flight exports
