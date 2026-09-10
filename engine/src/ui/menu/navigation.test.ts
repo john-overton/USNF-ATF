@@ -50,7 +50,10 @@ test('disabled main-menu items go nowhere', () => {
 
 test('the enabled main-menu items reach their screens', () => {
   expect(go('main-menu', 'free-flight')).toBe('aircraft-select');
-  expect(go('main-menu', 'quick-mission')).toBe('aircraft-select');
+  // A quick fight is set up first; free flight goes straight to the aircraft.
+  expect(go('main-menu', 'quick-mission')).toBe('quick-fight');
+  expect(go('quick-fight', 'continue')).toBe('aircraft-select');
+  expect(go('quick-fight', 'back')).toBe('main-menu');
   expect(go('main-menu', 'terrain-explorer')).toBe('explorer');
 });
 
@@ -104,6 +107,7 @@ test('a whole run from the menu to a flight and back leaves a flyable mission', 
   expect(state.screen).toBe('main-menu');
   // A quick fight keeps its opponents when it comes back round.
   state = applyMenuAction(state, { command: 'quick-mission' });
+  expect(state.screen).toBe('quick-fight');
   expect(state.mission.mode).toBe('quick-fight');
   expect(state.mission.opponents).toEqual([{ aircraft: 'f14', skill: 2 }]);
 });
@@ -133,4 +137,14 @@ test('the debrief keeps the summary taken as the flight was left', () => {
   expect(debrief.summary).toEqual(summary);
   // It survives the walk back to the menu, and a menu click does not invent one.
   expect(applyMenuAction(debrief, { command: 'main-menu' }).summary).toEqual(summary);
+});
+
+test('backing out of aircraft select returns to the quick fight setup that opened it', () => {
+  const quick: MissionParams = {
+    ...DEFAULT_MISSION,
+    mode: 'quick-fight',
+    opponents: [{ aircraft: 'f14', skill: 2 }],
+  };
+  expect(nextScreen('aircraft-select', { command: 'back' }, quick)).toBe('quick-fight');
+  expect(nextScreen('aircraft-select', { command: 'back' }, DEFAULT_MISSION)).toBe('main-menu');
 });

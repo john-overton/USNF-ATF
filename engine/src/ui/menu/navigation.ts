@@ -12,7 +12,14 @@ import { AIRCRAFT, type AircraftId } from '../../flight/aircraft-catalog';
 import { validateMission, type MissionParams } from '../../sim/mission/params';
 
 export type Screen =
-  'main-menu' | 'explorer' | 'aircraft-select' | 'loadout' | 'flight' | 'debrief' | 'probe';
+  | 'main-menu'
+  | 'explorer'
+  | 'quick-fight'
+  | 'aircraft-select'
+  | 'loadout'
+  | 'flight'
+  | 'debrief'
+  | 'probe';
 
 /**
  * Command ids double as the `data-menu-command` test surface, the way the MFD bezel's
@@ -30,6 +37,7 @@ export type MenuCommand =
   | 'free-flight'
   | 'terrain-explorer'
   | 'choose-aircraft'
+  | 'continue'
   | 'fly'
   | 'select-plane'
   | 'end-flight'
@@ -182,14 +190,19 @@ export function nextMission(action: MenuAction, mission: MissionParams): Mission
 export function nextScreen(screen: Screen, action: MenuAction, mission: MissionParams): Screen {
   switch (screen) {
     case 'main-menu':
-      if (action.command === 'free-flight' || action.command === 'quick-mission')
-        return 'aircraft-select';
+      if (action.command === 'quick-mission') return 'quick-fight';
+      if (action.command === 'free-flight') return 'aircraft-select';
       if (action.command === 'terrain-explorer') return 'explorer';
       // Everything else on the main menu is disabled and goes nowhere.
       return 'main-menu';
+    case 'quick-fight':
+      if (action.command === 'continue') return 'aircraft-select';
+      if (action.command === 'back' || action.command === 'main-menu') return 'main-menu';
+      return 'quick-fight';
     case 'aircraft-select':
       if (action.command === 'choose-aircraft') return 'loadout';
-      if (action.command === 'back' || action.command === 'main-menu') return 'main-menu';
+      if (action.command === 'back' || action.command === 'main-menu')
+        return mission.mode === 'quick-fight' ? 'quick-fight' : 'main-menu';
       return 'aircraft-select';
     case 'loadout':
       // Per LOADORD.DLG: Fly, or go back and Select Plane. A mission that does not

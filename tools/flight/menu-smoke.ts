@@ -53,6 +53,36 @@ try {
   );
   assert.equal(items.length, 10, 'The retail item list stays whole, with the rest disabled');
 
+  // The quick fight is set up before an aircraft is chosen, and backing out
+  // returns to the setup rather than jumping to the main menu.
+  await session.evaluate(`document.querySelector('[data-menu-command="quick-mission"]').click()`);
+  const setup = await session.evaluate(
+    `document.querySelector('[data-menu-screen]')?.getAttribute('data-menu-screen')`,
+  );
+  assert.equal(setup, 'quick-fight');
+  await session.evaluate(`document.querySelector('[data-menu-command="continue"]').click()`);
+  assert.equal(
+    await session.evaluate(
+      `document.querySelector('[data-menu-screen]')?.getAttribute('data-menu-screen')`,
+    ),
+    'aircraft-select',
+  );
+  await session.evaluate(`document.querySelector('[data-menu-command="back"]').click()`);
+  assert.equal(
+    await session.evaluate(
+      `document.querySelector('[data-menu-screen]')?.getAttribute('data-menu-screen')`,
+    ),
+    'quick-fight',
+  );
+  await session.capture('quick-fight');
+  await session.evaluate(`document.querySelector('[data-menu-command="back"]').click()`);
+  assert.equal(
+    await session.evaluate(
+      `document.querySelector('[data-menu-screen]')?.getAttribute('data-menu-screen')`,
+    ),
+    'main-menu',
+  );
+
   // A page reload would discard this marker; an in-app transition keeps it.
   await session.evaluate(`window.__menuSmokeMarker = 'kept'`);
   await session.evaluate(`document.querySelector('[data-menu-command="single-mission"]').click()`);

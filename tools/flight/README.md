@@ -213,3 +213,22 @@ browser would, then clicks Fly and asserts `window.__flightDiagnostics()` report
 the chosen aircraft and fuel. It needs a ported `f14-loadout.json`
 (`--loadout`, default `extracted/flight/f14-loadout.json`); see
 [Aircraft porting](../../Docs/aircraft-porting.md).
+
+## Quick fight, mocked
+
+```sh
+bun tools/flight/quickfight-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --out extracted/quickfight-smoke
+```
+
+Three aircraft in the sky at once, deep-linked with
+`mode=quick-fight&opponents=2&seed=7`. It asserts two opponents exist, that each
+one has taken exactly as many fixed steps as the player — they run inside the same
+120 Hz clock, so adding aircraft cannot change the rate — and that each has moved
+exactly its own speed times that time. It then flies until the head-on pass is
+inside 1,500 m and captures it, so the screenshot is evidence that the opponents
+are actually rendered at the terrain's floating origin.
+
+**This is a mock and the test says so in its report.** The opponents hold a
+heading, a speed and an altitude; the retail AI is parsed and unit-tested but is
+not bound to aircraft state. Nothing acquires, nothing shoots and no round does
+damage. See section 8 of [the game shell plan](../../Docs/game-shell-plan.md).

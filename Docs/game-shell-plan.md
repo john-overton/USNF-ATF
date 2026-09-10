@@ -550,6 +550,10 @@ Each step ends green on `bun run check` and is committed separately.
 7. **`sim/world/entities.ts`** and the mocked quick fight: three aircraft,
    deterministic spawn, fixed profiles, rendered with the floating origin
    preserved. Gate: `quickfight-smoke.ts` and the determinism test.
+   **Landed 2026-09-10.** The setup screen is its own `quick-fight` screen ahead
+   of aircraft select, rather than a variant of it. Heading uses the sim's own
+   convention — identity forward -Z, a bearing along (-sin, cos) — which the first
+   spawn got backwards; see the progress entry.
 8. **Progress and baseline entries** per AGENTS.md, stating plainly which parts
    are mocked.
 

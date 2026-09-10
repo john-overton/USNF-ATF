@@ -34,6 +34,7 @@ import {
   sampleTelemetry as sampleAssistedTelemetry,
 } from '../sim/flight/assisted-flight';
 import { GroundSampler, type PracticeStrip } from './GroundSampler';
+import { OpponentLayer } from './OpponentLayer';
 import { preparePractice } from './practice';
 import { FlightInput, type PilotControls } from './FlightInput';
 import {
@@ -117,11 +118,22 @@ export interface FlightDiagnostics {
   systems: ReturnType<typeof createAircraftSystems>;
   audio: ReturnType<FlightAudio['diagnostics']>;
   animation: Record<string, number>;
+  /** The mocked quick fight's opponents. Empty in every other mode. */
+  entities: ReturnType<OpponentLayer['diagnostics']>;
 }
 declare global {
   interface Window {
     __flightDiagnostics?: () => FlightDiagnostics;
   }
+}
+
+/**
+ * North-referenced heading from an attitude, in radians, on the sim's own
+ * convention: identity forward is -Z, and a bearing points along (-sin, cos).
+ */
+function headingOf(q: { x: number; y: number; z: number; w: number }): number {
+  const forward = new Vector3(0, 0, -1).applyQuaternion(new Quaternion(q.x, q.y, q.z, q.w));
+  return Math.atan2(-forward.x, forward.z);
 }
 
 /** Wind is reported the way it is named: the bearing it blows *from*. */
@@ -195,7 +207,21 @@ export class FlightLayer {
         profile = parseRetailFlightProfile(JSON.parse(text));
         validateAircraftProfile(id, profile);
       }
-      return new FlightLayer(scene, ground, strip, audio, gun, id, mission, model, profile);
+      const opponents = mission.opponents.length
+        ? await OpponentLayer.create(scene, platform, mission)
+        : undefined;
+      return new FlightLayer(
+        scene,
+        ground,
+        strip,
+        audio,
+        gun,
+        id,
+        mission,
+        opponents,
+        model,
+        profile,
+      );
     } catch (error) {
       model?.dispose();
       audio?.dispose();
@@ -218,6 +244,7 @@ export class FlightLayer {
     private readonly gun: FlightGun,
     readonly aircraftId: AircraftId,
     mission: MissionParams,
+    private readonly opponents?: OpponentLayer,
     private readonly model?: RetailAircraft,
     private readonly profile?: RetailFlightProfile,
   ) {
@@ -255,6 +282,11 @@ export class FlightLayer {
     this.environment = { sampleGround: (x: number, z: number) => ground.sample(x, z) };
     this.state = this.initialState();
     this.previous = this.state;
+    // Spawns are deterministic from the mission seed and where the player started.
+    this.opponents?.spawn(mission, {
+      position: { ...this.state.position },
+      headingRad: headingOf(this.state.attitude),
+    });
     if (this.approach || this.airborneStart) this.input.throttle = 0.2;
     this.systems = createAircraftSystems(this.input.throttle);
     this.telemetry = (this.useRetail ? sampleTelemetry : sampleAssistedTelemetry)(
@@ -518,6 +550,8 @@ export class FlightLayer {
       if (!AIRCRAFT[this.aircraftId].afterburner) this.input.afterburner = false;
       if (!AIRCRAFT[this.aircraftId].hook) this.input.hookDown = false;
       this.systems = stepAircraftSystems(this.systems, this.input, dt);
+      // Inside the player's own fixed step, so extra aircraft cannot change the rate.
+      this.opponents?.advance(dt);
       if (this.useRetail && this.profile)
         this.systems.thrustMultiplier =
           1 +
@@ -640,6 +674,7 @@ export class FlightLayer {
   }
   render(origin: { x: number; z: number }): void {
     const pose = this.pose();
+    this.opponents?.render(origin);
     this.aircraft.visible = this.input.cameraMode !== 'cockpit';
     this.gun.render(origin);
     this.aircraft.position.set(
@@ -789,6 +824,7 @@ export class FlightLayer {
       airbrakeDown: this.input.airbrakeDown,
       systems: { ...this.systems },
       audio: this.audio.diagnostics(),
+      entities: this.opponents?.diagnostics() ?? [],
       animation: {
         gear: this.systems.gearFraction,
         hook: this.systems.hookFraction,
@@ -813,6 +849,7 @@ export class FlightLayer {
     this.audio.dispose();
     this.gun.dispose();
     this.model?.dispose();
+    this.opponents?.dispose();
     this.ground.dispose();
     const materials = new Set<MeshStandardMaterial>();
     for (const group of [this.aircraft, this.deck]) {

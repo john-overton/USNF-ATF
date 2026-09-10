@@ -4,6 +4,7 @@ import { RendererProbe } from './RendererProbe';
 import { TerrainViewer } from './TerrainViewer';
 import { MainMenu } from './menu/MainMenu';
 import { AircraftSelect } from './menu/AircraftSelect';
+import { QuickFightSetup } from './menu/QuickFightSetup';
 import { LoadoutScreen } from './menu/LoadoutScreen';
 import { Debrief } from './menu/Debrief';
 import { loadMenuAssets, type MenuAssets } from './menu/assets';
@@ -140,6 +141,15 @@ export function Shell({ search }: { search: string }) {
   if (state.screen === 'explorer' || state.screen === 'flight')
     return (
       <TerrainViewer key={state.screen} mission={state.mission} parseError={parsed.parseError} />
+    );
+  if (state.screen === 'quick-fight')
+    return (
+      <QuickFightSetup
+        mission={state.mission}
+        {...(assets ? { assets } : {})}
+        onMission={(mission) => setState((previous) => ({ ...previous, mission }))}
+        onCommand={act}
+      />
     );
   if (state.screen === 'aircraft-select')
     return (

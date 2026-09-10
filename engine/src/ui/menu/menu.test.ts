@@ -5,6 +5,7 @@ import { MainMenu } from './MainMenu';
 import { AircraftSelect } from './AircraftSelect';
 import { LoadoutScreen } from './LoadoutScreen';
 import { Debrief, debriefLines } from './Debrief';
+import { QuickFightSetup, SKILLS } from './QuickFightSetup';
 import { MAIN_MENU_ITEMS } from './navigation';
 import {
   BUTTON_WIDTH,
@@ -138,4 +139,37 @@ test('the debrief reads back the flight it was given, and says so when there was
   expect(markup).toContain('Time aloft 1:00');
   expect(commands(markup)).toEqual(['main-menu']);
   expect(markup).toContain('Damage is not modelled yet');
+});
+
+test('the quick fight setup says it is a mock, and its rockers describe the sky', () => {
+  const markup = renderToStaticMarkup(
+    createElement(QuickFightSetup, {
+      mission: {
+        ...DEFAULT_MISSION,
+        mode: 'quick-fight',
+        opponents: [
+          { aircraft: 'x31', skill: 3 },
+          { aircraft: 'x31', skill: 3 },
+        ],
+      },
+      onMission: () => undefined,
+      onCommand: () => undefined,
+    }),
+  );
+  expect(markup).toContain('data-menu-screen="quick-fight"');
+  expect(markup).toContain('data-menu-rocker="opponent-count"');
+  expect(markup).toContain('3 aircraft in the sky, including you');
+  expect(markup).toContain('X-31 EFM');
+  expect(markup).toContain(SKILLS[3]);
+  expect(markup).toContain('This is a mock.');
+  expect(commands(markup)).toEqual([
+    'continue',
+    'back',
+    'opponent-count-down',
+    'opponent-count-up',
+    'opponent-aircraft-down',
+    'opponent-aircraft-up',
+    'opponent-skill-down',
+    'opponent-skill-up',
+  ]);
 });
