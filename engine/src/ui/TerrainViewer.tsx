@@ -1,3 +1,5 @@
+import type { CockpitMirrorLayout } from '../terrain/mirrors';
+import { CockpitOverlay, GunStatus } from '../flight/CockpitOverlay';
 import { AIRCRAFT } from '../flight/aircraft-catalog';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPlatform } from '../platform';
@@ -27,6 +29,9 @@ export function TerrainViewer() {
   const [rootPath, setRootPath] = useState('');
   const canvas = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<ReturnType<typeof startTerrainViewer> | null>(null);
+  const cockpitMirrors = useCallback((layout: CockpitMirrorLayout) => {
+    viewerRef.current?.setCockpitMirrors(layout);
+  }, []);
   const navigationTarget = useCallback((waypoint: MapWaypoint | undefined) => {
     viewerRef.current?.setNavigationTarget(waypoint);
   }, []);
@@ -86,6 +91,7 @@ export function TerrainViewer() {
             : 'Terrain free camera. WASD move, Q E altitude, drag to look.'
         }
       />
+      {stats?.flight && <CockpitOverlay flight={stats.flight} onMirrors={cockpitMirrors} />}
       {stats?.flight && (
         <FlightNavigationOverlay
           key={request.generation}
@@ -97,6 +103,7 @@ export function TerrainViewer() {
           onNavigationTarget={navigationTarget}
         />
       )}
+      {stats?.flight && <GunStatus flight={stats.flight} />}
       {!flightMode && stats?.name && (
         <ExplorerNavigationOverlay
           key={request.generation}
@@ -275,7 +282,7 @@ export function TerrainViewer() {
           {!error && stats?.status === 'loading' && <p>Loading terrain chunks…</p>}
           <p>
             {flightMode
-              ? 'Arrows pitch/roll · Q/E rudder · 1–5 throttle 0/25/50/75/100% · 6 afterburner · W/S fine throttle · T engine · G gear · H hook · F flaps · B speed/wheel brakes · F2 locked chase · F3 horizon-up · [ / ] waypoint · A autopilot hold · Ctrl-A fly to waypoint · M mute · R reset.'
+              ? 'Arrows pitch/roll · Q/E rudder · 1–5 throttle 0/25/50/75/100% · 6 afterburner · W/S fine throttle · T engine · G gear · H hook · F flaps · B speed/wheel brakes · F1 cockpit · F2 locked chase · F3 horizon-up · Shift+arrows look · Shift+/ center · Tab gun · Shift+Tab safety · [ / ] waypoint · A autopilot hold · Ctrl-A fly to waypoint · M mute · R reset.'
               : 'WASD move · Q/E altitude · drag to look · arrows turn · Shift accelerates. Click the terrain to focus controls.'}
           </p>
           {flightMode && !stats?.flight && !error && !stats?.error && (
@@ -320,9 +327,11 @@ export function TerrainViewer() {
                 </dd>
                 <dt>View</dt>
                 <dd>
-                  {stats.flight.cameraMode === 'attitude'
-                    ? 'F2 · attitude locked'
-                    : 'F3 · horizon up'}
+                  {stats.flight.cameraMode === 'cockpit'
+                    ? 'F1 · cockpit'
+                    : stats.flight.cameraMode === 'attitude'
+                      ? 'F2 · attitude locked'
+                      : 'F3 · horizon up'}
                 </dd>
                 <dt>Sound</dt>
                 <dd>

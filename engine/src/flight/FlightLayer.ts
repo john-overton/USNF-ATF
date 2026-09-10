@@ -44,6 +44,7 @@ import { bearingDegrees } from '../sim/flight';
 import { flightCamera } from './FlightCamera';
 import { createAircraftSystems, stepAircraftSystems } from './AircraftSystems';
 import { FlightAudio } from './FlightAudio';
+import { FlightGun } from './FlightGun';
 import { createFuelState, setFuelFraction, stepFuel, type FuelState } from './FuelSystem';
 import { RetailAircraft } from './RetailAircraft';
 import { surfaceAngle } from './ControlSurfaces';
@@ -96,6 +97,9 @@ export interface FlightDiagnostics {
   afterburnerThrustN: number;
   flightProfileSha256: string | null;
   cameraMode: string;
+  viewYawRad: number;
+  viewPitchRad: number;
+  gun: ReturnType<FlightGun['diagnostics']>;
   autopilot: AutopilotMode;
   /** Bearing the waypoint hold is steering to, or null when it is holding heading. */
   autopilotBearingDeg: number | null;
@@ -175,11 +179,13 @@ export class FlightLayer {
     const ground = new GroundSampler(manifest, platform, root, folder);
     let model: RetailAircraft | undefined;
     let audio: FlightAudio | undefined;
+    let gun: FlightGun | undefined;
     try {
       const strip = await preparePractice(ground);
       const id = aircraftId(new URLSearchParams(window.location.search).get('aircraft'));
       model = await RetailAircraft.load(platform, id);
       audio = await FlightAudio.create(platform, id);
+      gun = await FlightGun.load(platform, id);
       let profile: RetailFlightProfile | undefined;
       if (await platform.fs.exists('appData', `aircraft/${id}-flight.json`)) {
         const text = await platform.fs.readText('appData', `aircraft/${id}-flight.json`);
@@ -187,10 +193,11 @@ export class FlightLayer {
         profile = parseRetailFlightProfile(JSON.parse(text));
         validateAircraftProfile(id, profile);
       }
-      return new FlightLayer(scene, ground, strip, audio, id, model, profile);
+      return new FlightLayer(scene, ground, strip, audio, gun, id, model, profile);
     } catch (error) {
       model?.dispose();
       audio?.dispose();
+      gun?.dispose();
       ground.dispose();
       throw error;
     }
@@ -206,6 +213,7 @@ export class FlightLayer {
     readonly ground: GroundSampler,
     readonly strip: PracticeStrip,
     private readonly audio: FlightAudio,
+    private readonly gun: FlightGun,
     readonly aircraftId: AircraftId,
     private readonly model?: RetailAircraft,
     private readonly profile?: RetailFlightProfile,
@@ -341,7 +349,7 @@ export class FlightLayer {
           shadowed.add(object.material);
       });
     for (const material of shadowed) applyCloudShadow(material, 'aircraft-cloud-shadow-v1');
-    scene.add(this.aircraft, this.deck);
+    scene.add(this.aircraft, this.deck, this.gun.lines);
   }
   /** Publish only after the viewer accepts this asynchronous result. */
   activate(): void {
@@ -436,6 +444,8 @@ export class FlightLayer {
     });
     this.previous = this.state;
     this.clock.reset();
+    this.gun.reset();
+    this.input.gunSafe = true;
     this.alpha = 0;
     this.waiting = false;
     this.airborneArmed = true;
@@ -466,6 +476,7 @@ export class FlightLayer {
       this.previous = this.state;
       this.clock.reset();
       this.input.reset();
+      this.gun.reset();
       this.systems = createAircraftSystems(this.approach || this.airborneStart ? 0.2 : 0);
       this.takeoffs = 0;
       this.landings = 0;
@@ -486,7 +497,10 @@ export class FlightLayer {
     this.ground.prefetch(p.x, p.z, v.x, v.z);
     this.waiting =
       !this.ground.sample(p.x, p.z) || !this.ground.sample(p.x + v.x * 0.25, p.z + v.z * 0.25);
-    if (this.waiting || this.ground.error) return;
+    if (this.waiting || this.ground.error) {
+      this.gun.audioUpdate(this.audio.diagnostics().muted);
+      return;
+    }
     const result = this.clock.advance(seconds, (dt) => {
       this.previous = this.state;
       // The flight clock, not the render clock, drives the field so headless
@@ -541,6 +555,7 @@ export class FlightLayer {
         this.systems.effectiveThrottle = 0;
         this.systems.thrustMultiplier = 1;
       }
+      this.gun.step(this.state, this.input.gunTrigger, this.input.gunSafe, dt);
       const next = (this.useRetail ? stepFlight : stepAssistedFlight)(
         this.state,
         {
@@ -571,6 +586,7 @@ export class FlightLayer {
       this.state = next.state;
       this.telemetry = next.telemetry;
     });
+    this.gun.audioUpdate(this.audio.diagnostics().muted);
     this.alpha = result.alpha;
     if (result.clamped) this.clampedFrames++;
     this.audio.update(
@@ -597,7 +613,10 @@ export class FlightLayer {
       new Quaternion(qb.x, qb.y, qb.z, qb.w),
       this.alpha,
     );
-    const { camera, look, up } = flightCamera(position, attitude, this.input.cameraMode);
+    const { camera, look, up } = flightCamera(position, attitude, this.input.cameraMode, {
+      yaw: this.input.cameraYaw,
+      pitch: this.input.cameraPitch,
+    });
     // Keep the chase camera above known ground, even when the aircraft rolls.
     if (this.input.cameraMode === 'world-up')
       camera.y = Math.max(
@@ -606,8 +625,20 @@ export class FlightLayer {
       );
     return { position, attitude, camera, look, up };
   }
+  /** Rear mirrors see the airframe; restore primary cockpit visibility even on render errors. */
+  withAircraftVisible(render: () => void): void {
+    const visible = this.aircraft.visible;
+    this.aircraft.visible = true;
+    try {
+      render();
+    } finally {
+      this.aircraft.visible = visible;
+    }
+  }
   render(origin: { x: number; z: number }): void {
     const pose = this.pose();
+    this.aircraft.visible = this.input.cameraMode !== 'cockpit';
+    this.gun.render(origin);
     this.aircraft.position.set(
       pose.position.x - origin.x,
       pose.position.y,
@@ -720,6 +751,9 @@ export class FlightLayer {
       flightProfileSha256: this.useRetail ? this.profile!.source.sha256 : null,
       modelTriangles: this.model?.triangles ?? 0,
       cameraMode: this.input.cameraMode,
+      viewYawRad: this.input.cameraYaw,
+      viewPitchRad: this.input.cameraPitch,
+      gun: this.gun.diagnostics(this.input.gunSafe),
       autopilot: this.input.autopilot,
       autopilotBearingDeg:
         this.input.autopilot === 'waypoint' ? (this.navigationBearing() ?? null) : null,
@@ -755,6 +789,7 @@ export class FlightLayer {
     this.teleportRequest++;
     this.input.dispose();
     this.audio.dispose();
+    this.gun.dispose();
     this.model?.dispose();
     this.ground.dispose();
     const materials = new Set<MeshStandardMaterial>();

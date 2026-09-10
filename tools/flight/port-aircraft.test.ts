@@ -7,6 +7,9 @@ test('recipes use independent model/PT origins and explicit scale without a shel
   expect(a4[0]).toContain('/tmp/media & sources/atf-gold/ATF_2.LIB/A4.SH');
   expect(a4[1]).toContain('/tmp/media & sources/usnf97/USNF_2.LIB/A4E.PT');
   expect(a4[2]).toContain('/tmp/out folder/audio/a4e.json');
+  expect(a4[3]).toContain('/tmp/out folder/cockpits/a4e.json');
+  expect(a4[3]).toContain('/tmp/media & sources');
+  expect(a4[4]).toContain('/tmp/out folder/a4e-gun.json');
   const x31 = portCommands('x31', '/tmp/media', '/tmp/out', 'python3');
   expect(x31[0]).toContain('--wingspan-metres');
   expect(x31[0]).toContain('7.26');

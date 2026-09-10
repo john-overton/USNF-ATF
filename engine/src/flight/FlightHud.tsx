@@ -1,3 +1,5 @@
+import { cockpitHudRect } from './cockpit-layout';
+import { cockpitLook } from './RetailCockpit';
 import { useId } from 'react';
 import type { FlightDiagnostics } from './FlightLayer';
 import { flightHudReadout, windReadoutText, wrapHeading, HUD_PITCH_PIXELS_PER_DEGREE } from './hud';
@@ -21,6 +23,10 @@ export function FlightHud({
   autopilot?: AutopilotMode;
 }) {
   const clip = useId();
+  const cockpit = flight.cameraMode === 'cockpit';
+  const cockpitRect =
+    cockpit && cockpitHudRect(flight.aircraftId, flight.viewYawRad, flight.viewPitchRad);
+  const look = cockpitLook(flight.viewYawRad, flight.viewPitchRad);
   const hud = flightHudReadout(flight.state, flight.telemetry);
   const headingBase = Math.floor(hud.heading / 10) * 10;
   const warning =
@@ -40,20 +46,24 @@ export function FlightHud({
   return (
     <svg
       data-flight-hud="true"
+      data-cockpit-hud={cockpit ? flight.aircraftId : undefined}
+      preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label={`Flight HUD. Heading ${hud.headingText}, speed ${Math.round(hud.speedKnots)} knots true, altitude ${Math.round(hud.altitudeFeet)} feet MSL, throttle ${Math.round(flight.throttle * 100)} percent.`}
       viewBox="0 0 760 620"
       style={{
         position: 'absolute',
-        left: '50%',
-        top: '50%',
-        transform: 'translate(-50%, -50%)',
-        width: 'min(570px, 51vw)',
-        maxHeight: '66vh',
+        left: cockpitRect ? `${cockpitRect.x * 100}%` : '50%',
+        top: cockpitRect ? `${cockpitRect.y * 100}%` : '50%',
+        transform: cockpit ? undefined : 'translate(-50%, -50%)',
+        width: cockpitRect ? `${cockpitRect.width * 100}%` : 'min(570px, 51vw)',
+        height: cockpitRect ? `${cockpitRect.height * 100}%` : undefined,
+        maxHeight: cockpit ? undefined : '66vh',
+        opacity: cockpit ? look.opacity : 1,
         pointerEvents: 'none',
         color: '#66ff66',
         fontWeight: 400,
-        overflow: 'visible',
+        overflow: cockpit ? 'hidden' : 'visible',
       }}
       fill="none"
       stroke="currentColor"
@@ -228,7 +238,11 @@ export function FlightHud({
               : 'ENGINE ON'}
         </text>
         <text x="650" y="490" textAnchor="end" fontSize="13">
-          {flight.cameraMode === 'attitude' ? 'F2 LOCKED CHASE' : 'F3 WORLD-UP CHASE'}
+          {flight.cameraMode === 'cockpit'
+            ? 'F1 COCKPIT'
+            : flight.cameraMode === 'attitude'
+              ? 'F2 LOCKED CHASE'
+              : 'F3 WORLD-UP CHASE'}
         </text>
         <text x="650" y="514" textAnchor="end" fontSize="13">
           {flight.controls.brake && flight.status === 'grounded' ? 'WHEEL BRAKE' : ''}

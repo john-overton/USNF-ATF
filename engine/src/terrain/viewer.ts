@@ -37,6 +37,7 @@ import {
 import { parseManifest, safeRelativePath } from './manifest';
 import { buildPatch } from './mesh';
 import { TerrainAntialias } from './antialias';
+import { CockpitMirrors, type CockpitMirrorLayout } from './mirrors';
 import { TerrainSeams, type SeamPatch } from './seams';
 import { SourceTransition } from './transition';
 import { waypointDestination, type TeleportWaypoint } from './teleport';
@@ -85,6 +86,7 @@ export interface TerrainDiagnostics {
   paint?: string;
   paintModes?: string[];
   flight?: FlightDiagnostics;
+  mirrors?: ReturnType<CockpitMirrors['diagnostics']>;
   status: 'loading' | 'ready' | 'error';
   error: string;
   frames: number;
@@ -150,6 +152,7 @@ export function startTerrainViewer(
   update: (d: TerrainDiagnostics) => void,
 ): {
   dispose(): void;
+  setCockpitMirrors(layout: CockpitMirrorLayout): void;
   setFuelFraction(fraction: number): void;
   setTimeOfDay(hours: number): void;
   setWeather(id: WeatherId): void;
@@ -193,6 +196,7 @@ export function startTerrainViewer(
   if (flightMode) sky.enableShadows(renderer);
   const camera = new PerspectiveCamera(60, 1, 5, 400000);
   const antialias = new TerrainAntialias(renderer, scene, camera);
+  const mirrors = flightMode ? new CockpitMirrors() : undefined;
   antialias.clouds.quality = cloudQuality;
   antialias.clouds.steps = cloudSteps;
   const world: WorldPosition = { x: 0, y: 4000, z: 0 };
@@ -809,6 +813,12 @@ export function startTerrainViewer(
     });
     renderer.info.reset();
     antialias.render();
+    if (mirrors && flight && d.flight?.cameraMode === 'cockpit') {
+      mirrors.render(renderer, scene, camera.position, flight.pose().attitude, now, (render) =>
+        flight!.withAircraftVisible(render),
+      );
+      d.mirrors = mirrors.diagnostics();
+    }
     d.frames++;
     d.triangles = renderer.info.render.triangles;
     d.drawCalls = renderer.info.render.calls;
@@ -821,6 +831,7 @@ export function startTerrainViewer(
       d.waterCacheBytes +
       imageryBytes +
       antialias.bytes +
+      (mirrors?.bytes ?? 0) +
       antialias.clouds.bytes +
       sky.bytes +
       (shoreline?.bytes ?? 0);
@@ -849,6 +860,9 @@ export function startTerrainViewer(
   }
   raf = requestAnimationFrame(frame);
   return {
+    setCockpitMirrors(layout: CockpitMirrorLayout): void {
+      mirrors?.setLayout(layout);
+    },
     async setTerrainPaint(mode: string): Promise<void> {
       if (disposed || !manifest) throw new Error('Terrain viewer is not ready');
       await loadPaint(manifest, mode);
@@ -919,6 +933,7 @@ export function startTerrainViewer(
       shoreline?.dispose();
       imagery?.dispose();
       flight?.dispose();
+      mirrors?.dispose();
       antialias.dispose();
       sky.dispose();
       renderer.dispose();

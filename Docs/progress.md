@@ -13,8 +13,66 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite and a shared sky highlight rolloff | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
-| 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned |
+
+## 2026-09-09: fit HUD to cockpit glass and render live mirrors
+
+The user's follow-up requested a larger frame so the HUD fits consistently and
+live cockpit mirrors. The frame is now 1.8× viewport width, centered, with full
+height retained; each aircraft's measured safe HUD opening determines the SVG's
+aspect-preserving fit. Frame, HUD and mirrors share resize/look transforms.
+Side mirrors enter view with head look. This supersedes the earlier independent
+HUD layout and static-mirror limitation below; native gauge/HUD execution and
+3D side/rear cockpit reconstruction remain open.
+
+The exporter now removes only the connected flat-color mirror interiors and
+emits exact RGBA masks for F14 and A4E/F4 (three each); X31 has no mirrors in its
+retail frame. The renderer reuses a 512×256 rear scene at 10 Hz, with distinct
+left/center/right reflected crops, aircraft/tail visible and renderer state
+restored afterward. Optics and placement remain original approximations; the
+rear view omits volumetric clouds and uses already selected terrain/shadow maps.
+
+Fresh desktop evidence and final checks are in [phase 4 baseline](baselines/phase-4.md).
+F14/A4E center mirrors visibly show their tail and the landscape, the complete HUD
+fits the opening, and X31 remains mirror-free. A synthetic mask test checks exact
+coverage without punching out disconnected pixels of the same color. Existing
+external-HUD test failure from an unconditional aperture lookup was corrected;
+237 Bun tests pass. Updated cockpit imports are installed in local app data.
+Next: manually compare forward and side mirror framing at preferred window size.
+
+## 2026-09-09: retail cockpit views and luminous practice guns
+
+Imported forward cockpit frames for F14, A4E and X31 through the existing
+validated developer port helper and installed all three locally. A4E.PT selects
+F4.HUD: its shared F4 frame is genuine retail mapping; IIA4E.PIC is a small
+silhouette, correcting the older cockpit-set hypothesis in format notes.
+F1 opens a window-filling cockpit overlay, Shift-arrows look/orbit, Shift-/
+centers, and shifted arrows remain isolated from flight controls.
+
+PT/JT-selected internal guns now bring their own type, capacity and PCM. Tab
+fires individual 120 Hz ballistic rounds; Shift-Tab toggles the default-on safety.
+Aircraft world velocity is added to muzzle velocity, gravity acts on every round,
+and one in five is a tracer. The user's night-visibility follow-up adds self-lit
+additive heads: F14/A4E red and ATF X31 green defaults, with configurable imported
+belt color. Raw retail grouped-round fields remain separate from authored
+ballistics and colors. Default assisted flight physics remain unchanged.
+
+`bun run check` passed 234 tests; Python passed 83 with one optional scratchpad
+skip; original flight harness 16/16; fresh M3 hardware probe passed. Day desktop
+scenarios passed for all three aircraft, midnight red/green captures were inspected,
+and safety/ammo/view/audio-context assertions passed. Multi-session smoke attempts
+twice hit an Electron sandbox startup error before app loading; the remaining
+X31-night scenario passed separately. Exact commands, source, installations,
+failures/skips and scope are in [phase 4 baseline](baselines/phase-4.md).
+
+[Implementation guide](phase-4-cockpit-guns.md) records source mappings,
+ballistics citations and controls. This user-requested early extension is recorded
+in the build plan; it does not complete phases 5/6. Side/rear cockpit geometry,
+working retail gauges/mirrors, conformal native HUD, projectile impacts/damage,
+drag/dispersion/recoil and human sound acceptance remain open. Next: run the
+installed aircraft in `bun run dev:electron` and compare cockpit views and gun
+sound by hand. Linux remains deferred, Windows acceptance remains phase 9.
 
 ## 2026-09-09: aircraft-porting guide performance follow-up
 

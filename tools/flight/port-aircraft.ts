@@ -8,6 +8,8 @@ import { AIRCRAFT, aircraftId, validateAircraftProfile, type AircraftId } from '
 import { parseRetailAircraft } from '../../engine/src/flight/RetailAircraft';
 import { parseRetailFlightProfile } from '../../engine/src/data/retail-flight';
 import { parseFlightSamples } from '../../engine/src/flight/FlightAudio';
+import { parseRetailCockpit } from '../../engine/src/flight/RetailCockpit';
+import { parseRetailGun } from '../../engine/src/data/retail-gun';
 import { AIRCRAFT_RECIPES } from './aircraft-recipes';
 
 const REPO = realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'));
@@ -18,6 +20,8 @@ export function portCommands(id: AircraftId, sourceRoot: string, out: string, py
     [python, '-m', 'retail.sh_static', source(recipe.model), '--pal', source(recipe.palette), '--out', path.join(out, `${id}.json`), '--name', AIRCRAFT[id].name, `--${recipe.scale.axis}-metres`, String(recipe.scale.metres)],
     [python, '-m', 'retail.flight', '--pt', source(recipe.pt), '--out', path.join(out, `${id}-flight.json`)],
     [python, '-m', 'retail.audio', '--pt', source(recipe.pt), '--out', path.join(out, 'audio', `${id}.json`)],
+    [python, '-m', 'retail.cockpit', '--aircraft', id, '--source-root', sourceRoot, '--out', path.join(out, 'cockpits', `${id}.json`)],
+    [python, '-m', 'retail.gun', '--pt', source(recipe.pt), '--out', path.join(out, `${id}-gun.json`)],
   ];
 }
 
@@ -101,6 +105,11 @@ export async function main(args: string[]): Promise<void> {
     const modelFile = path.join(staging, `${id}.json`);
     const profileFile = path.join(staging, `${id}-flight.json`);
     const audioFile = path.join(staging, 'audio', `${id}.json`);
+    const cockpitFile = path.join(staging, 'cockpits', `${id}.json`);
+    const gunFile = path.join(staging, `${id}-gun.json`);
+    const cockpit = parseRetailCockpit(await Bun.file(cockpitFile).json(), id);
+    const gun = parseRetailGun(await Bun.file(gunFile).json());
+    if (gun.aircraftSource !== path.basename(recipe.pt)) throw new Error('Gun aircraft identity mismatch');
     const model = summarizeModel(await Bun.file(modelFile).json());
     if (model.name !== AIRCRAFT[id].name) throw new Error('Model identity mismatch');
     const profile = parseRetailFlightProfile(await Bun.file(profileFile).json());
@@ -115,7 +124,9 @@ export async function main(args: string[]): Promise<void> {
       recipe, executedCommands, reproductionCommands: commands, model,
       sourceSha256: { model: await sha256(path.resolve(sourceRoot, recipe.model)), palette: await sha256(path.resolve(sourceRoot, recipe.palette)), pt: await sha256(path.resolve(sourceRoot, recipe.pt)) },
       flight: { source: profile.source, name: profile.name, emptyMassKg: profile.emptyMassKg, fuelCapacityKg: profile.fuelCapacityKg, militaryThrustN: profile.militaryThrustN, maximumThrustN: profile.afterburnerThrustN, gRows: profile.envelopes.map(e => e.g), nativeDataPresent: !!profile.native },
-      outputSha256: { model: await sha256(modelFile), profile: await sha256(profileFile), audio: await sha256(audioFile) },
+      cockpit: { label: cockpit.label, width: cockpit.width, height: cockpit.height },
+      gun: { name: gun.name, aircraftSource: gun.aircraftSource, capacity: gun.capacity },
+      outputSha256: { model: await sha256(modelFile), profile: await sha256(profileFile), audio: await sha256(audioFile), cockpit: await sha256(cockpitFile), gun: await sha256(gunFile) },
       acceptance: { conversion: 'validated', visual: 'pending', runtime: 'pending', nativeParity: 'not established by this helper' },
       installation: { status: options['--install'] ? 'pending' : 'not requested', dataRoot: options['--install'] ? path.resolve(options['--install']) : null },
     };
@@ -124,7 +135,7 @@ export async function main(args: string[]): Promise<void> {
     published = true;
     if (options['--install']) {
       try {
-        await run([process.execPath, path.join(REPO, 'tools/flight/install-aircraft.ts'), path.join(output, `${id}.json`), path.resolve(options['--install']), path.join(output, 'audio', `${id}.json`), path.join(output, `${id}-flight.json`), '--id', id]);
+        await run([process.execPath, path.join(REPO, 'tools/flight/install-aircraft.ts'), path.join(output, `${id}.json`), path.resolve(options['--install']), path.join(output, 'audio', `${id}.json`), path.join(output, `${id}-flight.json`), '--id', id, '--cockpit', path.join(output, 'cockpits', `${id}.json`), '--gun', path.join(output, `${id}-gun.json`)]);
         report.installation.status = 'installed';
       } catch (error) {
         report.installation.status = 'failed; inspect installer output';

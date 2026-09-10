@@ -68,3 +68,21 @@ Unit of `fuelT` / `removeT` (ticks of some fixed rate; AIM-9M 44 / 88, guns
 0 / 40) and the exact meaning of `initialSpeed` / `finalSpeed` (1026 for
 every missile, which is too slow for ft/s unless it is added to the
 launcher's speed and the seeker/turn model does the rest).
+
+## 2026-09-09: practice gun import
+
+`retail.gun` follows the supported aircraft PT's internal-gun hardpoint to its
+JT and then the JT `fireSound` reference. Local observations: USNF F14 selects
+M61/675 rounds; A4E selects MK12/400 with paired-hardpoint flags 12; ATF F31
+selects M61/740. M61 selects `&FASTGUN.11K`, MK12 `&SU33GUN.11K`. Names alone
+are not evidence for which airplane uses a sample.
+
+The exported manifest preserves the raw projectile fields, PT/JT/sample hashes,
+hardpoint index, flags and position. Runtime individual-round cadence, muzzle
+speed, mount positions, tracer spacing and red/green belt color are separate
+**authored** settings. In particular, the runtime does not use
+`actualRoundsPerGame` to debit multiple rounds for each visible tracer. A
+non-tracer is still a simulated round. The initial/final-speed and timing-unit
+questions above are not resolved by the new physical-speed implementation.
+See [cockpit and gun implementation](../phase-4-cockpit-guns.md) for sources,
+controls and the intentionally limited gravity-only ballistics model.

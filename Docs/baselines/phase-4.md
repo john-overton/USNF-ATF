@@ -1,5 +1,143 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09 follow-up: enlarged HUD fit and live mirrors
+
+This supersedes the initial independent HUD layout/static-mirror limitation
+below. Same M3/macOS/Bun/Python/Electron machine and base source commit
+`40d5fb9ffe2c5de41efef2274e04d13f5d5c9843`, with the follow-up working tree.
+Final changed-source inventory: `extracted/cockpit-gun-smoke/source-with-mirrors.json`,
+SHA256 `290fd41cf89842de2ed09b559b79d2f45a25f0a6d9b5b4f80b2bc6af4706dcae`.
+The initial inventory remains separate at `source-files.json`.
+
+The user's larger-frame/HUD-fit request is implemented with a centered 1.8×
+horizontal frame and per-aircraft safe glass rectangles. The full SVG fits
+without changing its aspect ratio at 1280×720, 1920×1080, 2560×1440 and 1024×768
+(test geometry); frame/HUD/mirror transforms share 30 Hz flight UI updates.
+Forward framing crops the side mirrors, which enter view during head look.
+
+Exact connected mirror fills are extracted as RGBA masks and alpha holes (three
+F14, three shared F4/A4E, none F31/X31). One 512×256 rear target refreshes at
+10 Hz, with distinct reflected left/center/right crops. Tail/airframe rendering
+is temporarily enabled only for the mirror pass. Renderer target/viewport/scissor,
+clear/shadow-update state and primary aircraft visibility are restored. Rear
+terrain uses the already selected radial terrain; volumetric cloud compositing
+is omitted. This is authored mirror optics, not recovered game code.
+
+Final verification:
+
+- `bun run check`: **237 passed, 0 failed**, 692,954 assertions; typecheck,
+  lint and formatting pass. Intermediate check had one external HUD fixture
+  failure because cockpit layout was looked up in chase mode; conditional
+  lookup corrected it. The normal external HUD fixture is unchanged.
+- `python3 -m unittest discover -s tools/retail/tests`: **84 tests, OK,
+  1 optional scratchpad skip**, 62.768 s. Mirror coverage test proves exact alpha
+  and preservation of disconnected pixels of the same color. Initial A4E mirror
+  seed fell outside opaque art and export rejected it; reviewed seed corrected
+  before successful exports. Existing ResourceWarnings remain as noted below.
+- `bun run probe --fresh`: final source build and M3 hardware probe pass.
+- `bun tools/flight/cockpit-gun-smoke.ts f14`: enlarged cockpit, all three masks
+  loaded, updating live rear tail view and controls/gun checks pass. This first
+  mirror run precedes the final distinct-crop refinement.
+- After rebuilding, `bun tools/flight/cockpit-gun-smoke.ts a4e`,
+  `bun tools/flight/cockpit-gun-smoke.ts x31` and
+  `bun tools/flight/cockpit-gun-smoke.ts f14-night`: **all pass**, zero renderer
+  errors. A4E has three loaded masks, no mask errors; X31 has zero regions/updates.
+  Final F14-night includes the distinct-crop code. A4E center and side mirror
+  images, F14 center tail view, and X31 720p fitted HUD were inspected. Red night
+  luminance remains visible with the final enlarged cockpit. Earlier green night
+  evidence is below; the gun renderer did not change in this follow-up.
+- `git diff --check` and staged-file inspection pass; staging remains empty.
+  Default assisted-flight source is unchanged; its 16-case harness pass below
+  remains applicable (no physics changes in this follow-up).
+
+Canonical cockpit manifests were regenerated with
+`PYTHONPATH=tools/retail python3 -m retail.cockpit --aircraft <id> --source-root extracted --out extracted/flight/cockpits/<id>.json`
+and installed for each ID with
+`bun tools/flight/install-aircraft.ts extracted/flight/<id>.json "$HOME/Library/Application Support/USNF-ATF/data" --id <id> --cockpit extracted/flight/cockpits/<id>.json --gun extracted/flight/<id>-gun.json`.
+These supersede the initial bundle's static cockpit imports. The helper will
+produce the new masks in future complete bundles. Screenshot/report paths below
+are reused by later scenarios, so the latest files supersede earlier captures.
+
+Mirror diagnostic CPU submission samples were 0.8 ms F14 and 0.6 ms A4E on update
+frames; these are single samples, not a GPU benchmark or 60-fps acceptance. Target
+storage is about 1 MiB plus small mask textures. Remaining limitations: authored
+mirror optics/cropping, small-window HUD readability requires human acceptance,
+static retail instrument art, no 3D side/rear cockpit, no volumetric clouds in
+mirrors, no native HUD projection, and the previously recorded intermittent
+Electron startup failure. Next: compare mirror framing and HUD readability in
+`bun run dev:electron` at the user's preferred window size. Linux deferred;
+Windows remains phase 9.
+
+
+## 2026-09-09: cockpit frames, view controls and luminous practice guns
+
+Source: working tree based on `40d5fb9ffe2c5de41efef2274e04d13f5d5c9843`,
+including this change; no new source commit claimed. Mac Apple M3 arm64,
+macOS 26.6.2, Bun 1.4.2, Python 3.14.6, Electron 44.2.0 / Chromium
+152.0.7977.76. The original `assisted-flight.ts` has no diff. Changed source
+hashes are in ignored `extracted/cockpit-gun-smoke/source-files.json` (SHA256
+`72a728ada89a096c7b1d3a0d69b571af85e99c7049bef9dca81e9e855e0d89ed`).
+
+All three full bundles converted and installed under local app data with:
+`bun tools/flight/port-aircraft.ts --aircraft <id> --install "$HOME/Library/Application Support/USNF-ATF/data"`.
+Bundles under `extracted/aircraft-ports/<id>/`: F14
+`2026-09-10T01-53-16-651Z-0bf13d96`, A4E
+`2026-09-10T01-54-20-652Z-9eaf782e`, X31
+`2026-09-10T01-54-21-337Z-d194815e` (UTC names; local date September 9).
+Each report records source/output hashes. Retail bytes stay ignored and outside
+the build. Cockpit/PIC and gun/JT source mappings and ballistics references are
+in [cockpit and guns](../phase-4-cockpit-guns.md).
+
+Verification:
+
+- `bun run check`: **234 passed, 0 failed**, 692,887 assertions; typecheck,
+  lint and formatting passed. Intermediate runs stopped on a nullish-coalescing
+  lint error, fixed before the final pass. Focused tests also exposed/fixed
+  signed-zero and synthetic-fixture errors and truncated-PNG acceptance.
+- `python3 -m unittest discover -s tools/retail/tests`: **83 tests, OK,
+  1 skip** (optional scratchpad USNF_1.LIB slice comparison; `USNF_SCRATCHPAD`
+  unavailable). New three-aircraft gun and cockpit retail coverage ran without
+  missing-media skips. Existing archive ResourceWarnings were emitted.
+- `bun run harness --output extracted/flight-harness/report.json`: **16/16**
+  original flight cases passed. This is not retail gun or aircraft parity.
+- `bun run probe --fresh`: fresh unpackaged build passed, Apple M3 Metal
+  hardware WebGL2, `softwareRenderer: false`; no new installer build claimed.
+- `bun tools/flight/cockpit-gun-smoke.ts`: day F14/A4E/X31 and midnight F14
+  scenarios passed. Two multi-session attempts stopped during Electron startup
+  with `sandboxed_renderer.bundle.js` / null `binding.startupData.preloadScripts`,
+  before application loading (first at A4E, then at X31-night). The second attempt
+  passed all daylight cases and F14-night. Final
+  `bun tools/flight/cockpit-gun-smoke.ts x31-night` passed independently.
+  Successful scenes had **zero renderer errors**, decoded cockpit images,
+  working look/orbit/center controls without roll input, safe-fire inhibition,
+  actual ammunition debit, minority tracers and running imported audio contexts.
+  The intermittent Electron startup failure remains recorded, not suppressed.
+- `git diff --check`: passed; no staged files or retail bytes added to Git.
+
+The final recorded shot counts after safety reengaged were 85 F14/day,
+30 A4E/day, 80 X31/day, 85 F14/night, 77 X31/night. These include CDP screenshot
+latency while the key remained held and are not cadence measurements; deterministic
+unit tests establish 100 M61 rounds and 20 tracers per second at 120 Hz. A test at
+800 m/s aircraft speed verifies 1,830 m/s forward projectile world speed, plus
+lateral/vertical inherited velocity and gravity. Mk12 pair uses 33⅓ rounds/s.
+
+Screenshots/reports live under `extracted/cockpit-gun-smoke/{f14,a4e,x31,f14-night,x31-night}/`.
+Inspected F14 day/night and X31 night tracers and A4E 720p cockpit: retail alpha
+shows the scene, the artwork expands with the viewport, and red/green luminous
+heads and streaks remain visible at midnight. Cockpit proportions stretch with
+the window; mirrors/gauges are static retail art. Forward art moves/fades while
+looking, with no invented side/rear cockpit. The original HUD is independent of
+the retail HUD glass and is not a recovered conformal gunsight. Audio context
+running establishes active Web Audio, not human listening acceptance.
+
+Remaining: drag/dispersion/recoil, terrain impacts, targets/damage, native cockpit
+layout/working instruments/mirrors, manual audio/visual familiarity, and the
+intermittent Electron startup issue. Full phase 5/6 acceptance is not claimed.
+Linux deferred; Windows launch remains phase 9. Next reproducible step: run
+`bun run dev:electron`, select each installed aircraft, F1, Shift-arrow/Shift-/,
+then Shift-Tab and Tab; listen to the selected gun and compare day/night tracers.
+
+
 
 ## 2026-09-09: Tomcat envelope controls, longitudinal forces and loading
 

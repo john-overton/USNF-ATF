@@ -129,3 +129,35 @@ Totals: USNF'97 1,644 (834 + 316 + 494), ATF Gold 2,496 (947 + 962 + 587), all d
 - The PNG batch maps kind-1 transparency to a free palette index with a
   tRNS entry (255 is normally free in sprites), falling back to RGBA if all
   256 indices are in use. Kind-0 output is a straight indexed PNG.
+
+
+## 2026-09-09: cockpit frame import
+
+`retail.cockpit` exports reviewed high-resolution transparent forward frames as
+self-contained PNG manifests. F-14 uses USNF97 `~F14H.PIC`; A-4E uses USNF97
+`~F4H.PIC`, confirmed by `A4E.PT` → `f4.HUD` → `~f4h`; X-31 uses ATF-GOLD
+`~F31H.PIC`, explicitly named in `F31.HUD`. All three are kind-1 1280×490
+frames and carry their own 64-color palette over the game's flight palette.
+The exporter verifies the HUD string reference and records source hashes.
+The A-4E shared cockpit is retail behavior, not an A-4-specific artwork claim.
+The ATF F31.PT reader does not recover a HUD field, so its module association
+is a reviewed named-resource recipe, not a parsed PT reference.
+
+The PNG retains span-mask transparency, including opaque black pixels; no
+black color key is introduced. Runtime fills the window with the forward art
+and applies original translation/fading during continuous head look. Native
+HUD projection, mirrors, live instruments, and side/rear cockpit geometry are
+not executed or reconstructed. Existing original SVG instruments remain live.
+Actual local images were inspected; parser/export success is separate from
+native cockpit behavior parity.
+
+### 2026-09-09 follow-up: mirror fill masks
+
+The cockpit exporter now flood-fills each reviewed flat mirror interior from an
+authored seed, removes those pixels from the frame alpha and emits a cropped
+RGBA mask and normalized bounds. Only connected pixels matching the seed's
+index are removed; a leak beyond the size bound aborts conversion. F14/F4 frames
+have three such regions; the F31 frame has none. Masks and detailed bounds stay
+in ignored converted output. Mirror optics/camera crops and HUD aperture fitting
+are original rendering, not recovered native module code. This supersedes the
+previous static-mirror limitation for the supported frames.

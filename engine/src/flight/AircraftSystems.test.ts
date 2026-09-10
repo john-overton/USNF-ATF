@@ -32,7 +32,7 @@ describe('USNF-style pilot commands', () => {
     press(state, 'Digit5');
     expect(state.afterburner).toBe(false);
   });
-  test('toggles ignore key repeat and releases; both camera modes are directly selectable', () => {
+  test('toggles ignore key repeat and releases; all camera modes are directly selectable', () => {
     const state = commands();
     for (const code of ['KeyT', 'KeyG', 'KeyH']) {
       press(state, code);
@@ -42,6 +42,8 @@ describe('USNF-style pilot commands', () => {
     expect(state.engineRunning).toBe(false);
     expect(state.gearDown).toBe(false);
     expect(state.hookDown).toBe(true);
+    press(state, 'F1');
+    expect(state.cameraMode).toBe('cockpit');
     press(state, 'F2');
     expect(state.cameraMode).toBe('attitude');
     press(state, 'F3');

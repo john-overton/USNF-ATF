@@ -33,7 +33,10 @@ strings inside are symbol and resource names, not data:
   `~f14_ch`, `~f14_rh`, `~f14_p`, `~f14_w`, `BRAKE`, `winfont`: the HUD
   symbol table naming the `.PIC` overlays (left/centre/right, high variants,
   pitch ladder, warning) for that cockpit.
-- `A4E.PTS`: `IIA4E.PIC`, i.e. the cockpit picture set for the aircraft.
+- `A4E.PTS`: `IIA4E.PIC`, a small aircraft silhouette sprite. Correction
+  (2026-09-09): this is not a cockpit picture set; the earlier identification
+  was incorrect. A4E.PT selects `f4.HUD`, whose `~f4h` reference selects the
+  shared F-4 forward cockpit frame.
 
 So the per-aircraft HUD and cockpit are code plug-ins that bind picture
 names to engine symbols. For the remake they are a lookup table to

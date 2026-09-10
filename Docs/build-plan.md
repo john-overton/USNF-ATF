@@ -104,6 +104,13 @@ Goal: know exactly what we can import before writing engine code that depends on
 
 ### Phase 5: In-app importer
 
+**2026-09-09 scope decision:** at the user's request, the existing developer
+aircraft port workflow is being extended ahead of this phase with F-14,
+A-4E and X-31 cockpit art with fitted HUD, live F14/A4E mirrors, cockpit/orbit
+view controls and an imported practice
+gun with individual ballistic rounds and matching audio. This does not satisfy
+the in-app importer gate or phase 6's targets, sensors and damage deliverable.
+
 - Entry: phase 0 format notes exist for at least PIC, PAL, SH, and PT. Phase 4 defines the target JSON.
 - Work: port the phase 0 Python decoders to TypeScript in `/importer`. First-run flow: pick the disc folder or install folder, validate it, convert, write to app data with attribution metadata. Convert one aircraft (F-14), its cockpit art, HUD fonts, and its `.PT` into the phase 4 schema.
 - Deliverable: the retail F-14 with its retail cockpit flying over real terrain.

@@ -9,7 +9,7 @@ conversion completed. Native game-flight parity is a separate milestone.
 ## Repeat an existing port
 
 The helper has reviewed recipes for **f14**, **a4e**, and **x31**. It runs the SH,
-PT and audio converters, validates their output with the engine parsers, checks
+PT, audio, cockpit and internal-gun converters, validates their output with the engine parsers, checks
 profile identity and the selected scale, and writes a unique complete bundle.
 It does not automatically identify or rig an arbitrary new aircraft.
 
@@ -34,6 +34,8 @@ extracted/aircraft-ports/<id>/<timestamp-and-id>/
   <id>.json                 # geometry, textures, authored rig and provenance
   <id>-flight.json          # converted PT facts and confidence metadata
   audio/<id>.json           # PT-selected PCM and source hashes
+  cockpits/<id>.json        # transparent retail frame and mirror masks
+  <id>-gun.json             # PT/JT-selected gun, PCM and authored ballistics
   port-report.json          # dimensions, moving groups, checks, hashes and limits
 ```
 
@@ -42,7 +44,7 @@ private staging directory; it does not install a partial conversion. `--dry-run`
 prints the recipe and argument arrays without writing files or installing.
 `--install` is optional and uses the existing validated installer after the
 bundle is ready. Installation is atomic per file, not transactional across the
-three files; an I/O failure can leave a mixed installed set. The report records
+installed files; an I/O failure can leave a mixed installed set. The report records
 installation failure and the validated bundle remains available for a retry.
 The helper rejects output directories redirected through symlinks, keeping all
 converted bytes inside the checkout's ignored extraction tree.
@@ -321,3 +323,14 @@ files. Never bundle or commit retail inputs/outputs with the code. Update the
 progress snapshot/log, relevant format notes and phase baseline. Commit only
 the port's work; pushing/publishing requires separate authorization. Mac is the
 current acceptance platform, Linux is deferred, and Windows launch is phase 9.
+
+## Cockpit and practice gun extension
+
+See [cockpit views and practice guns](phase-4-cockpit-guns.md) for the F1/Shift-arrow
+controls, safety, per-aircraft source mappings, ballistics references and desktop
+acceptance command. A4E.PT explicitly selects F4.HUD: import that shared cockpit
+rather than selecting an unrelated image by filename. Gun sound comes from the
+selected JT, not the engine PCM list. Keep raw retail grouped-round/speed fields
+separate from authored individual-round cadence, muzzle speed, tracer color and
+mount locations. A cockpit parser passing does not establish native gauge/view
+parity; gun liveness does not establish collision or damage behavior.
