@@ -242,3 +242,53 @@ th {
   font-size: 1.25cqw;
   color: #e2a05a;
 }
+
+/* With the retail bundle installed the background art and the nine-slice button
+   chrome come from the user's own disc as data URLs. The state is picked by
+   ordinary :hover and :disabled rules, so nothing here needs JavaScript. */
+.menu-frame-art {
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+.menu-panel-art {
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+.menu-panel-art .menu-title {
+  display: none;
+}
+.menu-panel-art .menu-action,
+.menu-panel-art .menu-action:hover:not(:disabled),
+.menu-panel-art .menu-action:disabled {
+  background-color: transparent;
+  border: none;
+  background-repeat: no-repeat, repeat-x, no-repeat;
+  background-position:
+    left center,
+    center center,
+    right center;
+  background-size:
+    auto 100%,
+    auto 100%,
+    auto 100%;
+}
+.menu-panel-art .menu-action {
+  background-image:
+    var(--menu-button-left-normal), var(--menu-button-middle-normal),
+    var(--menu-button-right-normal);
+}
+.menu-panel-art .menu-action:hover:not(:disabled) {
+  background-image:
+    var(--menu-button-left-hover), var(--menu-button-middle-hover), var(--menu-button-right-hover);
+}
+.menu-panel-art .menu-action:active:not(:disabled) {
+  background-image:
+    var(--menu-button-left-pressed), var(--menu-button-middle-pressed),
+    var(--menu-button-right-pressed);
+}
+.menu-panel-art .menu-action:disabled {
+  background-image:
+    var(--menu-button-left-disabled), var(--menu-button-middle-disabled),
+    var(--menu-button-right-disabled);
+}

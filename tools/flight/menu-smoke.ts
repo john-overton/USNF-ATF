@@ -19,9 +19,11 @@ const session = await openDesktop({
   binary: option('--binary'),
   ...(args.includes('--app') ? { app: option('--app') } : {}),
   terrain: option('--terrain', 'extracted/terrain/ukraine'),
+  ...(args.includes('--menu') ? { menu: option('--menu') } : {}),
   out,
   bareLaunch: true,
 });
+const withBundle = args.includes('--menu');
 const evidence: Record<string, unknown> = {};
 try {
   const screen = await session.poll(
@@ -32,6 +34,13 @@ try {
     'main menu',
   );
   assert.equal(screen, 'main-menu', 'A bare launch must show the main menu');
+  // With a ported bundle installed the screen is drawn from the user's own disc;
+  // without one it is our chrome, and the menu must work identically either way.
+  const art = await session.evaluate(
+    `document.querySelector('[data-menu-art]')?.getAttribute('data-menu-art')`,
+  );
+  evidence.art = art;
+  assert.equal(art, withBundle ? 'retail' : 'original');
   await session.capture('main-menu');
   const items = await session.evaluate(
     `Array.from(document.querySelectorAll('[data-menu-command]'), (b) => ({command: b.dataset.menuCommand, disabled: b.disabled}))`,

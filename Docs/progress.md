@@ -14,8 +14,73 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite, a shared sky highlight rolloff and terrain shading contrast | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
 | 4: flight model | Retail PT-envelope default with preserved assisted comparison/fallback and opt-in recovered-native-envelope backend; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, Default F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers, camera-projected gun pipper using nearer terrain or a 1,000 m base range, thick lower closing-range arc (hidden at/above 1 km) and target-input plumbing; cockpit-only HUD and armed-only reticle; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
-| Game shell | Steps 1–4 of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload, and the menu, aircraft select and debrief screens are drawn in original chrome at the geometry `retail.mnu` recovers from `CHOOSEAC.DLG` | The retail bundle (artwork, fonts, sounds), the loadout screen and the quick fight are steps 5–7; the loadout screen is still only its Fly / Select Plane pair. The `.MNU`/`.DLG` widget tables are decoded (`retail.mnu`), so those layouts can be read from the media rather than redrawn; dial and slider positions, tab order and widget state are still unknown. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
+| Game shell | Steps 1–5 of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload, and the menu, aircraft select and debrief screens are drawn at the geometry `retail.mnu` recovers from `CHOOSEAC.DLG`, in original chrome or in the original's own artwork and sounds when a locally ported menu bundle is installed | The loadout screen and the quick fight are steps 6–7; the loadout screen is still only its Fly / Select Plane pair. The bundle carries no retail fonts and no hover or pressed button art, both stated in [menu-porting.md](menu-porting.md). The `.MNU`/`.DLG` widget tables are decoded (`retail.mnu`), so those layouts can be read from the media rather than redrawn; dial and slider positions, tab order and widget state are still unknown. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
 | 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request. Phase 6/7 groundwork brought forward 2026-09-09: retail AI script parser and VM interpreter, `.SEE` detection model, damage/hit-point model with the recovered performance penalties, swept gun-round hit geometry, and a reusable MFD bezel extracted for a future target page. 2026-09-10: game shell planned end to end in [game-shell-plan.md](game-shell-plan.md), and the aircraft port now exports `.PT` hardpoints and the `.JT`/`.GAS`/`.SEE`/`.ECM` stores they name into a validated engine contract | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned. The new AI and combat modules are pure, unit-tested and verified against all 17 retail AI programs, but NONE of it is wired into the flight loop: no multi-aircraft world, no acquisition, no damage applied from rounds. Nine AI action semantics remain open; parser success is not flown-tactics parity. The loadout data is exported, validated and installable but drives nothing: no loadout screen, stores do not feed mass, and the hardpoint `flags` compatibility mask and `maxWeight` unit are still undecoded |
+
+## 2026-09-10: the original menu artwork and sounds, as an optional bundle
+
+Step 5 of [game-shell-plan.md](game-shell-plan.md). The menus can now be drawn
+from a locally owned disc, and the app is unchanged without one — which is the
+normal case and is asserted, not assumed.
+
+The pieces, following the aircraft porting workflow exactly because it already
+satisfies the AGENTS.md retail rules:
+
+- `tools/retail/retail/menu.py` converts one game's menu media into two
+  manifests: layouts and art from the `.DLG` tables `retail.mnu` decoded in step
+  3, and the `&`-prefixed menu sound bank.
+- `tools/menu/port-menu.ts` orchestrates it, validates the result through the
+  engine's own parser before anything is published, writes to
+  `extracted/menu-ports/<game>/<timestamp>/` with a port report, and installs on
+  `--install` through `tools/menu/install-menu.ts`.
+- `engine/src/data/retail-menu.ts` is the validating contract: caps on image
+  size, PCM length, widget counts, label characters and the bundle's total bytes,
+  and a check that each PNG's own `IHDR` agrees with the size the manifest claims.
+- `engine/src/ui/menu/assets.ts` reduces a validated bundle to data URLs and CSS
+  custom properties, loaded once in `Shell.tsx` and handed down, so the menu
+  components stay prop-driven and effect-free.
+- `engine/src/ui/menu/UiAudio.ts` plays the menu one-shots, and the `M` mute
+  listener is now a shared `engine/src/flight/mute.ts` that flight audio and menu
+  audio subscribe to, rather than two window listeners.
+
+Measured on local media: 3 screens (main menu, loadout, debrief), 14 widget
+records, 12 of them labelled, three nine-slice button parts in two states, and
+seven sounds. `screens.json` is 492 KB and `sounds.json` 64 KB, both far inside
+the parser's caps.
+
+**Two things were cut deliberately, and the app says so rather than faking them.**
+The retail proportional fonts are not in the bundle: they are glyph strips with a
+256-entry table, and compositing text glyph by glyph is not something an
+effect-free React component can do, so menu text is the app's own font. And hover
+and pressed button art is not exported, because `ACTION0..3` and `ACTIOD0..3`
+turn out not to be four states: measured on the media they draw 30, 18, 16 and 14
+opaque rows inside boxes 30, 30, 28 and 26 tall, which reads as a size set. Only
+the enabled button and its disabled twin are exported, and hover and pressed are
+a brightness filter in CSS.
+
+Which of that pair is the disabled one is not decoded either; it is read from
+mean colour against the button well drawn into `CHOOSEAC.PIC`. The well averages
+(172, 188, 144); `ACTIOD0M` averages (147, 155, 108) and blends into it, while
+`ACTION0M` averages (212, 196, 163) and stands proud of it. That is the whole
+basis for the mapping, and it is recorded in the bundle's own `limitations`.
+
+Verification. `bun run check` clean at 358 tests: 4 parser tests covering 30
+rejection cases and the total-byte budget, 5 UI audio tests covering the shared
+mute listener and the silent-before-a-gesture path, and the existing menu and
+navigation tests. Python is 101 tests, OK, one skip, including 4 new export tests
+that read local media and skip without it. Against a packaged build,
+`menu-smoke.ts` passes twice: once with no bundle, asserting the screen reports
+`data-menu-art="original"`, and once with the ported bundle copied into the
+isolated profile, asserting `retail` — after which both walk the same
+transitions, so a bundle can change how the menu looks and never what it does.
+Screenshots of both are in `extracted/step5/`. The port itself ran end to end on
+this Mac; `desktop.ts` gained a `--menu` copy option, leaving every other
+script's setup untouched.
+
+[menu-porting.md](menu-porting.md) is the workflow and the limits.
+
+Next: step 6, the loadout screen proper, on the `data/retail-loadout.ts` contract
+that has been sitting ready since this morning.
 
 ## 2026-09-10: the menu is drawn at the geometry the retail dialog gives
 

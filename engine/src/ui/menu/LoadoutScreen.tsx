@@ -1,5 +1,6 @@
 import type { MissionParams } from '../../sim/mission/params';
 import { MenuScreen } from './MenuScreen';
+import type { MenuAssets } from './assets';
 import { BUTTON_HEIGHT, BUTTON_WIDTH, BUTTON_X, type MenuLayout } from './layout';
 import type { MenuAction } from './navigation';
 
@@ -61,10 +62,12 @@ function layout(mission: MissionParams): MenuLayout {
 export function LoadoutScreen({
   mission,
   problems,
+  assets,
   onCommand,
 }: {
   mission: MissionParams;
   problems: readonly string[];
+  assets?: MenuAssets;
   onCommand: (action: MenuAction) => void;
 }) {
   return (
@@ -72,6 +75,7 @@ export function LoadoutScreen({
       screen="loadout"
       layout={layout(mission)}
       problems={problems}
+      {...(assets ? { assets } : {})}
       onCommand={onCommand}
     />
   );

@@ -1,4 +1,5 @@
 import type { AircraftId } from './aircraft-catalog';
+import { isEditingTarget, muteControl } from './mute';
 import type { Platform } from '../platform/Platform';
 
 type ClipRole = 'jet' | 'burner' | 'start' | 'stop';
@@ -33,7 +34,10 @@ export function parseFlightSamples(value: unknown): FlightSamples {
 }
 /** Remove DC and crossfade the tail into the head without a wrap discontinuity.
  * The returned loop starts after the crossfade head; one-shots keep their full duration. */
-export function flightPcm(clip: FlightClip, loop: boolean): Float32Array {
+export function flightPcm(
+  clip: { sampleRate: number; pcm: number[] },
+  loop: boolean,
+): Float32Array {
   const pcm = Float32Array.from(clip.pcm, (x) => (x - 128) / 128);
   const mean = pcm.reduce((a, b) => a + b, 0) / pcm.length;
   for (let i = 0; i < pcm.length; i++) pcm[i] = pcm[i]! - mean;
@@ -140,7 +144,7 @@ export class FlightAudio {
   private sources: (AudioBufferSourceNode | OscillatorNode)[] = [];
   private previous?: FlightAudioState;
   private disposed = false;
-  private muted = false;
+  private unsubscribeMute?: () => void;
   private error: string | undefined;
   private levels = { jet: 0, wind: 0, burner: 0, frequency: 65 };
 
@@ -148,37 +152,18 @@ export class FlightAudio {
     if (!event.isTrusted || this.disposed) return;
     if (event.type === 'keydown') {
       const key = event as KeyboardEvent;
-      if (key.repeat || this.editing(key.target)) return;
+      if (key.repeat || isEditingTarget(key.target)) return;
     }
     this.unlock();
   };
-  private key = (event: KeyboardEvent): void => {
-    if (
-      event.code !== 'KeyM' ||
-      event.repeat ||
-      event.ctrlKey ||
-      event.metaKey ||
-      event.altKey ||
-      this.editing(event.target)
-    )
-      return;
-    event.preventDefault();
-    this.muted = !this.muted;
-    if (this.context && this.master)
-      this.master.gain.setTargetAtTime(this.muted ? 0 : 0.45, this.context.currentTime, 0.04);
-  };
-  private editing(target: EventTarget | null): boolean {
-    return (
-      target instanceof HTMLElement &&
-      (target.isContentEditable ||
-        Boolean(target.closest('input,textarea,select,button,[contenteditable="true"]')))
-    );
-  }
   constructor(private readonly samples?: FlightSamples) {
     // Creating the context only inside a real gesture avoids autoplay warnings.
     window.addEventListener('pointerdown', this.gesture);
     window.addEventListener('keydown', this.gesture);
-    window.addEventListener('keydown', this.key);
+    this.unsubscribeMute = muteControl.subscribe((muted) => {
+      if (this.context && this.master)
+        this.master.gain.setTargetAtTime(muted ? 0 : 0.45, this.context.currentTime, 0.04);
+    });
   }
   private unlock(): void {
     try {
@@ -196,7 +181,7 @@ export class FlightAudio {
     const context = new AudioContext();
     this.context = context;
     const master = context.createGain();
-    master.gain.value = this.muted ? 0 : 0.45;
+    master.gain.value = muteControl.muted ? 0 : 0.45;
     master.connect(context.destination);
     this.master = master;
     const buffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
@@ -344,7 +329,7 @@ export class FlightAudio {
     lastTransition: 'start' | 'stop' | undefined;
   } {
     return {
-      muted: this.muted,
+      muted: muteControl.muted,
       contextState: this.context?.state ?? 'locked',
       error: this.error,
       levels: { ...this.levels },
@@ -366,7 +351,7 @@ export class FlightAudio {
     this.disposed = true;
     window.removeEventListener('pointerdown', this.gesture);
     window.removeEventListener('keydown', this.gesture);
-    window.removeEventListener('keydown', this.key);
+    this.unsubscribeMute?.();
     this.master?.disconnect();
     this.transition?.stop();
     for (const source of this.sources) {

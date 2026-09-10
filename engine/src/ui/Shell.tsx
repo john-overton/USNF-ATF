@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getPlatform } from '../platform';
 import { RendererProbe } from './RendererProbe';
 import { TerrainViewer } from './TerrainViewer';
 import { MainMenu } from './menu/MainMenu';
 import { AircraftSelect } from './menu/AircraftSelect';
 import { LoadoutScreen } from './menu/LoadoutScreen';
 import { Debrief } from './menu/Debrief';
+import { loadMenuAssets, type MenuAssets } from './menu/assets';
+import { UiAudio } from './menu/UiAudio';
 import {
   applyMenuAction,
   flightSummary,
@@ -46,10 +49,38 @@ export function Shell({ search }: { search: string }) {
     screen: isProbeQuery(search) ? 'probe' : initialScreen(search),
     mission: parsed.mission,
   }));
+  // The optional retail bundle, read once and handed down, so the menu components
+  // themselves stay prop-driven and effect-free. Absent is the normal case.
+  const [assets, setAssets] = useState<MenuAssets>();
+  useEffect(() => {
+    let active = true;
+    void loadMenuAssets(getPlatform()).then((loaded) => {
+      if (active) setAssets(loaded);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const audio = useRef<UiAudio>(null);
+  useEffect(() => {
+    const service = new UiAudio(assets?.sounds?.sounds ?? {});
+    audio.current = service;
+    return () => {
+      service.dispose();
+      audio.current = null;
+    };
+  }, [assets]);
   const act = useCallback((action: MenuAction) => {
     // Read the flight's own snapshot as it is left, so the debrief has numbers.
     const summary = flightSummary(window.__flightDiagnostics?.());
-    setState((previous) => applyMenuAction(previous, action, summary));
+    setState((previous) => {
+      const next = applyMenuAction(previous, action, summary);
+      // The original answers a refused command differently from an accepted one.
+      queueMicrotask(() =>
+        audio.current?.play(next.screen === previous.screen ? 'reject' : 'click'),
+      );
+      return next;
+    });
   }, []);
   useEffect(() => {
     // Esc leaves a running session the way the original did, without a reload.
@@ -65,12 +96,15 @@ export function Shell({ search }: { search: string }) {
       <TerrainViewer key={state.screen} mission={state.mission} parseError={parsed.parseError} />
     );
   if (state.screen === 'aircraft-select')
-    return <AircraftSelect mission={state.mission} onCommand={act} />;
+    return (
+      <AircraftSelect mission={state.mission} {...(assets ? { assets } : {})} onCommand={act} />
+    );
   if (state.screen === 'loadout')
     return (
       <LoadoutScreen
         mission={state.mission}
         problems={validateMission(state.mission)}
+        {...(assets ? { assets } : {})}
         onCommand={act}
       />
     );
@@ -79,8 +113,9 @@ export function Shell({ search }: { search: string }) {
       <Debrief
         mission={state.mission}
         {...(state.summary ? { summary: state.summary } : {})}
+        {...(assets ? { assets } : {})}
         onCommand={act}
       />
     );
-  return <MainMenu mission={state.mission} onCommand={act} />;
+  return <MainMenu mission={state.mission} {...(assets ? { assets } : {})} onCommand={act} />;
 }

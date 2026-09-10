@@ -535,6 +535,11 @@ Each step ends green on `bun run check` and is committed separately.
    unused.
 5. **Retail menu bundle**: `port-menu.ts`, `retail-menu.ts`, `UiAudio`. The app
    must still run identically with no bundle installed.
+   **Landed 2026-09-10**, with two deliberate cuts recorded in
+   [menu-porting.md](menu-porting.md): no `fonts.json`, because compositing retail
+   glyph strips is not something an effect-free component can do, and no hover or
+   pressed button art, because `ACTION0..3` measures as a size set rather than as
+   four states.
 6. **Loadout screen** on the `retail-loadout.ts` contract landed on
    2026-09-10; fuel and stores feed `MissionParams`; weight validation and
    display-only performance penalty. Store icons come from the §4.5 bundle.

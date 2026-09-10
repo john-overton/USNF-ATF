@@ -24,7 +24,8 @@ export const RETAIL_MAIN_MENU_RECT = { x: 379, y: 80, width: 238, height: 361 } 
 export const RETAIL_MAIN_MENU_ROWS = [24, 56, 88, 120, 170, 202, 234, 285] as const;
 export const BUTTON_X = 31;
 export const BUTTON_WIDTH = 180;
-export const BUTTON_HEIGHT = 26;
+/** The retail nine-slice button art is 30 px tall, on a 32 px row pitch. */
+export const BUTTON_HEIGHT = 30;
 /** The two rows below the retail group are ours, so our panel is that much taller. */
 const OUR_ROWS = [317, 349] as const;
 
@@ -64,23 +65,38 @@ export interface MenuLayout {
  */
 export const MAIN_MENU_RECT: Rect = { x: 379, y: 40, width: 238, height: 425 };
 
-const ROWS = [...RETAIL_MAIN_MENU_ROWS, ...OUR_ROWS];
-
-export function mainMenuLayout(): MenuLayout {
+/**
+ * With the retail bundle installed the panel is the original's own rect, which has
+ * no room below `Reference` for the two rows we add. They go side by side just
+ * under the panel instead, where the artwork is plain.
+ */
+export function mainMenuLayout(rect: Rect = MAIN_MENU_RECT): MenuLayout {
+  const stacked = rect.height >= (OUR_ROWS[1] ?? 0) + BUTTON_HEIGHT;
+  const ours = stacked
+    ? OUR_ROWS.map((y) => ({ x: BUTTON_X, y, width: BUTTON_WIDTH }))
+    : [
+        { x: BUTTON_X, y: rect.height + 2, width: 86 },
+        { x: BUTTON_X + 94, y: rect.height + 2, width: 86 },
+      ];
+  const places = [
+    ...RETAIL_MAIN_MENU_ROWS.map((y) => ({ x: BUTTON_X, y, width: BUTTON_WIDTH })),
+    ...ours,
+  ];
   return {
-    rect: MAIN_MENU_RECT,
+    rect,
     title: 'Jane’s USNF — fan remake',
-    widgets: MAIN_MENU_ITEMS.map((item, index) => ({
-      type: 'action' as const,
-      x: BUTTON_X,
-      y: ROWS[index] ?? BUTTON_HEIGHT * index,
-      width: BUTTON_WIDTH,
-      height: BUTTON_HEIGHT,
-      command: item.command,
-      label: item.label,
-      disabled: !item.enabled,
-      ...(item.note ? { note: item.note } : {}),
-    })),
+    widgets: MAIN_MENU_ITEMS.map((item, index) => {
+      const place = places[index] ?? { x: BUTTON_X, y: BUTTON_HEIGHT * index, width: BUTTON_WIDTH };
+      return {
+        type: 'action' as const,
+        ...place,
+        height: BUTTON_HEIGHT,
+        command: item.command,
+        label: item.label,
+        disabled: !item.enabled,
+        ...(item.note ? { note: item.note } : {}),
+      };
+    }),
   };
 }
 

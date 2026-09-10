@@ -1,5 +1,6 @@
 import type { MenuAction } from './navigation';
 import { DESIGN_HEIGHT, DESIGN_WIDTH, type MenuLayout, type MenuWidget } from './layout';
+import { buttonChrome, screenBackground, type MenuAssets } from './assets';
 
 /**
  * Every menu is drawn into the same 640x480 box the original used, and the box is
@@ -45,23 +46,32 @@ function MenuButton({
 export function MenuScreen({
   screen,
   layout,
+  assets,
   problems = [],
   onCommand,
   children,
 }: {
   screen: string;
   layout: MenuLayout;
+  /** The optional retail bundle. Absent is the normal case and changes nothing. */
+  assets?: MenuAssets;
   problems?: readonly string[];
   onCommand: (action: MenuAction) => void;
   children?: React.ReactNode;
 }) {
   const { rect } = layout;
+  const background = screenBackground(assets, screen);
   return (
     <div className="menu-root" data-menu-screen={screen}>
-      <div className="menu-frame">
+      <div
+        className={`menu-frame${background ? ' menu-frame-art' : ''}`}
+        {...(background ? { style: { backgroundImage: background } } : {})}
+        data-menu-art={background ? 'retail' : 'original'}
+      >
         <div
-          className="menu-panel"
+          className={`menu-panel${background ? ' menu-panel-art' : ''}`}
           style={{
+            ...buttonChrome(assets),
             left: percent(rect.x, DESIGN_WIDTH),
             top: percent(rect.y, DESIGN_HEIGHT),
             width: percent(rect.width, DESIGN_WIDTH),

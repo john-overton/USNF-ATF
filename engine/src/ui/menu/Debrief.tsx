@@ -1,5 +1,6 @@
 import type { MissionParams } from '../../sim/mission/params';
 import { MenuScreen } from './MenuScreen';
+import type { MenuAssets } from './assets';
 import { debriefLayout } from './layout';
 import type { FlightSummary, MenuAction } from './navigation';
 import { AIRCRAFT } from '../../flight/aircraft-catalog';
@@ -23,10 +24,12 @@ export function debriefLines(summary: FlightSummary | undefined): string[] {
 export function Debrief({
   mission,
   summary,
+  assets,
   onCommand,
 }: {
   mission: MissionParams;
   summary?: FlightSummary;
+  assets?: MenuAssets;
   onCommand: (action: MenuAction) => void;
 }) {
   return (
@@ -36,6 +39,7 @@ export function Debrief({
         aircraft: summary?.aircraftName ?? AIRCRAFT[mission.aircraft].name,
         lines: debriefLines(summary),
       })}
+      {...(assets ? { assets } : {})}
       onCommand={onCommand}
     >
       <p className="menu-summary">Damage is not modelled yet, so no aircraft is ever lost here.</p>
