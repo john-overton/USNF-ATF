@@ -20,6 +20,28 @@ import atlasUrl from './assets/shoreline.png';
 // Clip in projected meters before converting to patch-local float32 coordinates.
 // Interpolated ribbon UV/material weights survive every triangle/tile split.
 type Vertex = number[]; // x,z,s,t, five material weights
+
+/** Seaward extension as a fraction of the landward cross-section; the water line sits at t = SEA_RATIO / (1 + SEA_RATIO). */
+export const SEA_RATIO = 0.7;
+/** Along-coast metres per atlas repeat (384 px). */
+export const COAST_REPEAT_METERS = 128;
+/** Ribbon vertices float at least this high so the sea side sits on the water plane (+0.2). */
+export const RIBBON_LIFT = 0.5;
+/**
+ * Visual widening of the pipeline cross-sections (nominal 10–25 m landward). The
+ * pipeline's narrow-land safety was computed at 1x; widened ribbons may overlap
+ * translucently on spits and around small islands. Test value, not accepted art.
+ */
+export const RIBBON_WIDTH_SCALE = 3;
+/** Landward ribbon edge, scaled from the water-edge point. */
+export function landward(p: ShorePoint): readonly [number, number] {
+  return [p[0] + (p[2] - p[0]) * RIBBON_WIDTH_SCALE, p[1] + (p[3] - p[1]) * RIBBON_WIDTH_SCALE];
+}
+/** Water-edge point mirrored seaward by SEA_RATIO of the (scaled) landward offset. */
+export function seaward(p: ShorePoint): readonly [number, number] {
+  const k = RIBBON_WIDTH_SCALE * SEA_RATIO;
+  return [p[0] - (p[2] - p[0]) * k, p[1] - (p[3] - p[1]) * k];
+}
 interface Segment {
   a: ShorePoint;
   b: ShorePoint;
@@ -67,13 +89,17 @@ export class ShoreIndex {
           b = ring.points[i]!;
         if (Math.hypot(a[2] - a[0], a[3] - a[1]) + Math.hypot(b[2] - b[0], b[3] - b[1]) < 0.1)
           continue;
+        const sa = seaward(a),
+          sb = seaward(b),
+          la = landward(a),
+          lb = landward(b);
         const s = {
           a,
           b,
-          minX: Math.min(a[0], a[2], b[0], b[2]),
-          minZ: Math.min(a[1], a[3], b[1], b[3]),
-          maxX: Math.max(a[0], a[2], b[0], b[2]),
-          maxZ: Math.max(a[1], a[3], b[1], b[3]),
+          minX: Math.min(la[0], lb[0], sa[0], sb[0]),
+          minZ: Math.min(la[1], lb[1], sa[1], sb[1]),
+          maxX: Math.max(la[0], lb[0], sa[0], sb[0]),
+          maxZ: Math.max(la[1], lb[1], sa[1], sb[1]),
         };
         for (let x = Math.floor(s.minX / 4096); x <= Math.floor(s.maxX / 4096); x++)
           for (let z = Math.floor(s.minZ / 4096); z <= Math.floor(s.maxZ / 4096); z++) {
@@ -94,8 +120,6 @@ export class ShoreIndex {
   }
 }
 interface Binding {
-  bottom?: boolean;
-  wallNormal?: readonly [number, number];
   ids: number[];
   weights: number[];
 }
@@ -116,10 +140,11 @@ export function buildShoreSurface(index: ShoreIndex, patch: SeamPatch): ShoreSur
     weights: number[] = [],
     extra: number[] = [],
     bindings: Binding[] = [];
+  // The quad runs from the seaward edge (t = 0) across the water line to the
+  // landward edge (t = 1); the atlas rows are painted with the same layout.
   const corner = (p: ShorePoint, inside: boolean): Vertex => [
-    p[inside ? 2 : 0],
-    p[inside ? 3 : 1],
-    p[4] / 32,
+    ...(inside ? landward(p) : seaward(p)),
+    p[4] / COAST_REPEAT_METERS,
     inside ? 1 : 0,
     ...Array.from({ length: 5 }, (_, k) => (k === p[5] ? 1 : 0)),
   ];
@@ -147,22 +172,14 @@ export function buildShoreSurface(index: ShoreIndex, patch: SeamPatch): ShoreSur
             c = tri[2]!;
           const den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
           if (Math.abs(den) < 1e-8) continue;
-          const append = (
-            v: Vertex,
-            wallNormal?: readonly [number, number],
-            bottom = false,
-          ): void => {
+          const append = (v: Vertex): void => {
             const wa = ((b[1] - c[1]) * (v[0]! - c[0]) + (c[0] - b[0]) * (v[1]! - c[1])) / den;
             const wb = ((c[1] - a[1]) * (v[0]! - c[0]) + (a[0] - c[0]) * (v[1]! - c[1])) / den;
             positions.push(v[0]! - x, 0, v[1]! - z);
-            uv.push(v[2]!, wallNormal ? (bottom ? 0.5 : 0.2) : v[3]!);
+            uv.push(v[2]!, v[3]!);
             weights.push(...v.slice(4, 8));
             extra.push(v[8]!);
-            bindings.push({
-              ids,
-              weights: [wa, wb, 1 - wa - wb],
-              ...(wallNormal ? { wallNormal, bottom } : {}),
-            });
+            bindings.push({ ids, weights: [wa, wb, 1 - wa - wb] });
           };
           for (let k = 1; k + 1 < polygon.length; k++) {
             const p = polygon[0]!,
@@ -173,24 +190,6 @@ export function buildShoreSurface(index: ShoreIndex, patch: SeamPatch): ShoreSur
             )
               continue;
             for (const v of [p, q, r]) append(v);
-          }
-          // Seal the visible cut down to sea level; an elevated bank must not
-          // leave background visible between the ground edge and the water plane.
-          for (let k = 0; k < polygon.length; k++) {
-            const p = polygon[k]!,
-              q = polygon[(k + 1) % polygon.length]!;
-            if (Math.abs(p[3]!) > 1e-8 || Math.abs(q[3]!) > 1e-8) continue;
-            const dx = q[0]! - p[0]!,
-              dz = q[1]! - p[1]!,
-              length = Math.hypot(dx, dz);
-            if (length < 0.001) continue;
-            const normal: readonly [number, number] = [dz / length, -dx / length];
-            append(p, normal);
-            append(q, normal);
-            append(p, normal, true);
-            append(q, normal);
-            append(q, normal, true);
-            append(p, normal, true);
           }
           if (bindings.length > 16000) return undefined;
         }
@@ -254,9 +253,10 @@ export function drapeShoreSurface(surface: ShoreSurface, patch: SeamPatch): void
       ny += w * evaluated[at + 2]!;
       nz += w * evaluated[at + 3]!;
     }
-    out.setY(i, binding.bottom ? Math.min(y, 0.2) : y);
-    if (binding.wallNormal) n.setXYZ(i, binding.wallNormal[0], 0, binding.wallNormal[1]);
-    else n.setXYZ(i, nx, ny, nz);
+    // The seaward half and any shore ground below sea level float just above
+    // the water plane; the ribbon is the visible coast where the DEM dips.
+    out.setY(i, Math.max(y, RIBBON_LIFT));
+    n.setXYZ(i, nx, ny, nz);
   }
   out.needsUpdate = true;
   n.needsUpdate = true;
@@ -286,7 +286,7 @@ export class ShoreLayer {
   readonly atlas: Texture;
   private resourceBytes = 0;
   get bytes(): number {
-    return this.resourceBytes + this.index.bytes + (128 * 640 * 4 * 7) / 3;
+    return this.resourceBytes + this.index.bytes + (384 * 640 * 4 * 7) / 3;
   }
   triangles = 0;
   pending = 0;
@@ -382,13 +382,13 @@ export class ShoreLayer {
             shader.fragmentShader;
           shader.fragmentShader = shader.fragmentShader.replace(
             '#include <map_fragment>',
-            `vec3 shoreColor=vec3(0.0);
+            `vec4 shore=vec4(0.0);
             for(int i=0;i<5;i++) {
               float w=i==4?vShoreMarsh:vShoreWeights[i];
-              shoreColor+=texture2D(shoreAtlas,vec2(fract(vShoreUv.x),(float(i)*128.0+4.0+clamp(vShoreUv.y,0.0,1.0)*120.0)/640.0)).rgb*w;
+              shore+=texture2D(shoreAtlas,vec2(fract(vShoreUv.x),(float(i)*128.0+2.0+clamp(vShoreUv.y,0.0,1.0)*124.0)/640.0))*w;
             }
-            diffuseColor.rgb*=shoreColor;
-            diffuseColor.a*=smoothstep(0.0,0.1,vShoreUv.y)*(1.0-smoothstep(0.55,1.0,vShoreUv.y))*(1.0-smoothstep(12000.0,18000.0,vShoreDistance));
+            diffuseColor.rgb*=shore.rgb;
+            diffuseColor.a*=shore.a*(1.0-smoothstep(12000.0,18000.0,vShoreDistance));
             float noise=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
             if(sourceOutgoing ? noise<sourceFade : noise>=sourceFade) discard;`,
           );
@@ -398,7 +398,7 @@ export class ShoreLayer {
           );
           patchCloudShadow(shader);
         };
-        material.customProgramCacheKey = () => 'terrain-shore-ribbon-v2-cloud-shadow';
+        material.customProgramCacheKey = () => 'terrain-shore-ribbon-v3-seaward-alpha';
         const mesh = new Mesh(surface.geometry, material);
         mesh.receiveShadow = true;
         mesh.renderOrder = 1;

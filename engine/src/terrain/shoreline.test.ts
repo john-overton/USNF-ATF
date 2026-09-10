@@ -1,7 +1,16 @@
 import { ShoreWaterMask } from './shoreline-mask';
 import { expect, test } from 'bun:test';
 import { buildPatch } from './mesh';
-import { ShoreIndex, buildShoreSurface, drapeShoreSurface, clipPolygon } from './shoreline';
+import {
+  ShoreIndex,
+  buildShoreSurface,
+  drapeShoreSurface,
+  clipPolygon,
+  seaward,
+  SEA_RATIO,
+  RIBBON_LIFT,
+  RIBBON_WIDTH_SCALE,
+} from './shoreline';
 import { parseShorelines, type ShoreRing } from './shoreline-data';
 import type { TerrainChunk } from '../data';
 import { TerrainSeams, type SeamPatch } from './seams';
@@ -101,7 +110,7 @@ test('ribbons follow the exact morphed triangles and shared tile boundary', () =
               (1 - w) +
               g.getAttribute('seamHeight').getX(id) * w);
         }
-        expect(pos.getY(i)).toBeCloseTo(b.bottom ? Math.min(expected, 0.2) : expected, 4);
+        expect(pos.getY(i)).toBeCloseTo(Math.max(expected, RIBBON_LIFT), 4);
       }
     }
     const edge = (i: number) => {
@@ -192,29 +201,39 @@ test('visual sea mask never erases a sub-texel dry island', () => {
   texture.dispose();
 });
 
-test('bank faces on terrain grid lines are emitted only once', () => {
-  const patch = { x: 0, z: 0, span: 160, depth: 1, key: 'bank' };
+test('ribbons extend seaward by SEA_RATIO and float above the water plane', () => {
+  const patch = { x: 0, z: 0, span: 160, depth: 1, key: 'sea' };
   const p = {
     chunk,
     patch,
     morph: 0,
-    geometry: buildPatch(chunk, new Float32Array(65536).fill(10), patch).geometry,
+    geometry: buildPatch(chunk, new Float32Array(65536).fill(-3), patch).geometry,
   };
-  const index = new ShoreIndex([
-    {
-      id: 'segment',
-      points: [
-        [20, 20, 10, 20, 0, 0, 0],
-        [20, 80, 10, 80, 60, 0, 0],
-      ],
-    },
-  ]);
-  const surface = buildShoreSurface(index, p)!;
+  const points = [
+    [60, 20, 70, 20, 0, 1, 0],
+    [60, 80, 70, 80, 60, 1, 0],
+  ] as const;
+  expect(seaward(points[0])[0]).toBeCloseTo(60 - 10 * SEA_RATIO * RIBBON_WIDTH_SCALE, 8);
+  expect(seaward(points[0])[1]).toBeCloseTo(20, 8);
+  const surface = buildShoreSurface(new ShoreIndex([{ id: 'segment', points }]), p)!;
   drapeShoreSurface(surface, p);
-  expect(surface.bindings.filter((b) => b.wallNormal).length / 3).toBe(12);
-  const positions = surface.geometry.getAttribute('position');
-  for (let i = 0; i < surface.bindings.length; i++)
-    if (surface.bindings[i]!.bottom) expect(positions.getY(i)).toBeCloseTo(0.2, 6);
+  const positions = surface.geometry.getAttribute('position'),
+    uv = surface.geometry.getAttribute('shoreUv');
+  let minX = Infinity,
+    maxX = -Infinity,
+    minT = Infinity,
+    maxT = -Infinity;
+  for (let i = 0; i < positions.count; i++) {
+    expect(positions.getY(i)).toBeCloseTo(RIBBON_LIFT, 6);
+    minX = Math.min(minX, positions.getX(i));
+    maxX = Math.max(maxX, positions.getX(i));
+    minT = Math.min(minT, uv.getY(i));
+    maxT = Math.max(maxT, uv.getY(i));
+  }
+  expect(minX).toBeCloseTo(60 - 10 * SEA_RATIO * RIBBON_WIDTH_SCALE, 4);
+  expect(maxX).toBeCloseTo(60 + 10 * RIBBON_WIDTH_SCALE, 4);
+  expect(minT).toBeCloseTo(0, 6);
+  expect(maxT).toBeCloseTo(1, 6);
   surface.geometry.dispose();
   p.geometry.dispose();
 });

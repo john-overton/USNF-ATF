@@ -96,13 +96,19 @@ This deliberately retains a small coarse-ground fringe instead of opening holes.
 Mask spacing depends on the displayed patch size; this is not a replacement for
 precise terrain/water intersection geometry. Source fades remain complementary.
 
-The five original prebaked material swatches live in
-`engine/src/terrain/assets/shoreline.png` (128 × 640). They repeat every 32 m along
-the coast and blend across the ribbon; the generator is
-`tools/terrain/bake-shoreline-texture.py`. No source satellite or retail pixels are
-in that texture. It is a first art pass, with grain/strata and directly authored
-RGB colors. The broader seasonal color maps remain independent, so vegetation
-palettes can change without tinting sand and rock.
+The five material rows live in `engine/src/terrain/assets/shoreline.png` (384 × 640
+RGBA, 2026-09-09 revision). Each row spans the cross-section from the sea side to
+the land side with the water line at about 0.41; the ribbon geometry now extends
+seaward by `SEA_RATIO` (0.7) of its landward offset and floats at least 0.5 m so the
+sea half sits on the water plane. Rows repeat every 128 m along the coast, blend
+across the ribbon by class weight, and carry alpha that fades to zero at both
+edges. The generator is `tools/terrain/bake-shoreline-texture.py`; it colors the
+user's own grayscale paintings from ignored `gameassets/textures/` (beach, rocks,
+cliff, marsh) with per-class land ramps and a water-to-foam ramp toward the
+engine's water color. No source satellite or retail pixels are in that texture.
+`RIBBON_WIDTH_SCALE` (3) is a visual test widening beyond the pipeline's safety
+analysis; overlaps on narrow land are expected until it is retuned or moved into
+the pipeline. The seasonal color maps remain independent.
 
 Meshes fade from 12 to 18 km distance. Construction is limited to one candidate
 patch per frame; active ribbon/mask resources have a 32 MiB estimate budget and

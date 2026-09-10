@@ -16,6 +16,48 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
 
+## 2026-09-09: retail coastline research and painted two-sided shoreline ribbons
+
+**How the originals draw coasts (observed, not yet in `Docs/formats/`).** The
+`.T2` grid only gives a 2.5 km land/sea boundary. Coast detail comes from
+hand-painted 256×256 `.PIC` "tmap" tiles per theater (`UKR0..28`, `VIE0..41`,
+`BAL0..65`, `EGY0..48`, `FRA0..46`, `VLA0..51`; Kurils use 128×128 `K<xxx><yyy>`),
+placed by `tmap x z index rot` / `tmap_named name x z` lines in the theater `.MM`
+master mission on a 4-cell (10 km) grid with 0–3 rotation; both executables
+carry an in-game tmap editor. About 20 of the shared 29-tile base set are
+sea/land edge shapes with painted beach lines and sandbars. Fallback ground is
+`LAND.PIC`, water `OCEAN0..6.PIC` + `WAVE01/02.PIC`; palette bands 0xC0..0xFE come
+from the `.LAY` PE modules at runtime, which is why extracted terrain previews are
+magenta. New `.T2` facts: tile table = (0, origin-cell color index, majority land
+class); land class 1 is deep water and `(0xFF, 0)` a 1–5 cell near-shore band;
+Vietnam uses color bank 0xC2..0xC7, all others 0xD0..0xDA; the Baltics water mask
+is not an exception. Hypotheses: the shallow band is drawn distinctly; `VLAND.PIC`
+is Vietnam ground; the clutter table is indexed by land class. Format docs still
+need updating from this.
+
+**Rebuild change: two-sided painted ribbons.** The shoreline ribbon now spans
+from a seaward edge across the water line to the landward edge
+(`SEA_RATIO` 0.7 of the landward offset, water line at t≈0.41), all vertices
+float at least 0.5 m so the sea half sits on the water plane, and the bank faces
+are removed (the sloped seaward half replaces them). The atlas is 384×640 RGBA:
+five rows from the user's own grayscale paintings in ignored
+`gameassets/textures/` (beach, rocks, cliff, marsh; unknown = muted beach), made
+seamless, box-downsampled ≈5.7×, colored by a per-class two-tone land ramp and a
+water-to-foam ramp toward the engine's slate water, with alpha fading at both
+edges so the strip blends rather than outlining. The along-coast repeat is 128 m.
+`RIBBON_WIDTH_SCALE` = 3 widens the pipeline cross-sections visually; the
+pipeline's narrow-land safety was computed at 1×, so slivers and translucent
+overlaps appear on spits and small islands. This is a test value, not accepted art.
+
+Evidence: `bun run check` 214 pass; fresh unpackaged build; shoreline smoke against
+`extracted/terrain/ukraine-shorelines` at noon (`time=12`) →
+`extracted/terrain-shoreline-seaward/{summer,winter}.png`, 60 fps, 15,459 ribbon
+triangles, 72 MiB estimate, no runtime errors. The summer frame reads as a beach/
+rock coast with a foam line instead of a grey outline. Not measured: flight-mode
+performance, Odesa detail waypoint, other theaters. Next: decide on the width
+scale (or move widening into the pipeline with its safety checks), retune class
+palettes against the seasonal maps, and document tmaps in `Docs/formats`.
+
 ## 2026-09-09: compass direction, cloud silhouettes, sun highlight and autopilot
 
 A polish pass over four things the user reported flying the practice mission.
