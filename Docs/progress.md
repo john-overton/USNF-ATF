@@ -12,7 +12,7 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 0: retail toolkit | Containers, images/fonts and data readers; bounded nearest-detail F-14 static export with textures | F-14 is recognizable in packaged flight. General SH interpreter, native animation semantics and unified deliverable remain open |
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
-| 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite and a shared sky highlight rolloff | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
+| 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite, a shared sky highlight rolloff and terrain shading contrast | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
 | 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned |
 
@@ -180,6 +180,57 @@ rock coast with a foam line instead of a grey outline. Not measured: flight-mode
 performance, Odesa detail waypoint, other theaters. Next: decide on the width
 scale (or move widening into the pipeline with its safety checks), retune class
 palettes against the seasonal maps, and document tmaps in `Docs/formats`.
+
+## 2026-09-09: terrain shading contrast
+
+The terrain read as one flat wash at altitude, with hillsides blending into the next
+ridge. New `engine/src/terrain/light-contrast.ts` widens the gap between a sunlit face
+and a shaded one by scaling the two diffuse terms apart in the terrain material: the
+direct term, which is what varies from face to face, goes up by the setting, and the
+hemisphere fill, which is near constant across the scene and is therefore the part
+doing the flattening, comes down by half as much. It is patched in at
+`#include <aomap_fragment>`, after the light loop and after the cloud shadow has
+already dimmed the direct term, and before the diffuse terms are summed.
+
+Doing it on the light rather than as a curve over the finished frame is the point: the
+sky, the sun disc, the clouds and the haze are not shaded surfaces, and a curve over
+the final pixel would stretch the fog along with the ground it is hiding.
+
+**The value is 0.8, chosen by the user against the running renderer, not derived.** A
+temporary slider was added under the time-of-day control so it could be dialled in
+live, then removed once the value was picked; `?contrast=<fraction>` remains for
+comparing values without a rebuild, and there is no in-app control.
+
+What it measures on the Crimean ridge, 10:00, clear, 1280x768 on this M3, over the
+foreground terrain of the same frame:
+
+| Setting | mean sRGB luminance | standard deviation |
+|---|---|---|
+| off | 47.5 | 2.22 |
+| shipped 0.8 | 74.0 | 2.80 |
+
+So it brightens as well as separates, which the fill reduction restrains rather than
+cancels. That is recorded in the module comment as what it does; the earlier draft of
+that comment claimed the mean was held, and the measurement above is what corrected it.
+Checked at 13:00 as well: no clipping on sunlit slopes.
+
+Two earlier approaches to the same complaint were built and discarded on the user's
+direction, and are not in the tree: elevation contour lines like a topographic chart,
+and cel-shaded ink — polygon edges found from the patch cell lattice plus a depth
+silhouette. Worth recording from the second one, since it will come up again if
+outlines are revisited: only one pass may sample the scene depth. That texture is
+attached to one of the composer's two ping-pong targets, so a second depth-sampling
+pass inevitably writes to the target the texture is attached to, and the driver
+rejects it outright as a framebuffer feedback loop
+(`GL_INVALID_OPERATION: Feedback loop formed between Framebuffer and active Texture`).
+A silhouette pass therefore has to share the cloud composite, which already holds that
+depth, or the scene needs a dedicated depth target outside the ping-pong pair.
+
+Verification on this Mac against this source: `bun run check` — typecheck, lint,
+format and 245 bun tests. Seven new tests cover the arithmetic, the shared uniform box,
+the query, and that the three shader include this patches still exists and still sits
+after the lights and before the diffuse sum. Driven in Electron over CDP at three times
+of day: no shader errors, no exceptions.
 
 ## 2026-09-09: compass direction, cloud silhouettes, sun highlight and autopilot
 

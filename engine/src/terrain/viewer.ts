@@ -43,6 +43,12 @@ import { SourceTransition } from './transition';
 import { waypointDestination, type TeleportWaypoint } from './teleport';
 import { SkyLayer } from './sky';
 import { patchCloudShadow } from './cloud-shadow';
+import {
+  parseContrastQuery,
+  patchTerrainLightContrast,
+  setTerrainContrast,
+  TERRAIN_CONTRAST,
+} from './light-contrast';
 import { marchedLayer } from '../sim/environment/clouds';
 import {
   Environment,
@@ -85,6 +91,8 @@ export interface TerrainDiagnostics {
   imageryAttribution?: string;
   paint?: string;
   paintModes?: string[];
+  /** Extra separation between lit and shaded ground, as a fraction. */
+  contrast: number;
   flight?: FlightDiagnostics;
   mirrors?: ReturnType<CockpitMirrors['diagnostics']>;
   status: 'loading' | 'ready' | 'error';
@@ -189,6 +197,10 @@ export function startTerrainViewer(
     ...(query.wind === undefined ? {} : { wind: query.wind }),
   });
   let cloudQuality: CloudQuality = query.clouds ?? 'half';
+  // Parsed before any GPU resource exists, so a bad value surfaces through the
+  // viewer's explicit error path rather than leaking a context.
+  const contrast = parseContrastQuery(window.location.search) ?? TERRAIN_CONTRAST;
+  setTerrainContrast(contrast);
   // Step count is a URL-only performance control; the panel exposes quality.
   const cloudSteps = query.cloudSteps ?? 40;
   // SkyLayer owns the background, fog and both lights from here on.
@@ -277,6 +289,7 @@ export function startTerrainViewer(
   };
   const d: TerrainDiagnostics = {
     environment: environmentDiagnostics(),
+    contrast,
     status: 'loading',
     error: '',
     frames: 0,
@@ -316,6 +329,7 @@ export function startTerrainViewer(
   };
   const diagnostics = (): TerrainDiagnostics => ({
     ...d,
+    contrast,
     environment: environmentDiagnostics(),
     camera: { ...world },
     origin: { ...d.origin },
@@ -625,8 +639,10 @@ export function startTerrainViewer(
               if(sourceOutgoing ? sourceNoise<sourceFade : sourceNoise>=sourceFade) discard;`,
             );
             patchCloudShadow(shader);
+            patchTerrainLightContrast(shader);
           };
-          material.customProgramCacheKey = () => 'terrain-shared-edge-imagery-v5-cloud-shadow';
+          material.customProgramCacheKey = () =>
+            'terrain-shared-edge-imagery-v6-cloud-shadow-light-contrast';
           const mesh = new Mesh(built.geometry, material);
           // The patch rewrites `transformed` inside begin_vertex, which runs
           // before Three's shadow chunk, so morphed heights reach the receiver.
