@@ -1,6 +1,6 @@
 # Audio gap follow-up — 2026-09-10
 
-Source checkpoint: `cd0176ba4765630beb511a287ef9514c2936681f` on `main`, already
+Source checkpoint: `6d941027333d43ee73f6854c90d1a2da89a09f42` on `main`, already
 pushed to `origin/main` before this follow-up. Measurements test the working
 follow-up on that parent, not the future commit hash. Linux x64/Omarchy,
 Bun1.4.2, Node26.8.1, Python3.14.7. No retail/generated output is committed.

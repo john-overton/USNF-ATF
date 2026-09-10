@@ -7,7 +7,7 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-10
 
-**Audio gap follow-up:** checkpoint `cd0176ba4765630beb511a287ef9514c2936681f`
+**Audio gap follow-up:** checkpoint `6d941027333d43ee73f6854c90d1a2da89a09f42`
 is committed/pushed on main. Strict media audit recovered a separately labeled48s
 partial S35_S soundtrack, not seven complete movies. RPN0 pitch range, sustain,
 finite loops and pressure preservation improved; offline MIDI/user-bank audition

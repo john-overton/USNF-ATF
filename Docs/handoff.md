@@ -2,7 +2,7 @@
 
 ## Latest: remaining audio gaps follow-up
 
-Checkpoint **`cd0176ba4765630beb511a287ef9514c2936681f`** is committed/pushed on
+Checkpoint **`6d941027333d43ee73f6854c90d1a2da89a09f42`** is committed/pushed on
 `main`; its415 Bun/50 Python/16 harness and three live results are preserved in
 [audio gap baseline](baselines/audio-gaps.md). Earlier “nothing committed/pushed”
 statements below are historical. No manual compaction API was available; this
