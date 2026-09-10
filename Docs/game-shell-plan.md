@@ -521,6 +521,11 @@ Each step ends green on `bun run check` and is committed separately.
    untouched.
 3. **`tools/retail/retail/mnu.py` + `Docs/formats/mnu.md` + formats index
    correction (`LAY` is not UI).** Pure research, no engine change.
+   **Landed 2026-09-10.** 182 of 186 tables decode; record boundaries come from
+   `.reloc` rather than a fixed stride, because the stride differs by widget
+   class. The claim in section 2.1 that `CHOOSEAC.DLG` matches the converted art
+   pixel for pixel holds for the rect and not for the button rows; see the
+   progress entry.
 4. **Menu components and layouts**, original chrome only, no retail bundle.
    Main menu, aircraft select, debrief. Gate: menu unit tests.
 5. **Retail menu bundle**: `port-menu.ts`, `retail-menu.ts`, `UiAudio`. The app

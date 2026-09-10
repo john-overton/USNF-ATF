@@ -22,7 +22,7 @@ Header keys (order as in the files):
 | `textFormat` | | flag |
 | `brief`, `briefmap`, `selectplane`, `armplane` | | which pre-flight screens to show |
 | `map` | `kurile.T2` | terrain, see [t2.md](t2.md); `~ukr6.t2` / `$bal2.t2` are campaign variant names of the base terrain |
-| `layer` | `day2.LAY 3` | UI layer / time of day art |
+| `layer` | `day2.LAY 3` | sky and sea layer plug-in ([README](README.md)); `.LAY` is not UI |
 | `clouds`, `wind` | `16493`, `-76 20` | weather |
 | `view` | `1842 377487 314572` | initial camera |
 | `sides2` / `sides3` | 19 hex bytes on following tab-indented lines | side / nationality table |

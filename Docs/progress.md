@@ -14,8 +14,83 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite, a shared sky highlight rolloff and terrain shading contrast | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
 | 4: flight model | Retail PT-envelope default with preserved assisted comparison/fallback and opt-in recovered-native-envelope backend; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, Default F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers, camera-projected gun pipper using nearer terrain or a 1,000 m base range, thick lower closing-range arc (hidden at/above 1 km) and target-input plumbing; cockpit-only HUD and armed-only reticle; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
-| Game shell | Steps 1–2 of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, and a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload | Menu is a structural placeholder; the recovered retail layouts, artwork, sounds, loadout screen and quick fight are steps 3–7. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
+| Game shell | Steps 1–3 of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, and a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload | Menu is a structural placeholder; the recovered retail layouts, artwork, sounds, loadout screen and quick fight are steps 4–7. The `.MNU`/`.DLG` widget tables are decoded (`retail.mnu`), so those layouts can be read from the media rather than redrawn; dial and slider positions, tab order and widget state are still unknown. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
 | 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request. Phase 6/7 groundwork brought forward 2026-09-09: retail AI script parser and VM interpreter, `.SEE` detection model, damage/hit-point model with the recovered performance penalties, swept gun-round hit geometry, and a reusable MFD bezel extracted for a future target page. 2026-09-10: game shell planned end to end in [game-shell-plan.md](game-shell-plan.md), and the aircraft port now exports `.PT` hardpoints and the `.JT`/`.GAS`/`.SEE`/`.ECM` stores they name into a validated engine contract | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned. The new AI and combat modules are pure, unit-tested and verified against all 17 retail AI programs, but NONE of it is wired into the flight loop: no multi-aircraft world, no acquisition, no damage applied from rounds. Nine AI action semantics remain open; parser success is not flown-tactics parity. The loadout data is exported, validated and installable but drives nothing: no loadout screen, stores do not feed mass, and the hardpoint `flags` compatibility mask and `maxWeight` unit are still undecoded |
+
+## 2026-09-10: the UI tables are decoded, and `.LAY` is not UI
+
+Step 3 of [game-shell-plan.md](game-shell-plan.md). Pure research: no engine
+code changed, and nothing here affects what the app does today.
+
+`tools/retail/retail/mnu.py` decodes `.MNU` and `.DLG`. They are data-only Phar
+Lap `PL` images of the family already documented for `.FNT` and `.HUD`: an `MZ`
+stub, a `CODE` section holding the table, `.reloc` listing every pointer in it,
+and for `.DLG` an `.idata` importing from `main.dll` — the host executable's own
+export table, as [formats/ai.md](formats/ai.md) established for the AI plug-ins.
+The only x86 present is a run of six-byte `jmp [IAT]` thunks, and that is the
+useful part: **the imported name is the widget class**, so `_DrawAction`,
+`_DrawDial`, `_DrawRocker`, `_DrawListBox` and the rest are read off the import
+table rather than inferred.
+
+Measured on local media, 2026-09-10: 182 of the 186 `.MNU`/`.DLG` files across
+both discs decode, giving 1,113 widget records in 25 classes, 113 labels that
+live in the file, 242 supplied by the host through `_okString`/`_cancelString`/
+`_exitString`, and 62 menu entries. The four that do not decode — ATF's
+`NETIPX2`, `NETJOIN`, `NETNEW`, `NEWNET` — have no `CODE` section at all, only
+`.reloc` and a `$$DOSX` stub, so they carry no table.
+
+Two things the decoder does differently from the plan's sketch, both because the
+media said so:
+
+- **Record boundaries are measured, not strided.** The plan recorded a fixed
+  38-byte stride from `CHOOSEAC.DLG`, where every record is a `_DrawAction`.
+  `LOADORD.DLG` packs a `_DrawRocker` in 39 bytes and a `_DrawDial` in 31, so
+  the decoder walks `.reloc` instead: a relocated dword resolving to a thunk
+  starts a record, and the dword at `+0x14` is its label.
+- **A record's class pointer may be null**, meaning the host chooses the class.
+  `QUIKMISS.DLG` is two real buttons plus 61 such records whose label slot points
+  at an 80-byte run of zeroes — storage the game fills in per mission. They are
+  reported as host-supplied with `runtime_text`, not given an invented class.
+
+**A correction to the 2026-09-10 plan entry.** It said `CHOOSEAC.DLG` matches the
+converted `CHOOSEAC.png` "pixel for pixel, including the break between the
+mission group and the campaign group". The rect does: counting differing pixels
+between adjacent rows and columns of that image puts the strongest vertical edge
+at x=379 with its pair at x=616-617, and the top edge at y=80 where exactly 238
+pixels change — left, right and top match `(379, 80, 238, 361)` to the pixel.
+The button rows do not, because the background art contains no buttons at all;
+the `ACTION*` nine-slice sprites are composited at run time. The eight `y`
+values rest on the record layout alone.
+
+Still open, and stated as such in [formats/mnu.md](formats/mnu.md): the `x`/`y`
+pair at `+0x04`/`+0x06` is confirmed only for classes carrying a text label —
+`LOADORD.DLG`'s two dials both decode to `(33, 38)`, which cannot be right for
+two visible dials, so those classes keep their position elsewhere in the record.
+26 records across both discs trip that check and are reported. Tab order, the
+enabled state, the sprite set a widget uses and a dial's range are all unknown.
+The `.MNU` node tree is pinned only for its text and accelerators; the flag byte
+in front of each label is reported raw.
+
+`ARMPLANE.MNU` decodes to "Weapons", "Unload All" and "Cheat (load anything
+anywhere)" — independent confirmation that the original enforces a per-station
+compatibility rule we still cannot reproduce, since the `.PT` hardpoint `flags`
+mask remains undecoded ([formats/pt.md](formats/pt.md)).
+
+[formats/README.md](formats/README.md) listed `MNU`/`LAY`/`DLG` as one row of
+"unknown — UI". That row is now split, and the `LAY` half was simply wrong:
+`DAY1`, `DAY2`, `CLOUD1`, `FOG1` and their `V` variants name `wave1.SH` and
+`ocean*06.PIC` in their data. They are the sky and sea layer plug-ins a
+mission's `layer` key selects, and there are no UI `.LAY` files on either disc.
+[formats/mission.md](formats/mission.md)'s `layer` row is corrected too.
+
+Verification: `python3 -m unittest discover -s tools/retail/tests` is 97 tests,
+OK, one skip — eight new in `tools/retail/tests/test_mnu.py`, four building a
+synthetic `PL` image with its own import table, thunks and relocations, and four
+reading local media that skip when it is absent. `bun run check` is unaffected
+and still clean at 346 tests.
+
+Next: step 4 of the plan, the menu components and layout constants, replacing
+the structural placeholder with original chrome at the recovered geometry.
 
 ## 2026-09-10: a session is one object, and the app has a main menu
 

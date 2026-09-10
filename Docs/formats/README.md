@@ -32,7 +32,8 @@ over the whole disc (ESA-embedded LIBs, root LIBs, and loose ESA files).
 | MT | decoded | [mission.md](mission.md) plain text | 178 / 282,619 | 172 / 229,947 |
 | T2 | partial | [t2.md](t2.md) header and cell grid; elevation units open | 11 / 1,463,944 | 4 / 580,526 |
 | HUD | identified | PL/PE-like i386 plug-in; original practice HUD ([hud.md](hud.md)) | 16 / 65,536 | 37 / 170,496 |
-| MNU / LAY / DLG | unknown | UI | 10+8+76 / 511,000 | 12+20+88 / 856,064 |
+| MNU / DLG | decoded | [mnu.md](mnu.md) data-only PL images; a widget table whose classes are `main.dll` imports | 10+76 / 364,544 | 12+88 / 477,184 |
+| LAY | identified | **not UI**: sky and sea layer plug-ins naming `wave1.SH` and `ocean*06.PIC`, selected by a mission's `layer` key ([mission.md](mission.md)) | 8 / 147,456 | 20 / 378,880 |
 | 5K / 8K / 11K | unknown | audio | 594+1+213 / 60,682,679 | 781+1+255 / 83,581,983 |
 | XMI | unknown | music (XMIDI) | 104 / 495,528 | 102 / 534,492 |
 | SEQ | unknown | | 104 / 10,347 | 32 / 6,434 |
