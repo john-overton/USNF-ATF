@@ -1,12 +1,14 @@
 import { expect, test } from 'bun:test';
 import {
   applyMenuAction,
+  flightSummary,
   initialScreen,
   MAIN_MENU_ITEMS,
   nextMission,
   nextScreen,
   type MenuAction,
   type Screen,
+  type ShellState,
 } from './navigation';
 import { DEFAULT_MISSION, type MissionParams } from '../../sim/mission/params';
 
@@ -86,7 +88,7 @@ test('commands change the mission as well as the screen', () => {
 });
 
 test('a whole run from the menu to a flight and back leaves a flyable mission', () => {
-  let state = { screen: 'main-menu' as Screen, mission: DEFAULT_MISSION };
+  let state: ShellState = { screen: 'main-menu', mission: DEFAULT_MISSION };
   state = applyMenuAction(state, { command: 'free-flight' });
   expect(state.screen).toBe('aircraft-select');
   state = applyMenuAction(state, { command: 'choose-aircraft', aircraft: 'a4e' });
@@ -104,4 +106,31 @@ test('a whole run from the menu to a flight and back leaves a flyable mission', 
   state = applyMenuAction(state, { command: 'quick-mission' });
   expect(state.mission.mode).toBe('quick-fight');
   expect(state.mission.opponents).toEqual([{ aircraft: 'f14', skill: 2 }]);
+});
+
+test('the debrief keeps the summary taken as the flight was left', () => {
+  const diagnostics = {
+    simTime: 91.2,
+    aircraftName: 'F-14 Tomcat',
+    takeoffs: 1,
+    landings: 0,
+    fuelFraction: 0.8,
+    gun: { fired: 120 },
+  };
+  const summary = flightSummary(diagnostics);
+  expect(summary).toEqual({
+    aircraftName: 'F-14 Tomcat',
+    simTimeSeconds: 91.2,
+    takeoffs: 1,
+    landings: 0,
+    roundsFired: 120,
+    fuelFraction: 0.8,
+  });
+  expect(flightSummary(undefined)).toBeUndefined();
+  expect(flightSummary({})).toBeUndefined();
+  const flying: ShellState = { screen: 'flight', mission: DEFAULT_MISSION };
+  const debrief = applyMenuAction(flying, { command: 'end-flight' }, summary);
+  expect(debrief.summary).toEqual(summary);
+  // It survives the walk back to the menu, and a menu click does not invent one.
+  expect(applyMenuAction(debrief, { command: 'main-menu' }).summary).toEqual(summary);
 });

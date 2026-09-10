@@ -528,6 +528,11 @@ Each step ends green on `bun run check` and is committed separately.
    progress entry.
 4. **Menu components and layouts**, original chrome only, no retail bundle.
    Main menu, aircraft select, debrief. Gate: menu unit tests.
+   **Landed 2026-09-10.** Scaling is pure CSS — an `aspect-ratio` frame and
+   container query units — rather than a JS `transform`, which keeps every menu
+   component effect-free and therefore testable. `MenuDial`, `MenuRocker` and
+   `MenuList` are deferred to the step that needs them (6) rather than built
+   unused.
 5. **Retail menu bundle**: `port-menu.ts`, `retail-menu.ts`, `UiAudio`. The app
    must still run identically with no bundle installed.
 6. **Loadout screen** on the `retail-loadout.ts` contract landed on

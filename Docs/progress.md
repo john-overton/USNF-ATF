@@ -14,8 +14,53 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite, a shared sky highlight rolloff and terrain shading contrast | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
 | 4: flight model | Retail PT-envelope default with preserved assisted comparison/fallback and opt-in recovered-native-envelope backend; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, Default F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers, camera-projected gun pipper using nearer terrain or a 1,000 m base range, thick lower closing-range arc (hidden at/above 1 km) and target-input plumbing; cockpit-only HUD and armed-only reticle; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
-| Game shell | Steps 1–3 of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, and a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload | Menu is a structural placeholder; the recovered retail layouts, artwork, sounds, loadout screen and quick fight are steps 4–7. The `.MNU`/`.DLG` widget tables are decoded (`retail.mnu`), so those layouts can be read from the media rather than redrawn; dial and slider positions, tab order and widget state are still unknown. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
+| Game shell | Steps 1–4 of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload, and the menu, aircraft select and debrief screens are drawn in original chrome at the geometry `retail.mnu` recovers from `CHOOSEAC.DLG` | The retail bundle (artwork, fonts, sounds), the loadout screen and the quick fight are steps 5–7; the loadout screen is still only its Fly / Select Plane pair. The `.MNU`/`.DLG` widget tables are decoded (`retail.mnu`), so those layouts can be read from the media rather than redrawn; dial and slider positions, tab order and widget state are still unknown. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
 | 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request. Phase 6/7 groundwork brought forward 2026-09-09: retail AI script parser and VM interpreter, `.SEE` detection model, damage/hit-point model with the recovered performance penalties, swept gun-round hit geometry, and a reusable MFD bezel extracted for a future target page. 2026-09-10: game shell planned end to end in [game-shell-plan.md](game-shell-plan.md), and the aircraft port now exports `.PT` hardpoints and the `.JT`/`.GAS`/`.SEE`/`.ECM` stores they name into a validated engine contract | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned. The new AI and combat modules are pure, unit-tested and verified against all 17 retail AI programs, but NONE of it is wired into the flight loop: no multi-aircraft world, no acquisition, no damage applied from rounds. Nine AI action semantics remain open; parser success is not flown-tactics parity. The loadout data is exported, validated and installable but drives nothing: no loadout screen, stores do not feed mass, and the hardpoint `flags` compatibility mask and `maxWeight` unit are still undecoded |
+
+## 2026-09-10: the menu is drawn at the geometry the retail dialog gives
+
+Step 4 of [game-shell-plan.md](game-shell-plan.md): real menu components,
+original chrome, no retail bundle yet. `engine/src/ui/menu/PlaceholderMenu.tsx`
+is gone, replaced by `layout.ts`, `MenuScreen.tsx` and the `MainMenu`,
+`AircraftSelect`, `LoadoutScreen` and `Debrief` screens.
+
+The layout constants are the numbers `retail.mnu` recovered from `CHOOSEAC.DLG`
+in step 3, not values chosen by eye: a 238-wide panel, eight buttons at x=31 and
+width 180, at y 24, 56, 88, 120, 170, 202, 234, 285, so the two group breaks the
+original has are the breaks we draw. `RETAIL_MAIN_MENU_RECT` keeps the original
+`(379, 80, 238, 361)` for the bundle in step 5; our own panel is 64 px taller and
+sits 40 px higher, which is exactly the room the two rows we add — Free Flight
+and Terrain Explorer — need below the retail group. No retail bytes are involved;
+these are measurements, in the same spirit as `flight/cockpit-layout.ts`.
+
+Every menu is written in the original's 640x480 box and scaled to the window by
+CSS alone: `aspect-ratio` on the frame, container query units for type, and
+percentage positions computed from the design box. Nothing measures the window,
+so no menu component has an effect — which is what makes them testable at all,
+since `renderToStaticMarkup` is the only React test tool in the repo.
+
+The debrief reads time aloft, takeoffs and landings, rounds fired and fuel
+remaining out of the flight's own diagnostics snapshot, captured as the player
+leaves. That is the same interface the Electron smoke scripts read, rather than
+new plumbing through the render loop. It says plainly that damage is not
+modelled, so no aircraft is ever lost there.
+
+The loadout screen is still only the `LOADORD.DLG` Fly / Select Plane pair and
+says on its face that stations and fuel are not adjustable yet; the real screen
+is step 6, on the `data/retail-loadout.ts` contract that already exists.
+
+Verification: `bun run check` clean, 349 tests, six new component tests covering
+the retail item list and its disabled entries, the recovered geometry, the
+percentage positions, aircraft selection, the loadout pair and the debrief lines.
+Against a packaged build of this source, `menu-smoke.ts` passes, and
+`smoke.ts --scenario ground`, `navigation-smoke.ts` and `teleport-smoke.ts` — the
+three that between them exercise flight, the map and all four deep-link modes —
+pass unchanged. A screenshot of the menu at 2560x1440 is in
+`extracted/step4/menu/`.
+
+Next: step 5, the retail menu bundle — `tools/menu/port-menu.ts`,
+`engine/src/data/retail-menu.ts` and `UiAudio` — with the app still running
+identically when no bundle is installed.
 
 ## 2026-09-10: the UI tables are decoded, and `.LAY` is not UI
 

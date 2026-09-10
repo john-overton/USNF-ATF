@@ -42,9 +42,44 @@ export interface MenuAction {
   aircraft?: AircraftId;
 }
 
+/**
+ * What the debrief shows. It is taken from the flight's own diagnostics snapshot
+ * at the moment the player leaves, which is the same interface the Electron smoke
+ * scripts read, rather than new plumbing through the render loop.
+ */
+export interface FlightSummary {
+  aircraftName: string;
+  simTimeSeconds: number;
+  takeoffs: number;
+  landings: number;
+  roundsFired: number;
+  fuelFraction: number;
+}
+
 export interface ShellState {
   screen: Screen;
   mission: MissionParams;
+  /** Present once a flight has been flown and left. */
+  summary?: FlightSummary;
+}
+
+/** Narrow a diagnostics snapshot to the handful of numbers a debrief reads out. */
+export function flightSummary(diagnostics: unknown): FlightSummary | undefined {
+  const d = diagnostics as
+    | (Partial<FlightSummary> & {
+        simTime?: number;
+        gun?: { fired?: number };
+      })
+    | undefined;
+  if (!d || typeof d.simTime !== 'number') return undefined;
+  return {
+    aircraftName: typeof d.aircraftName === 'string' ? d.aircraftName : 'Unknown aircraft',
+    simTimeSeconds: d.simTime,
+    takeoffs: d.takeoffs ?? 0,
+    landings: d.landings ?? 0,
+    roundsFired: d.gun?.fired ?? 0,
+    fuelFraction: d.fuelFraction ?? 0,
+  };
 }
 
 export interface MenuItem {
@@ -174,7 +209,13 @@ export function nextScreen(screen: Screen, action: MenuAction, mission: MissionP
   }
 }
 
-export function applyMenuAction(state: ShellState, action: MenuAction): ShellState {
+export function applyMenuAction(
+  state: ShellState,
+  action: MenuAction,
+  summary?: FlightSummary,
+): ShellState {
   const mission = nextMission(action, state.mission);
-  return { screen: nextScreen(state.screen, action, mission), mission };
+  const screen = nextScreen(state.screen, action, mission);
+  const kept = screen === 'debrief' ? (summary ?? state.summary) : state.summary;
+  return { screen, mission, ...(kept ? { summary: kept } : {}) };
 }

@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RendererProbe } from './RendererProbe';
 import { TerrainViewer } from './TerrainViewer';
-import { PlaceholderMenu } from './menu/PlaceholderMenu';
+import { MainMenu } from './menu/MainMenu';
+import { AircraftSelect } from './menu/AircraftSelect';
+import { LoadoutScreen } from './menu/LoadoutScreen';
+import { Debrief } from './menu/Debrief';
 import {
   applyMenuAction,
+  flightSummary,
   initialScreen,
   type MenuAction,
   type ShellState,
@@ -43,7 +47,9 @@ export function Shell({ search }: { search: string }) {
     mission: parsed.mission,
   }));
   const act = useCallback((action: MenuAction) => {
-    setState((previous) => applyMenuAction(previous, action));
+    // Read the flight's own snapshot as it is left, so the debrief has numbers.
+    const summary = flightSummary(window.__flightDiagnostics?.());
+    setState((previous) => applyMenuAction(previous, action, summary));
   }, []);
   useEffect(() => {
     // Esc leaves a running session the way the original did, without a reload.
@@ -58,12 +64,23 @@ export function Shell({ search }: { search: string }) {
     return (
       <TerrainViewer key={state.screen} mission={state.mission} parseError={parsed.parseError} />
     );
-  return (
-    <PlaceholderMenu
-      screen={state.screen}
-      mission={state.mission}
-      problems={validateMission(state.mission)}
-      onCommand={act}
-    />
-  );
+  if (state.screen === 'aircraft-select')
+    return <AircraftSelect mission={state.mission} onCommand={act} />;
+  if (state.screen === 'loadout')
+    return (
+      <LoadoutScreen
+        mission={state.mission}
+        problems={validateMission(state.mission)}
+        onCommand={act}
+      />
+    );
+  if (state.screen === 'debrief')
+    return (
+      <Debrief
+        mission={state.mission}
+        {...(state.summary ? { summary: state.summary } : {})}
+        onCommand={act}
+      />
+    );
+  return <MainMenu mission={state.mission} onCommand={act} />;
 }

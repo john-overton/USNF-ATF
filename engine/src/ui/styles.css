@@ -149,56 +149,96 @@ th {
   pointer-events: none;
 }
 
-/* Placeholder menu chrome. The recovered retail layouts and artwork replace this in
-   steps 4 and 5 of the game shell plan; the structure and test hooks stay. */
-.menu-placeholder {
+/* Menu chrome: ours, drawn into the same 640x480 box the original used. The
+   frame scales with the window through aspect-ratio and container query units,
+   so no component needs a resize effect. Step 5 swaps in retail sprites. */
+.menu-root {
   height: 100%;
-  overflow: auto;
-  padding: 48px 56px;
-  max-width: 720px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 30% 25%, #16202c 0%, #07090d 70%);
 }
-.menu-placeholder h1 {
-  font-size: 20px;
+.menu-frame {
+  position: relative;
+  width: min(100vw, 133.333vh);
+  aspect-ratio: 4 / 3;
+  container-type: inline-size;
+}
+.menu-panel {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 1.4cqw;
+  background: #0d131bd9;
+  border: 0.16cqw solid #2b3644;
+  box-shadow: 0 0 4cqw #0009;
+}
+.menu-title {
+  margin: 0 0 0.8cqw;
+  font-size: 1.8cqw;
   font-weight: 600;
-  margin: 0 0 24px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: #9fb4c9;
 }
-.menu-items {
-  list-style: none;
-  margin: 0 0 16px;
-  padding: 0;
-}
-.menu-items li {
+.menu-widget {
+  position: absolute;
   display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 6px;
+  align-items: center;
+  gap: 0.8cqw;
 }
-.menu-items button {
-  min-width: 240px;
+.menu-action {
+  width: 100%;
+  height: 100%;
+  min-height: 3.2cqh;
   text-align: left;
-  padding: 6px 10px;
+  padding: 0 1cqw;
   font: inherit;
-  color: inherit;
-  background: #131922;
-  border: 1px solid #2b3644;
+  font-size: 1.5cqw;
+  color: #d6dde6;
+  background: linear-gradient(#1b2531, #131922);
+  border: 0.16cqw solid #33455a;
   cursor: pointer;
 }
-.menu-items button:hover:not(:disabled) {
-  background: #1b2531;
+.menu-action:hover:not(:disabled) {
+  background: linear-gradient(#24303f, #18202b);
+  border-color: #4d6480;
 }
-.menu-items button:disabled {
+.menu-action:disabled {
   color: #5a6472;
+  background: #10151c;
+  border-color: #232d39;
   cursor: default;
 }
-.menu-items small {
+.menu-action[aria-pressed='true'] {
+  color: #ffd79a;
+  border-color: #c08a3e;
+}
+.menu-line {
+  font-size: 1.5cqw;
+  white-space: nowrap;
+}
+.menu-note {
+  position: absolute;
+  left: 104%;
+  font-size: 1.25cqw;
   color: #8b97a6;
+  white-space: nowrap;
 }
 .menu-summary {
+  position: absolute;
+  left: 1.4cqw;
+  bottom: 1cqw;
+  margin: 0;
+  font-size: 1.25cqw;
   color: #8b97a6;
 }
 .menu-problems {
+  position: absolute;
+  left: 1.4cqw;
+  bottom: 3.2cqw;
+  margin: 0;
+  padding-left: 1.6cqw;
+  font-size: 1.25cqw;
   color: #e2a05a;
-  padding-left: 18px;
 }
