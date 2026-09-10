@@ -555,7 +555,11 @@ Each step ends green on `bun run check` and is committed separately.
    convention — identity forward -Z, a bearing along (-sin, cos) — which the first
    spawn got backwards; see the progress entry.
 8. **Progress and baseline entries** per AGENTS.md, stating plainly which parts
-   are mocked.
+   are mocked. **Landed 2026-09-10** in
+   [baselines/game-shell.md](baselines/game-shell.md). Running the full Electron
+   set against the finished series found one real regression (menu audio taking
+   the retail audio test's tap) and confirmed three pre-existing failures against
+   a build of the parent commit.
 
 Steps 1–2 are the risky ones and are worth doing alone. Steps 3–5 can proceed in
 parallel with 6 if desired, since they touch disjoint files.

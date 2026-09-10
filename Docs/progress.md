@@ -14,8 +14,49 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite, a shared sky highlight rolloff and terrain shading contrast | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
 | 4: flight model | Retail PT-envelope default with preserved assisted comparison/fallback and opt-in recovered-native-envelope backend; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, Default F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers, camera-projected gun pipper using nearer terrain or a 1,000 m base range, thick lower closing-range arc (hidden at/above 1 km) and target-input plumbing; cockpit-only HUD and armed-only reticle; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
-| Game shell | Steps 1–7 of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload, and the menu, aircraft select and debrief screens are drawn at the geometry `retail.mnu` recovers from `CHOOSEAC.DLG`, in original chrome or in the original's own artwork and sounds when a locally ported menu bundle is installed, a working loadout screen over an aircraft's recovered hardpoints, and a mocked quick fight that puts three aircraft in the sky on deterministic spawns inside the one 120 Hz clock | The quick fight's opponents fly fixed profiles: no AI, no acquisition, no damage. Stores are chosen and weighed but do not affect flight, and a station still offers only its own default because the hardpoint compatibility mask is undecoded. The bundle carries no retail fonts and no hover or pressed button art, both stated in [menu-porting.md](menu-porting.md). The `.MNU`/`.DLG` widget tables are decoded (`retail.mnu`), so those layouts can be read from the media rather than redrawn; dial and slider positions, tab order and widget state are still unknown. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
+| Game shell | Steps 1–8 (all) of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload, and the menu, aircraft select and debrief screens are drawn at the geometry `retail.mnu` recovers from `CHOOSEAC.DLG`, in original chrome or in the original's own artwork and sounds when a locally ported menu bundle is installed, a working loadout screen over an aircraft's recovered hardpoints, and a mocked quick fight that puts three aircraft in the sky on deterministic spawns inside the one 120 Hz clock | The quick fight's opponents fly fixed profiles: no AI, no acquisition, no damage. Stores are chosen and weighed but do not affect flight, and a station still offers only its own default because the hardpoint compatibility mask is undecoded. The bundle carries no retail fonts and no hover or pressed button art, both stated in [menu-porting.md](menu-porting.md). The `.MNU`/`.DLG` widget tables are decoded (`retail.mnu`), so those layouts can be read from the media rather than redrawn; dial and slider positions, tab order and widget state are still unknown. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
 | 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request. Phase 6/7 groundwork brought forward 2026-09-09: retail AI script parser and VM interpreter, `.SEE` detection model, damage/hit-point model with the recovered performance penalties, swept gun-round hit geometry, and a reusable MFD bezel extracted for a future target page. 2026-09-10: game shell planned end to end in [game-shell-plan.md](game-shell-plan.md), and the aircraft port now exports `.PT` hardpoints and the `.JT`/`.GAS`/`.SEE`/`.ECM` stores they name into a validated engine contract | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned. The new AI and combat modules are pure, unit-tested and verified against all 17 retail AI programs, but NONE of it is wired into the flight loop: no multi-aircraft world, no acquisition, no damage applied from rounds. Nine AI action semantics remain open; parser success is not flown-tactics parity. The loadout data is exported, validated and installable but drives nothing: no loadout screen, stores do not feed mass, and the hardpoint `flags` compatibility mask and `maxWeight` unit are still undecoded |
+
+## 2026-09-10: the game shell is in, and the regression set says what it cost
+
+Step 8 of [game-shell-plan.md](game-shell-plan.md): the baseline entry, in
+[baselines/game-shell.md](baselines/game-shell.md), with the machine, the commits
+and every measurement in one place.
+
+The headline is that a person can now launch the app, be met by a menu rather than
+a terrain viewer, set up a quick fight or a free flight, choose an aircraft, load
+it, fly it, and come back to a debrief — without a page reload anywhere in that
+path. The simulation underneath is untouched: same 120 Hz clock in the same frame
+loop, same floating origin, same throttled snapshot into React.
+
+Two things came out of running the full Electron set against a packaged build of
+the finished series rather than assuming it was green:
+
+- **One real regression, found and fixed.** `retail-smoke` failed with "Mixed
+  audio graph was silent". Its tap attaches to the first node that connects to an
+  `AudioContext` destination, and the menu audio service added in step 5 was
+  constructed for the whole session, so in a flight it could get there first and
+  the tap would listen to a silent menu context. The shell now constructs menu
+  audio only while a menu is on screen — which is what a flight wants anyway, one
+  context rather than two — and `retail-smoke` passes again.
+- **Three failures that are not ours**, each reproduced identically on a build of
+  the parent commit `092d0d6`: `ground-smoke` and `aircraft-smoke` still assert
+  that assisted is the default flight model, which stopped being true in `c6069fe`
+  yesterday, and `smoke.ts --scenario approach` lands but brakes only to 7.07 m/s
+  inside its 60 s budget against a 5 m/s threshold. The scripts were left
+  unchanged rather than edited to pass; they are logged as defects with their
+  reproduction, and deciding which behaviour is wanted is a separate call.
+
+`envelope-smoke` could not be completed on this machine today. Its first case
+verifies, then the second Electron session fails in Electron's own sandbox
+bootstrap, before any of our renderer code runs, on both the new build and the
+`092d0d6` build, with no other Electron process running. That is recorded as an
+environment problem, not as evidence about the change.
+
+Everything the shell mocks is listed in the baseline and said out loud in the app:
+opponents fly fixed profiles with no AI, stores are weighed but do not affect
+flight, a station offers only its own default because the compatibility mask is
+undecoded, and the menu bundle has no retail fonts.
 
 ## 2026-09-10: three aircraft in the sky, and none of them are fighting
 

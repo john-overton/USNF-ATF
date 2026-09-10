@@ -44,6 +44,15 @@ export type MenuCommand =
   | 'main-menu'
   | 'back';
 
+/** The screens the shell draws itself, as opposed to hosting the viewer on. */
+export const MENU_SCREENS: readonly Screen[] = [
+  'main-menu',
+  'quick-fight',
+  'aircraft-select',
+  'loadout',
+  'debrief',
+];
+
 export interface MenuAction {
   command: MenuCommand;
   /** Only `choose-aircraft` carries one. */

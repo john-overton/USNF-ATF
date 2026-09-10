@@ -4,7 +4,7 @@
 
 - Read [README.md](README.md), the current snapshot in [Docs/progress.md](Docs/progress.md), and [Docs/build-plan.md](Docs/build-plan.md) before planning work.
 - `Docs/build-plan.md` owns phase numbering, sequencing, decisions, and exit criteria. `Docs/usnf-atf-plan.md` is the original design brief; its older build order is superseded.
-- This is an early fan remake: the runnable app has a terrain explorer, original practice flight, and renderer probe. Python retail research is substantially ahead of the TypeScript importer. The original flight model and maneuver harness are implemented; retail importing and combat remain planned; see the current progress snapshot for acceptance status.
+- This is an early fan remake: the runnable app has a main menu, a mocked quick fight, a terrain explorer, original practice flight with a loadout screen, and a renderer probe. Python retail research is substantially ahead of the TypeScript importer. The original flight model and maneuver harness are implemented; retail importing and combat remain planned; see the current progress snapshot for acceptance status.
 
 ## Development machine and commands
 
@@ -36,6 +36,7 @@ bun run probe --unpackaged
 
 ## Code boundaries
 
+- `engine/src/sim/mission/params.ts` is the single description of a session; the URL is one serializer of it, and every legacy query key must keep parsing so the Electron scripts keep deep-linking. `engine/src/ui/Shell.tsx` owns the screen and the mission; menu components under `engine/src/ui/menu/` must stay prop-driven and effect-free, because `renderToStaticMarkup` is the only React test tool here.
 - `engine/`: simulation, rendering, React UI, data contracts, and platform adapters. Keep Electron and Node filesystem calls out of engine code; use `engine/src/platform/Platform.ts`.
 - `shell/`: Electron main/preload, IPC, native filesystem/window/power access, development and packaging scripts. Preserve context isolation, sandboxing, and disabled renderer Node integration.
 - `importer/`: TypeScript import contracts now; decoder port and first-run workflow in phase 5. Python tools in `tools/retail/` are the research reference.

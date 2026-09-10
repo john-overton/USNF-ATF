@@ -11,6 +11,7 @@ import { loadMenuAssets, type MenuAssets } from './menu/assets';
 import { defaultLoadout, parseRetailLoadout, type RetailLoadout } from '../data/retail-loadout';
 import { UiAudio } from './menu/UiAudio';
 import {
+  MENU_SCREENS,
   applyMenuAction,
   flightSummary,
   initialScreen,
@@ -109,14 +110,20 @@ export function Shell({ search }: { search: string }) {
   }, [state.mission.aircraft]);
   const [unrestricted, setUnrestricted] = useState(false);
   const audio = useRef<UiAudio>(null);
+  // Only while a menu is on screen. A flight has its own AudioContext, and a
+  // second one sitting idle behind it is both wasteful and, for the retail audio
+  // acceptance test that taps the app's real graph, ambiguous about which context
+  // it is listening to.
+  const menuScreen = MENU_SCREENS.includes(state.screen);
   useEffect(() => {
+    if (!menuScreen) return;
     const service = new UiAudio(assets?.sounds?.sounds ?? {});
     audio.current = service;
     return () => {
       service.dispose();
       audio.current = null;
     };
-  }, [assets]);
+  }, [assets, menuScreen]);
   const act = useCallback((action: MenuAction) => {
     // Read the flight's own snapshot as it is left, so the debrief has numbers.
     const summary = flightSummary(window.__flightDiagnostics?.());
