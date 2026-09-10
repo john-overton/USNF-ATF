@@ -164,7 +164,7 @@ export class FlightInput {
   hookDown = false;
   flapsDown = false;
   airbrakeDown = false;
-  cameraMode: ChaseCameraMode = 'world-up';
+  cameraMode: ChaseCameraMode = 'cockpit';
   cameraYaw = 0;
   cameraPitch = 0;
   gunSafe = true;
@@ -252,7 +252,7 @@ export class FlightInput {
     this.hookDown = false;
     this.flapsDown = false;
     this.airbrakeDown = false;
-    this.cameraMode = 'world-up';
+    this.cameraMode = 'cockpit';
     this.cameraYaw = this.cameraPitch = 0;
     this.gunSafe = true;
     this.autopilot = 'off';

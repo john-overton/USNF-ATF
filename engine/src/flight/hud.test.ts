@@ -96,7 +96,10 @@ test('HUD renders live throttle, engine, flight warning and all four retail-name
     stalled: false,
     controls: { brake: true },
     loadFactor: 1,
-    cameraMode: 'world-up',
+    cameraMode: 'cockpit',
+    aircraftId: 'f14',
+    viewYawRad: 0,
+    viewPitchRad: 0,
   } as FlightDiagnostics;
   const markup = renderToStaticMarkup(
     createElement(FlightHud, { flight, flapFraction: 1, airbrakeFraction: 1 }),
@@ -130,4 +133,14 @@ test('wind readout names the bearing the wind blows from, in knots', () => {
   // Wrapping keeps 360 reading as 000 rather than a fourth digit.
   expect(windReadoutText(360, 9)).toBe('WIND 000/17');
   expect(windReadoutText(-10, 9)).toBe('WIND 350/17');
+});
+
+test('F2 and F3 suppress the entire flight HUD', () => {
+  for (const cameraMode of ['attitude', 'world-up']) {
+    expect(
+      renderToStaticMarkup(
+        createElement(FlightHud, { flight: { cameraMode } as FlightDiagnostics }),
+      ),
+    ).toBe('');
+  }
 });

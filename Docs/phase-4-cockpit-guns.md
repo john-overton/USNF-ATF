@@ -107,3 +107,56 @@ Exact measured results, source revision and limitations are recorded in
 [the phase 4 baseline](baselines/phase-4.md). Linux remains deferred; Windows
 launch acceptance remains phase 9. Manual cockpit familiarity and listening
 acceptance are separate from parser, unit-test and desktop telemetry results.
+
+## 2026-09-09 follow-up: defaults and radar-style gun sight
+
+Practice starts/reset use F1 cockpit by default, with no camera-mode text on the
+HUD. All three imported aircraft default to retail PT-envelope flight; assisted
+remains unchanged and selectable, and supplies the fallback without a profile.
+
+The original gun pipper uses a forward surface ray through the independent contact
+sampler (including classified water and the practice strip), capped at **1,000 m**.
+Closer terrain supplies the range; sky, farther terrain and missing contact data
+use an explicitly labelled **GUN BASE 1000 M**. Missing chunks are requested without
+blocking flight or fabricating a terrain elevation. The pipper includes the same
+inherited world velocity and gravity as the simulated rounds. The base distance
+is a gameplay tuning decision, not a recovered retail constant or universal gun zero.
+Ray steps are 25 m with bisection at the first sampled crossing; narrow features
+between steps can be missed. The sight shares existing aircraft-relative HUD
+angular scales; it is not a calibrated, world-projected collimated sight.
+
+`FlightLayer.setGunTarget({ position, velocity })` accepts absolute world metres
+and world m/s. Supplying a target selects the lead-cue mode; clearing with
+`undefined` restores terrain/base ranging. Reset/teleport also clear the input.
+The future sensor caller must refresh it and clear lost tracks. The solver finds
+the first intercept within the five-second projectile lifetime, including aircraft
+velocity and gravity. Steer boresight onto the target lead cue; the terrain/base
+pipper instead marks round displacement at the selected range. Invalid, behind or
+unreachable targets report no range. No targeting UI, acquisition, damage, drag,
+or recovered native sight execution is added.
+
+## 2026-09-09 correction: gun projection and visibility
+
+This supersedes the prior aircraft-relative sight mapping. The pipper is now
+projected from its absolute predicted world point through the actual render
+camera, using the same muzzle origin/velocity transform as emitted rounds.
+Perspective, pilot-eye parallax, head look, viewport aspect and floating origin
+are included. The A4E cue represents the average of its two parallel barrels.
+The renderer updates the sight every frame; HUD artwork scaling no longer moves
+it. The range-time calculation also includes gravity along the barrel axis when
+pitched. Terrain range remains a forward ray estimate, not a ballistic terrain
+collision solution. General instrument symbology retains its existing layout.
+
+The thick lower semicircle indicates **east/right = 0 m, south/bottom = 500 m,
+west/left = 1,000 m**. It grows from east around the bottom toward west with
+increasing range. Out-of-view cues are hidden/clipped at the cockpit combiner,
+never clamped to a false aimpoint. F2/F3 hide the complete flight HUD and reticle.
+Safe/unavailable/empty guns hide the reticle; Shift+Tab arms/disarms. Target input
+still has no acquisition UI. Numeric base-range HUD text is replaced by the arc.
+
+### Range-bar direction correction (2026-09-09)
+
+The thick bar is hidden at/above 1,000 m and for base-range fallback. As measured
+range closes below 1,000 m it fills from left/west, through bottom/south at
+500 m, to right/east at zero. This supersedes the increasing-range east-to-west
+fill described above; the thin reticle ring remains visible when armed.

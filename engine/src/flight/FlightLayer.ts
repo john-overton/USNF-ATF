@@ -1,3 +1,4 @@
+import { gunSight, type GunSightTarget } from './gun-sight';
 import { configureAircraftHook } from './AircraftHook';
 import { AIRCRAFT, aircraftId, validateAircraftProfile, type AircraftId } from './aircraft-catalog';
 import {
@@ -100,6 +101,7 @@ export interface FlightDiagnostics {
   viewYawRad: number;
   viewPitchRad: number;
   gun: ReturnType<FlightGun['diagnostics']>;
+  gunSight?: ReturnType<typeof gunSight>;
   autopilot: AutopilotMode;
   /** Bearing the waypoint hold is steering to, or null when it is holding heading. */
   autopilotBearingDeg: number | null;
@@ -220,8 +222,7 @@ export class FlightLayer {
   ) {
     const query = new URLSearchParams(window.location.search);
     this.useNativeEnvelope = query.get('flightModel') === 'recovered-envelope' && !!profile?.native;
-    this.useRetail =
-      (query.get('flightModel') === 'retail-envelope' || this.useNativeEnvelope) && !!profile;
+    this.useRetail = query.get('flightModel') !== 'assisted' && !!profile;
     const finite = (key: string, fallback: number) => {
       const value = Number(query.get(key) ?? fallback);
       return Number.isFinite(value) ? value : fallback;
@@ -445,6 +446,7 @@ export class FlightLayer {
     this.previous = this.state;
     this.clock.reset();
     this.gun.reset();
+    this.gunTarget = undefined;
     this.input.gunSafe = true;
     this.alpha = 0;
     this.waiting = false;
@@ -477,6 +479,7 @@ export class FlightLayer {
       this.clock.reset();
       this.input.reset();
       this.gun.reset();
+      this.gunTarget = undefined;
       this.systems = createAircraftSystems(this.approach || this.airborneStart ? 0.2 : 0);
       this.takeoffs = 0;
       this.landings = 0;
@@ -685,6 +688,14 @@ export class FlightLayer {
       0.7
     );
   }
+  private gunTarget: GunSightTarget | undefined;
+  /** World coordinates in metres / m/s. Call each sensor update; clear on lock loss. */
+  setGunTarget(target: GunSightTarget | undefined): void {
+    this.gunTarget = target && {
+      position: { ...target.position },
+      velocity: { ...target.velocity },
+    };
+  }
   diagnostics(): FlightDiagnostics {
     return {
       state: {
@@ -754,6 +765,17 @@ export class FlightLayer {
       viewYawRad: this.input.cameraYaw,
       viewPitchRad: this.input.cameraPitch,
       gun: this.gun.diagnostics(this.input.gunSafe),
+      gunSight: gunSight(
+        this.state,
+        this.gun.data,
+        (x, z) => {
+          const surface = this.ground.sample(x, z);
+          if (!surface && this.ground.sourceAt(x, z))
+            void this.ground.ensure(x, z, false).catch(() => undefined);
+          return surface;
+        },
+        this.gunTarget,
+      ),
       autopilot: this.input.autopilot,
       autopilotBearingDeg:
         this.input.autopilot === 'waypoint' ? (this.navigationBearing() ?? null) : null,

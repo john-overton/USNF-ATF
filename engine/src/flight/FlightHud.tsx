@@ -23,6 +23,7 @@ export function FlightHud({
   autopilot?: AutopilotMode;
 }) {
   const clip = useId();
+  if (flight.cameraMode !== 'cockpit') return null;
   const cockpit = flight.cameraMode === 'cockpit';
   const cockpitRect =
     cockpit && cockpitHudRect(flight.aircraftId, flight.viewYawRad, flight.viewPitchRad);
@@ -236,13 +237,6 @@ export function FlightHud({
             : flight.systems.engineSpool < 0.99
               ? 'ENGINE START'
               : 'ENGINE ON'}
-        </text>
-        <text x="650" y="490" textAnchor="end" fontSize="13">
-          {flight.cameraMode === 'cockpit'
-            ? 'F1 COCKPIT'
-            : flight.cameraMode === 'attitude'
-              ? 'F2 LOCKED CHASE'
-              : 'F3 WORLD-UP CHASE'}
         </text>
         <text x="650" y="514" textAnchor="end" fontSize="13">
           {flight.controls.brake && flight.status === 'grounded' ? 'WHEEL BRAKE' : ''}

@@ -10,6 +10,7 @@ for (const [id, time] of [['f14', '12'], ['a4e', '12'], ['x31', '12'], ['f14', '
     app: 'shell',
     terrain: 'extracted/terrain/ukraine',
     aircraft: `extracted/flight/${id}.json`,
+    flightProfile: `extracted/flight/${id}-flight.json`,
     cockpit: `extracted/flight/cockpits/${id}.json`,
     gun: `extracted/flight/${id}-gun.json`,
     audio: `extracted/flight/audio/${id}.json`,
@@ -23,6 +24,15 @@ for (const [id, time] of [['f14', '12'], ['a4e', '12'], ['x31', '12'], ['f14', '
       const d = await read();
       return d?.status === 'airborne' && d.simSteps > 10 ? d : undefined;
     }, 'airborne');
+    const reticleVisible = () => session.evaluate(`getComputedStyle(document.querySelector('[data-gun-sight-overlay]')).display !== 'none'`);
+    const initial = await read();
+    assert.equal(initial.cameraMode, 'cockpit');
+    assert.equal(await reticleVisible(), false, 'Safe weapons hide reticle');
+    assert.equal(initial.flightModelId, 'retail-envelope');
+    assert.equal(initial.gunSight.mode, 'terrain');
+    assert.equal(initial.gunSight.status, 'solution');
+    assert(initial.gunSight.rangeM <= 1000);
+    assert.equal(await session.evaluate(`document.querySelector('[data-flight-hud]')?.textContent.includes('F1 COCKPIT')`), false);
     const key = (code: string, down: boolean, modifiers = 0) => session.send('Input.dispatchKeyEvent', {
       type: down ? 'keyDown' : 'keyUp', code,
       key: code === 'Slash' ? (modifiers ? '?' : '/') : code,
@@ -69,6 +79,8 @@ for (const [id, time] of [['f14', '12'], ['a4e', '12'], ['x31', '12'], ['f14', '
     assert.equal(recentered.viewPitchRad, 0);
     for (const mode of ['F2', 'F3']) {
       await tap(mode);
+      await session.poll(async () => await session.evaluate(`document.querySelector('[data-flight-hud]') === null`) ? true : undefined, 'external HUD hidden');
+      assert.equal(await reticleVisible(), false, 'External reticle hidden');
       await key('ShiftLeft', true, 8);
       await key('ArrowLeft', true, 8);
       await advance(0.4);
@@ -86,6 +98,18 @@ for (const [id, time] of [['f14', '12'], ['a4e', '12'], ['x31', '12'], ['f14', '
     assert.equal(safe.gun.safe, true);
     assert.equal(safe.gun.fired, before.gun.fired, 'Safety must inhibit fire');
     await tap('Tab', 8);
+    await session.poll(async () => await reticleVisible() ? true : undefined, 'armed reticle visible');
+    await session.capture('armed-reticle');
+    for (const external of ['F2', 'F3']) {
+      await tap(external);
+      await advance(0.1);
+      assert.equal(await reticleVisible(), false, 'Armed reticle hidden externally');
+      await session.poll(async () => await session.evaluate(`document.querySelector('[data-flight-hud]') === null`) ? true : undefined, 'armed external HUD hidden');
+    }
+    await tap('F1');
+    await session.poll(async () => await reticleVisible() ? true : undefined, 'reticle restored in F1');
+    const rangeArc = await session.evaluate(`document.querySelector('[data-gun-range-arc]').getAttribute('d')`);
+    assert.equal(rangeArc, '', 'Base range has no closing-range bar');
     await key('Tab', true);
     const firing = await advance(0.6);
     assert.equal(firing.gun.safe, false);
@@ -99,13 +123,17 @@ for (const [id, time] of [['f14', '12'], ['a4e', '12'], ['x31', '12'], ['f14', '
     await tap('Tab', 8);
     const stopped = await advance(0.2);
     assert.equal(stopped.gun.safe, true);
+    assert.equal(await reticleVisible(), false, 'Safety hides reticle again');
     const stoppedAgain = await advance(0.2);
     assert.equal(stoppedAgain.gun.fired, stopped.gun.fired);
     await session.send('Emulation.setDeviceMetricsOverride', {
       width: 1280, height: 720, deviceScaleFactor: 1, mobile: false,
     });
     await advance(0.2);
+    await tap('Tab', 8);
+    await session.poll(async () => await reticleVisible() ? true : undefined, 'armed 720p reticle');
     await session.capture('cockpit-720p');
+    await tap('Tab', 8);
     assert.equal(session.errors.length, 0);
     await Bun.write(`${session.out}/report.json`, JSON.stringify({ id, mirrors, center, looking, recentered, before, safe, firing, stopped }, null, 2));
     console.log(JSON.stringify({ id, status: stopped.status, gun: stopped.gun, errors: session.errors.length }));

@@ -13,8 +13,71 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite, a shared sky highlight rolloff and terrain shading contrast | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Retail PT-envelope default with preserved assisted comparison/fallback and opt-in recovered-native-envelope backend; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, Default F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers, camera-projected gun pipper using nearer terrain or a 1,000 m base range, thick lower closing-range arc (hidden at/above 1 km) and target-input plumbing; cockpit-only HUD and armed-only reticle; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned |
+
+## 2026-09-09: reverse range-bar fill and hide it outside 1 km
+
+Corrected the user's reported reversed bar in `GunSightOverlay.ts`: the thick
+lower bar now starts at west/left just inside 1,000 m, reaches south/bottom at
+500 m and fills through east/right at zero. It is absent at or beyond 1,000 m
+and for the base-range fallback. The thin reticle ring remains visible while
+armed. This supersedes the earlier east-to-west fill description below.
+Projection, ballistics and weapon/camera visibility gates are unchanged.
+Verification is recorded in the phase 4 baseline. Next manual check: close on
+nearer terrain and observe the bar fill left-to-right.
+
+## 2026-09-09: correct gun/camera alignment, add range arc and visibility gates
+
+Confirmed the user's reported alignment bug: `gun-sight.ts` used unequal authored
+angular scales, and `FlightHud.tsx` positioned the reticle inside differently
+placed cockpit artwork. The sight also discarded muzzle-to-eye parallax. Repro:
+arm each aircraft in airborne practice; the old reticle sat at each aperture's
+HUD centre rather than the renderer-projected round trajectory. Earlier sight
+unit tests only checked the authored angular mapping, not screen alignment.
+
+The sight now returns an absolute world point using the same muzzle transform
+as emitted rounds. `GunSightOverlay.ts` projects it through the current renderer
+camera after its pose and floating origin are updated, every frame. The thick
+lower semicircle grows from east/0 through south/500 to west/1,000 metres. It
+clips to the combiner without relocating aimpoints. F2/F3 hide the entire flight
+HUD; safe, unavailable or empty weapons hide the reticle. Target mode remains
+input plumbing only. The near/base-range rule and default retail/cockpit choices
+remain as recorded below.
+
+Independent review confirmed the projection and parallax defects. New tests use
+all three locally imported gun manifests and actual stepped rounds, including
+both A4E barrels, across window shapes, head look, bank and origin rebasing.
+Exact final commands, screenshot evidence and limitations are in the
+[phase 4 baseline](baselines/phase-4.md). This supersedes the previous entry's
+camera-projection limitation and safe/external sight presentation. General
+instrument pitch-ladder calibration and actual ballistic terrain intersection
+are separate remaining work. Next: human low-level strafing comparison to tune
+range indication against nearer sloping ground.
+
+## 2026-09-09: retail/cockpit defaults and range-aware gun reticle
+
+User supersedes the earlier assisted-default decision: all imported aircraft now
+start in retail PT-envelope flight, with assisted unchanged as a selectable
+comparison and missing-profile fallback. Cockpit is the initial/reset view;
+camera-mode labels are removed from the HUD. Selector/start links follow the new
+default. Recovered-native envelope remains opt-in; no complete retail physics
+parity is claimed.
+
+The original radar-style gun pipper uses forward contact-surface range, capped at
+1,000 m per the user's follow-up. Sky, farther terrain and unloaded data show
+an explicit base-range solution, with aircraft velocity and gravity included.
+Closer land/water/strip surfaces use measured ray range. This corrects the first
+working iteration's no-range sky behavior, not a shipped baseline. Missing data
+is never zero ground. The base range is authored tuning, not recovered native
+sight behavior. Target mode is plumbing only: absolute world position/velocity
+input and a bounded intercept solution, cleared on reset/teleport or lock loss.
+
+Evidence, exact commands and the transient Electron startup failure/retry are in
+[phase 4 baseline](baselines/phase-4.md). No flight dynamics or retail decoders
+changed. Targets, acquisition and damage remain future work. Next: manually fly
+low over sloping ground to tune the range cap and assess aircraft-relative HUD
+cue placement; a world-projected collimated sight remains a separate refinement.
 
 ## 2026-09-09: fit HUD to cockpit glass and render live mirrors
 

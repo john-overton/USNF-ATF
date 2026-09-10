@@ -1,5 +1,122 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-09 correction: closing-range bar direction
+
+Same Apple M3/macOS 26.6.2, Bun 1.4.2 and Node v22.14.0 as below.
+Source: base commit `55c0471de3dddec519bb6cabefca4e6cc73cc052` plus working tree;
+`engine/src/flight/GunSightOverlay.ts` SHA256
+`6a7c0f0580b6ed1a12fbf937c40e5b794c827fb7fe1ece514ca2050df04cef43`.
+The earlier range bar filled in the wrong direction. It now stays absent at or
+beyond 1,000 m and on base fallback, then fills west→south→east as range closes.
+The thin ring and existing projection/visibility rules are unchanged.
+
+`bun run check`: **256 passed, 0 failed**, 693,172 assertions; typecheck, lint
+and formatting pass. Updated arc test checks absent 1,000/2,000/invalid ranges,
+left-hand origin, lower-half sweep and endpoints at 750/500/250/0 m. Imported
+projection tests also pass with local media, no skips. Desktop smoke assertion
+now expects no thick bar at base range. `git diff --check` passes; staging empty.
+Electron/packaging, Python and maneuver harness were not rerun for this SVG-only
+correction; previous desktop evidence predates the reversed fill. Linux remains
+deferred. Next manual check: approach nearer terrain and watch left-to-right fill.
+
+## 2026-09-09 correction: camera-projected gun cue and lower range arc
+
+Machine: Apple M3, macOS 26.6.2 arm64, Bun 1.4.2, Node v22.14.0,
+Electron 44.2.0 / Chromium 152.0.7977.76. Base source commit
+`55c0471de3dddec519bb6cabefca4e6cc73cc052` plus the uncommitted working tree.
+Final engine/tool source inventory:
+`extracted/cockpit-gun-smoke/source-projected-reticle.json`, SHA256
+`be90f1d05a462b2549f53b94c7d2e125cec3ad01e2c48953f8503a9c0cee2ad6`.
+This supersedes the previous sight's authored angular-scale and parallax
+limitations. No installer or retail files were changed.
+
+Confirmed defect/reproduction: the previous `gun-sight.ts` discarded the muzzle
+origin and mapped angles with unequal horizontal/vertical scales, then
+`FlightHud.tsx` centred those inside a per-aircraft artwork rectangle. Arming
+F14/A4E/X31 showed the cue follow each HUD artwork centre, not the gun trajectory.
+Tests comparing those same angles could not prove screen alignment. Independent
+bounded review confirmed this diagnosis and found no additional concrete
+regressions in the corrected projection/gating code.
+
+Verification:
+
+- `bun test engine/src/flight/gun-projection.test.ts`: **6 passed, 0 skipped**.
+  Actual locally installed gun manifests for all three aircraft were available.
+  Tests independently step rounds from each barrel then compare their mean world
+  point and projected screen point: world error <1e-7 m, pixel comparisons at
+  five decimal places. Cases cover 2560×1440, 1024×768, 3440×1440, centred/offset
+  head look, pitched/yawed/banked aircraft and three floating-origin choices.
+  Separate tests check eye-to-muzzle parallax, behind-camera rejection, range arc
+  endpoints/intermediate range, and armed/ammo/camera visibility gates.
+- `bun run check`: **256 passed, 0 failed**, 693,166 assertions; TypeScript,
+  lint and format pass, no skips. Existing gun cadence/ballistic tests pass with
+  the shared muzzle transform. HUD tests now explicitly reject F2/F3 markup.
+- `bun run probe --fresh`: fresh source built, Apple M3 hardware WebGL2, exit 0.
+- `bun tools/flight/cockpit-gun-smoke.ts f14`, then the same command with `a4e`
+  and `x31`: **all pass**, zero renderer errors, all remain airborne. Imported
+  cockpit/flight/gun data loaded; safety hides the cue, armed F1 shows it, F2/F3
+  hide the flight HUD, returning to F1 restores it, and 1280×720 resizing retains
+  the cue. A4E/X31 runs include additional armed F2/F3 assertions added after
+  the F14 run. Screenshot evidence: each aircraft's `armed-reticle.png`,
+  `tracers.png`, `F2-orbit.png`, `F3-orbit.png`, `cockpit-720p.png` under
+  `extracted/cockpit-gun-smoke/<id>/`. Armed cockpit images inspected for all
+  three; F14 tracer screenshot also inspected. Thick lower arc is visible.
+- `bunx prettier --check README.md AGENTS.md`, `git diff --check` pass;
+  staged files empty. No Python suites or flight maneuver harness rerun because
+  decoders, terrain pipeline and aircraft motion solvers were unchanged.
+
+The reticle projects a newly fired round at the selected range using the current
+camera. Earlier rounds in a manoeuvre can differ because they retain the velocity
+at firing. A4E represents the two parallel barrels' mean, not artificial
+convergence. Surface ranging still uses a sampled forward ray (25 m intervals),
+not exact ballistic terrain collision. General pitch-ladder/flight-path artwork
+is not re-calibrated by this fix. Target mode remains synthetic plumbing only.
+No frame-rate benchmark, installer, night or physical-input acceptance in this
+pass. Linux deferred; Windows phase 9. Next human check: low-level strafing with
+terrain inside 1 km, observing the arc shorten toward south/east and round paths.
+
+## 2026-09-09: retail/cockpit defaults and gun ranging
+
+Machine: Apple M3, macOS 26.6.2 arm64; Bun 1.4.2, Node v22.14.0,
+Electron 44.2.0 / Chromium 152.0.7977.76. Source: base commit
+`55c0471de3dddec519bb6cabefca4e6cc73cc052` plus this uncommitted working tree.
+Source inventory: `extracted/cockpit-gun-smoke/source-defaults-reticle.json`,
+SHA256 `6d6b3a701656970155d2982227dba0e2d8bfa0e843f7d75bbaac81a1a62d50ea`.
+Scope is defaults, input reset, gun-sight calculation/HUD and smoke assertions;
+assisted and experimental flight solvers and retail bytes are unchanged.
+
+- `bun run check`: **249 passed, 0 failed**, 693,018 assertions; TypeScript,
+  lint and formatting pass. Four new sight tests compare terrain cue to actual
+  stepped rounds, solve a moving target intercept, reject invalid direction or
+  unreachable targets, and check near/far/sky/missing-data ranges and lateral
+  inertia. No Bun skips.
+- `bun run probe --fresh`: final source rebuilt, hardware Apple M3 WebGL2 probe
+  passes. An earlier rebuild logged macOS `task_policy_set` invalid argument but
+  returned a successful hardware report; final probe also exits 0.
+- `bun tools/flight/cockpit-gun-smoke.ts`: F14 and A4E passed with imported PT
+  profiles, default cockpit, default `retail-envelope`, a range solution capped
+  at 1,000 m, removed camera HUD label, mirrors/look/chase and gun/safety/audio
+  checks, zero renderer errors. X31 launch then failed inside Electron's sandbox
+  startup (`binding.startupData` null / `preloadScripts`), before app acceptance.
+- `bun tools/flight/cockpit-gun-smoke.ts x31`: isolated retry passed, zero renderer
+  errors. All three aircraft remain airborne after the gun/control exercise.
+  F14 screenshot inspected: ring and 1,000 m base-range label visible, cockpit
+  fits, camera label absent. Range text initially crossed the pitch ladder; moved
+  to the vacated lower-right HUD row afterward. Final fresh-source X31 rerun
+  verifies that placement. Screenshots/reports in `extracted/cockpit-gun-smoke/`
+  supersede prior files for matching aircraft/scenarios.
+- `git diff --check` passes; staged-file inspection is empty. Python suites and
+  maneuver harness were not rerun: no decoder, pipeline or flight solver changes.
+  Installer packaging, physical controller/feel acceptance and night reruns were
+  not performed for this change. Linux remains deferred; Windows phase 9.
+
+The 1,000 m base range is an authored gameplay assumption. Surface probes step
+25 m and refine sampled crossings; thin features can be missed. The gun sight
+uses aircraft-relative HUD scales rather than camera-projected optics. Target
+input is tested synthetic plumbing only; it has no acquisition/UI or game targets.
+Next reproducible human check: start airborne in each aircraft, descend toward
+terrain inside 1 km and compare `GUN RDR` / `GUN BASE` transition and tracer cue.
+
 ## 2026-09-09 follow-up: enlarged HUD fit and live mirrors
 
 This supersedes the initial independent HUD layout/static-mirror limitation

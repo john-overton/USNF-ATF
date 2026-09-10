@@ -104,6 +104,16 @@ Goal: know exactly what we can import before writing engine code that depends on
 
 ### Phase 5: In-app importer
 
+**2026-09-09 defaults/sight decision:** Retail PT-envelope flight and cockpit view
+are the defaults for imported aircraft. Assisted remains a comparison/fallback.
+The original gun sight uses the nearer of forward terrain and a 1,000 m base
+range with inherited velocity/gravity; target position/velocity input is plumbing
+only, with no acquisition or damage system. Follow-up alignment correction projects
+the gun cue through the renderer camera; its lower range arc maps W/1,000 m,
+S/500 m, E/0 m, filling left-to-right as range closes below 1 km and hidden
+at/above 1 km or on base-range fallback. HUD is cockpit-only and gun cue is armed-only.
+This is not recovered retail sight code.
+
 **2026-09-09 scope decision:** at the user's request, the existing developer
 aircraft port workflow is being extended ahead of this phase with F-14,
 A-4E and X-31 cockpit art with fitted HUD, live F14/A4E mirrors, cockpit/orbit

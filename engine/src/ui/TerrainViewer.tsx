@@ -371,7 +371,9 @@ export function TerrainViewer() {
                     url.searchParams.set('aircraft', event.target.value);
                     url.searchParams.set(
                       'flightModel',
-                      stats.flight!.flightModelId === 'assisted' ? 'assisted' : 'retail-envelope',
+                      url.searchParams.get('flightModel') === 'assisted'
+                        ? 'assisted'
+                        : 'retail-envelope',
                     );
                     url.searchParams.set('flightFuel', String(stats.flight!.fuelFraction));
                     window.location.assign(url.href);
@@ -396,9 +398,9 @@ export function TerrainViewer() {
                     window.location.assign(url.href);
                   }}
                 >
-                  <option value="assisted">Preserved assisted (default)</option>
+                  <option value="assisted">Preserved assisted</option>
                   <option value="retail-envelope" disabled={!stats.flight.retailProfileAvailable}>
-                    Retail PT envelope fit (experimental)
+                    Retail PT envelope fit (default)
                   </option>
                   <option
                     value="recovered-envelope"
@@ -532,19 +534,19 @@ export function TerrainViewer() {
           )}
           <p>
             <a
-              href={`?mode=flight&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'assisted'}`}
+              href={`?mode=flight&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
             >
               Practice runway
             </a>
             {' · '}
             <a
-              href={`?mode=flight&flightStart=approach&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'assisted'}`}
+              href={`?mode=flight&flightStart=approach&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
             >
               Final approach
             </a>
             {' · '}
             <a
-              href={`?mode=flight&flightStart=airborne&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'assisted'}`}
+              href={`?mode=flight&flightStart=airborne&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
             >
               Airborne practice
             </a>

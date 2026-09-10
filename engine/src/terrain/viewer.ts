@@ -1,3 +1,4 @@
+import { GunSightOverlay } from '../flight/GunSightOverlay';
 import {
   DataTexture,
   SRGBColorSpace,
@@ -208,6 +209,8 @@ export function startTerrainViewer(
   if (flightMode) sky.enableShadows(renderer);
   const camera = new PerspectiveCamera(60, 1, 5, 400000);
   const antialias = new TerrainAntialias(renderer, scene, camera);
+  const gunSightOverlay =
+    flightMode && canvas.parentElement ? new GunSightOverlay(canvas.parentElement) : undefined;
   const mirrors = flightMode ? new CockpitMirrors() : undefined;
   antialias.clouds.quality = cloudQuality;
   antialias.clouds.steps = cloudSteps;
@@ -732,6 +735,8 @@ export function startTerrainViewer(
       yaw = camera.rotation.y;
       pitch = camera.rotation.x;
     } else camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    camera.updateMatrixWorld(true);
+    gunSightOverlay?.update(d.flight, camera, d.origin, d.width, d.height);
     d.yaw = yaw;
     d.pitch = pitch;
     for (const key of new Set([...visible, ...outgoing])) {
@@ -950,6 +955,7 @@ export function startTerrainViewer(
       imagery?.dispose();
       flight?.dispose();
       mirrors?.dispose();
+      gunSightOverlay?.dispose();
       antialias.dispose();
       sky.dispose();
       renderer.dispose();

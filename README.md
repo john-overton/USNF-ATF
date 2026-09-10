@@ -2,7 +2,7 @@
 
 A non-commercial fan remake of Jane's US Navy Fighters '97 (and, later, ATF Gold), built with TypeScript, Three.js, React, and Electron. The goal is retail aircraft and missions over real-elevation terrain, using assets imported from your own copy.
 
-**Current status (2026-09-09):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, stitched panel edges, water, optional satellite paint, compact seasonal color maps, classified shoreline ribbons, a simulated atmosphere with a theater clock, sun and moon lighting, wind, aircraft and cloud shadows and volumetric clouds, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. Practice flight now supports selectable locally imported F-14, A-4E and X-31 aircraft with throttle presets, engine/gear/hook controls, retail engine sounds, moving aircraft control surfaces, a flight HUD, bracket-selected waypoints, a zoomable regional terrain map and F2/F3 chase views over the generated theater. The existing assisted flight remains the default, with separate opt-in PT-calibrated and recovered-envelope models for comparison. For imported USNF profiles, both experimental modes now include recovered G command limits and speed-dependent thrust/drag with fuel/load corrections; the remaining motion solver is original. Wind is the only environment input the flight model reads; time of day, shadows and clouds do not affect flight. Retail cockpit frames and imported practice guns now support F1 cockpit, Shift-arrow look/orbit, safety and individual ballistic rounds. Targets/damage, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
+**Current status (2026-09-09):** the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, stitched panel edges, water, optional satellite paint, compact seasonal color maps, classified shoreline ribbons, a simulated atmosphere with a theater clock, sun and moon lighting, wind, aircraft and cloud shadows and volumetric clouds, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. Practice flight now supports selectable locally imported F-14, A-4E and X-31 aircraft with throttle presets, engine/gear/hook controls, retail engine sounds, moving aircraft control surfaces, a flight HUD, bracket-selected waypoints, a zoomable regional terrain map and F2/F3 chase views over the generated theater. The retail PT-envelope flight model is the default for imported aircraft, with preserved assisted and recovered-envelope models selectable for comparison; missing profiles fall back to assisted flight. For imported USNF profiles, both experimental modes now include recovered G command limits and speed-dependent thrust/drag with fuel/load corrections; the remaining motion solver is original. Wind is the only environment input the flight model reads; time of day, shadows and clouds do not affect flight. Retail cockpit frames and imported practice guns now support F1 cockpit, Shift-arrow look/orbit, safety and individual ballistic rounds. Targets/damage, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
 
 Start with [progress and review findings](Docs/progress.md), the [build plan](Docs/build-plan.md) (phase order and exit criteria), and the [design brief](Docs/usnf-atf-plan.md). Contributor and agent instructions are in [AGENTS.md](AGENTS.md). The [full US Navy Fighters manual](Docs/reference/JANES_US_NAVY_FIGHTERS_djvu.txt) is available locally; [reference details](Docs/reference/README.md) record its source and checksum.
 
@@ -91,14 +91,19 @@ exteriors and the separate experimental per-aircraft flight-data mode. [F-14 set
 - Hold **W/S** for incremental throttle; the setting stays when released.
 - **T** toggles engine, **G** gear, **H** hook, **F** flaps and **M** sound mute.
 - **B** toggles speed brakes and wheel braking on the ground.
-- **F1** opens the enlarged imported cockpit with a HUD fitted to its glass.
+- Cockpit view is the default; **F1** returns to the enlarged imported cockpit with a HUD fitted to its glass.
   F-14/A-4E mirrors show live rear views. **Shift + arrows**
   look around or orbit externally; **Shift + /** centers the view.
 - Hold **Tab** to fire; **Shift + Tab** toggles safety (starts safe). Guns use
   matching imported samples and individual rounds with aircraft velocity plus
   muzzle speed. Bright tracers appear every fifth round. See
-  [cockpit and gun setup](Docs/phase-4-cockpit-guns.md).
+  [cockpit and gun setup](Docs/phase-4-cockpit-guns.md). The gun reticle uses nearer
+  terrain or a 1,000 m base range, including aircraft velocity and gravity. Its thick
+  lower arc appears below 1,000 m and fills from left through bottom (500 m) to
+  right (zero) as range closes. The base-range fallback shows no bar. The reticle
+  appears only with the gun armed and ammunition available.
 - **F2** locks chase view to aircraft attitude; **F3** keeps the camera upright.
+  Both external views hide the flight HUD and gun reticle.
 - **ArrowDown** pulls up, **ArrowUp** pushes down; left/right arrows bank.
 - **Q/E** controls rudder; **R** resets the practice start.
 - **[ / ]** select the previous/next waypoint: practice strip, mountains, coastline.

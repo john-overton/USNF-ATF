@@ -27,6 +27,23 @@ function rotate(q: Quaternion, v: Vec3): Vec3 {
     z: v.z + q.w * tz + q.x * ty - q.y * tx,
   };
 }
+/** Shared muzzle transform for emitted rounds and the sight's predicted world point. */
+export function gunLaunch(aircraft: FlightState, mount: readonly number[], muzzleSpeedMps: number) {
+  const offset = rotate(aircraft.attitude, { x: mount[0]!, y: mount[1]!, z: mount[2]! });
+  const muzzle = rotate(aircraft.attitude, { x: 0, y: 0, z: -muzzleSpeedMps });
+  return {
+    position: {
+      x: aircraft.position.x + offset.x,
+      y: aircraft.position.y + offset.y,
+      z: aircraft.position.z + offset.z,
+    },
+    velocity: {
+      x: aircraft.velocity.x + muzzle.x,
+      y: aircraft.velocity.y + muzzle.y,
+      z: aircraft.velocity.z + muzzle.z,
+    },
+  };
+}
 /** Fixed-step actual rounds. Aircraft world velocity is added once at the muzzle. */
 export function stepGun(
   state: GunState,
@@ -53,27 +70,21 @@ export function stepGun(
   let at = state.cooldown;
   while (at < dt - 1e-10 && state.remaining > 0) {
     const mount = gun.mounts[state.fired % gun.mounts.length]!;
-    const offset = rotate(aircraft.attitude, { x: mount[0], y: mount[1], z: mount[2] });
-    const muzzle = rotate(aircraft.attitude, { x: 0, y: 0, z: -gun.muzzleSpeedMps });
-    const velocity = {
-      x: aircraft.velocity.x + muzzle.x,
-      y: aircraft.velocity.y + muzzle.y,
-      z: aircraft.velocity.z + muzzle.z,
-    };
+    const launch = gunLaunch(aircraft, mount, gun.muzzleSpeedMps);
+    const velocity = launch.velocity;
     const age = dt - at;
     state.fired++;
     state.remaining--;
     if (state.rounds.length < MAX_GUN_ROUNDS)
       state.rounds.push({
         position: {
-          x: aircraft.position.x + aircraft.velocity.x * at + offset.x + velocity.x * age,
+          x: launch.position.x + aircraft.velocity.x * at + velocity.x * age,
           y:
-            aircraft.position.y +
+            launch.position.y +
             aircraft.velocity.y * at +
-            offset.y +
             velocity.y * age -
             0.5 * 9.80665 * age * age,
-          z: aircraft.position.z + aircraft.velocity.z * at + offset.z + velocity.z * age,
+          z: launch.position.z + aircraft.velocity.z * at + velocity.z * age,
         },
         velocity: { ...velocity, y: velocity.y - 9.80665 * age },
         age,
