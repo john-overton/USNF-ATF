@@ -130,7 +130,8 @@ for (const altitude of [100, 3000, 10972.8]) {
   const ab = run(`level-AB-${altitude}m`, altitude, initial, 600, level(altitude, abRatio));
   const mil = run(`level-military-${altitude}m`, altitude, initial, 600, level(altitude, 1));
   assert(
-    Math.abs(ab.finalSpeedMps / target.maxSpeedMps - 1) < 0.05,
+    profile.native ? ab.finalSpeedMps <= target.maxSpeedMps * 1.05
+      : Math.abs(ab.finalSpeedMps / target.maxSpeedMps - 1) < 0.05,
     `AB does not approach imported boundary at ${altitude}: ${ab.finalSpeedMps} vs ${target.maxSpeedMps}`,
   );
   assert(ab.maxAltitudeError < 30 && mil.maxAltitudeError < 30, 'Level altitude excursion');
@@ -147,6 +148,15 @@ for (const altitude of [100, 3000, 10972.8]) {
       'Level flight must sustain approximately 1G',
     );
   }
+}
+if (profile.native) {
+  // Native load corrections make full-fuel speed lower than the unladen PT
+  // boundary. Verify that boundary at empty weight, without fuel burn logic.
+  const height = 10972.8;
+  const target = envelopeBounds(profile, 1, height)!;
+  const light = run('unladen-upper-boundary', height, target.maxSpeedMps * 0.6, 600,
+    level(height, abRatio), definition(profile.emptyMassKg));
+  assert(Math.abs(light.finalSpeedMps / target.maxSpeedMps - 1) < 0.05, 'Unladen AB upper boundary');
 }
 const altitude = 3000;
 const full = run('full-fuel-acceleration', altitude, 180, 60, level(altitude, abRatio));

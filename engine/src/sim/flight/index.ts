@@ -1,6 +1,8 @@
 import rawAircraft from '../../data/placeholder-aircraft.json';
 import { fitEnvelopeAero } from './retail-envelope';
 import { recoveredEnvelopeBounds } from './native-envelope-adapter';
+import { recoveredFlightPoint, recoveredLongitudinalForces } from './retail-dynamics';
+import { nativeSoundSpeedFps } from './native-drag';
 import { parseAircraftDefinition, type AircraftDefinition } from '../../data/aircraft';
 export type { AircraftDefinition } from '../../data/aircraft';
 
@@ -261,7 +263,11 @@ function aerodynamics(state: FlightState, env: FlightEnvironment, def: AircraftD
   const alpha = speed > 0.5 ? Math.atan2(-local.y, -local.z) : 0;
   const beta = speed > 0.5 ? Math.asin(clamp(local.x / speed, -1, 1)) : 0;
   const rho = 1.225 * Math.exp(-Math.max(0, state.position.y) / 8500),
-    mach = speed / 340.3;
+    mach =
+      speed /
+      (def.retail?.native
+        ? nativeSoundSpeedFps(Math.trunc((state.position.y / 0.3048) * 256)) * 0.3048
+        : 340.3);
   const qArea = 0.5 * rho * speed * speed * def.wingAreaM2;
   const fit = retailAeroFit(def, state.position.y);
   if (def.retail && !fit)
@@ -381,9 +387,23 @@ export function stepFlight(
   const onGround =
     state.position.y <= ground.height + def.gearHeightM + 0.02 && state.velocity.y <= 0.1;
   // Solve the unstalled lift branch for a neutral augmented 1g target.
+  const nativePoint = def.retail
+    ? recoveredFlightPoint(def.retail, state.position.y, a.speed, flap > 0.5, def.massKg)
+    : undefined;
+  const neutralG = 1 / Math.max(0.4, Math.abs(nativePoint ? a.liftDirection.y : a.up.y));
+  const targetG =
+    nativePoint && !onGround
+      ? clamp(
+          pitch >= 0
+            ? neutralG + pitch * (nativePoint.maximumG - neutralG)
+            : neutralG - pitch * (nativePoint.minimumG - neutralG),
+          nativePoint.minimumG,
+          nativePoint.maximumG,
+        )
+      : neutralG;
   const wantedCL = clamp(
-    (def.massKg * G) / (Math.max(1, a.qArea) * Math.max(0.4, Math.abs(a.up.y))),
-    0,
+    (def.massKg * G * targetG) / Math.max(1, a.qArea),
+    nativePoint && !onGround ? -(a.fit?.clMax ?? 1.3) : 0,
     a.fit ? a.fit.clMax + flap * a.flapLiftMax : 1.3,
   );
   let trimAlpha = 0;
@@ -415,11 +435,25 @@ export function stepFlight(
   const dynamicPressure = a.qArea / def.wingAreaM2;
   const authority = clamp(dynamicPressure / (0.5 * 1.225 * 65 ** 2), 0, 1),
     bank = -flightEuler(state.attitude).rollRad;
+  const currentLift =
+    a.qArea *
+    (a.cl + flapLiftCoefficient(a.alpha, flap, def.stallAlphaRad, a.flapLiftMax, a.flapCamber));
+  // Recovered stick targets are G, not a fixed pitch rate. Follow the airflow
+  // rotation and approach the alpha required for that G with the original
+  // attitude actuator. This adapter is not native GToTurn/MovePlane execution.
+  const envelopePitchRate = clamp(
+    (currentLift / def.massKg - G * a.liftDirection.y) / Math.max(a.speed, 30) +
+      (trimAlpha - a.alpha) * 1.7,
+    -def.controls.pitchRateRadS,
+    def.controls.pitchRateRadS,
+  );
   const desiredRates = {
     x:
       authority *
-      (pitch * def.controls.pitchRateRadS +
-        (onGround ? 0 : clamp((trimAlpha - a.alpha) * 1.7, -0.65, 0.65))),
+      (nativePoint && !onGround
+        ? envelopePitchRate
+        : pitch * def.controls.pitchRateRadS +
+          (onGround ? 0 : clamp((trimAlpha - a.alpha) * 1.7, -0.65, 0.65))),
     y:
       authority *
       (-yaw * def.controls.yawRateRadS -
@@ -485,7 +519,7 @@ export function stepFlight(
       controls.thrustMultiplier > 2)
   )
     throw new Error('Invalid thrust multiplier');
-  const thrust =
+  let thrust =
     (controls.thrustMultiplier ?? 1) *
     clamp(controls.throttle, 0, 1) *
     (def.retail
@@ -518,10 +552,35 @@ export function stepFlight(
     extraInducedDrag +
     airbrake * deviceDragCoefficient('airBrakesDrag', 0.12) +
     gear * deviceDragCoefficient('gearDrag', 0.02);
+  let drag = a.qArea * (a.cd + deviceDrag);
+  if (nativePoint && def.retail) {
+    const recovered = recoveredLongitudinalForces(def.retail, nativePoint, {
+      throttle: clamp(controls.throttle, 0, 1),
+      thrustMultiplier: controls.thrustMultiplier ?? 1,
+      massKg: def.massKg,
+      loadFactor: currentLift / (def.massKg * G),
+      pitchRad: flightEuler(state.attitude).pitchRad,
+      onGround,
+      gear,
+      flap,
+      airbrake,
+    });
+    if (recovered) {
+      thrust = recovered.thrustN;
+      const separated = clamp(
+        (Math.abs(a.alpha) - def.stallAlphaRad) / (Math.PI / 2 - def.stallAlphaRad),
+        0,
+        1,
+      );
+      // Preserve continuous separated-flow dissipation beyond the recovered
+      // command envelope. Native stall/departure integration remains unported.
+      drag = recovered.dragN + a.qArea * 1.8 * separated ** 2 * Math.sin(a.alpha) ** 2;
+    }
+  }
   // Sideforce is damping perpendicular to airflow, so it cannot manufacture energy.
   const side = unit(add(a.right, scale(a.direction, -dot(a.right, a.direction))));
   const force = add(
-    add(scale(a.forward, thrust), scale(a.direction, -a.qArea * (a.cd + deviceDrag))),
+    add(scale(a.forward, thrust), scale(a.direction, -drag)),
     add(scale(a.liftDirection, a.qArea * (a.cl + flapLift)), scale(side, -a.qArea * a.beta * 0.7)),
   );
   let acceleration = add(scale(force, 1 / def.massKg), { x: 0, y: -G, z: 0 });

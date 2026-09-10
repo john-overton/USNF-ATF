@@ -13,8 +13,73 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite and a shared sky highlight rolloff | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: aircraft-porting guide performance follow-up
+
+Updated [aircraft-porting.md](aircraft-porting.md) to reflect the recovered
+performance integration: profile-dependent behavior, G command limits,
+coefficient units, fuel/payload corrections and remaining native-parity gaps.
+Added partial-throttle, loading and instantaneous/sustained-G acceptance
+guidance plus the current F-14 harness, envelope audit and fresh desktop smoke
+commands. Aircraft-specific scenarios and unladen tests are explicitly scoped.
+
+Documentation-only follow-up; no new runtime measurements. Cross-checked the
+guide against the current tools, native-performance notes and phase 4 baseline;
+checked local Markdown links and `git diff --check`. The current snapshot and
+performance measurements remain those recorded below. Next: use this checklist
+when validating the next aircraft port or extending recovered native coverage.
+
+## 2026-09-09: recover the missing Tomcat G and partial-throttle performance calculations
+
+The reported behavior reproduced in still air: the previous solver sustained
+about 681 KTAS at 45% throttle/36,000 ft, and full aft stick from 450 KTAS at
+1,000 m peaked at 12.47/12.52G (retail/recovered modes). The HUD reads true
+airspeed, so a tailwind is not the explanation. The exact observed 770 KTAS was
+not a steady full-fuel equilibrium in this reproduction.
+
+The user's recollection and the manual's envelope/Extra G sections led to the
+missing native caller: row classification and fractional G interpolation feed
+bounded stick G commands, with fuel/load reductions and a +1G cheat branch
+clipped to the PT maximum (9G for F14). Actual local x86 execution also confirms
+the 1G upper-speed input to thrust, transonic drag, AB-referenced dry-power drag,
+altitude-dependent sound speed and loading corrections. **Correction to earlier
+entries:** exclusive sustained-G interpretation of all polygons was an assumption;
+those rows also directly govern instantaneous control authority.
+
+Both experimental modes now apply that recovered subset for native-metadata
+profiles. An original alpha controller tracks the G request; no HUD/load-number
+clamp hides excess lift. Native force arithmetic feeds the existing SI integrator,
+with continuous device/AB fractions. Full fuel and aggregate payload now reduce
+G authority and increase drag using the recovered percentage corrections.
+A-4E/X-31 local profiles have no native USNF metadata and retain the fitted path.
+`assisted-flight.ts` is unchanged.
+
+Current full-fuel, no-wind results: 45%/36,000 ft converges to **390.45 KTAS**
+from both 450 and 770 KTAS; 450-KTAS full-pull peaks are **5.95/5.96G**. The
+intermediate 426-KTAS result omitted native loading corrections and is superseded.
+The unladen-native coefficient probes and full-fuel SI trajectories must not be
+conflated. [Phase 4 baseline](baselines/phase-4.md) records commands, provenance,
+all verification and remaining gaps; [native performance](formats/native-performance.md)
+records the recovered formulas and field-confidence corrections.
+
+Verification: 218 Bun tests; all 16 original harness cases; 15 retail-profile
+acceptance cases per model; 16 audit trajectories; 600 native G ranges, 108
+low-speed reductions, 72 turn rates, 3,200 sound/drag and 800 loading comparisons.
+Fresh Mac probe and live flight evidence are recorded in the baseline. Initial
+neutral-trim regression was corrected to use airflow-normal lift; the historical
+full-fuel AB boundary gate failed once native loading was included and now checks
+the unladen boundary separately. A negative-zero mismatch in the isolated turn
+translation was corrected to native integer zero. A formatting check initially
+failed and was corrected. No unavailable-media skips in these runs.
+
+Remaining: complete native attitude/stall/damage integration, exact hardpoint
+partition, and human USNF feel acceptance. No whole-game parity or real-aircraft
+certification claim. Linux remains deferred; Windows phase 9. Next reproducible
+step: rerun `bun tools/harness/envelope-audit.ts extracted/flight/f14-flight.json
+extracted/flight-envelope-audit/f14.json`, then compare manual flying in both
+experimental models at the reported altitude/throttle and low-altitude pull-up.
 
 ## 2026-09-09: retail coastline research and painted two-sided shoreline ribbons
 

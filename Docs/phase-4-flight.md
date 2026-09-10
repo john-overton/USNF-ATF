@@ -1,7 +1,9 @@
 # Phase 4 practice flight
 
 Updated 2026-09-09: flight can now render a locally converted retail F-14.
-Dynamics remain the original assisted model, not evidence of USNF handling parity. Linux testing
+The preserved assisted model remains the default. Optional PT models now apply recovered
+USNF G limits and longitudinal forces when native profile metadata is available;
+[recovery scope](formats/native-performance.md) distinguishes this from full native handling parity. Linux testing
 remains deferred. Packaged checks and repeatable measurements belong in the phase
 4 baseline; headless maneuver assertions are separate evidence from flying the app.
 

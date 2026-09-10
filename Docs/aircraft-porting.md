@@ -120,19 +120,48 @@ consistent with the selected aircraft. Optional devices should not inherit
 F-14 behavior accidentally.
 
 The **preserved assisted** force/control code stays unchanged and remains the
-default comparison model. Retail mass/thrust/envelope fitting is opt-in through
-the flight-model selector. The shared 52.5 m² area currently normalizes that fit;
-it is not a claim that all aircraft share a real wing area. Angular assistance,
-stall/poststall behavior, device scaling and ground support remain original
-unless separately recovered and verified. Some higher-G fits use an explicit
-fallback; finite output is not proof that every sustained-G boundary matches.
+default comparison model. Both PT modes are opt-in through the flight-model
+selector. Their behavior depends on the supplied profile:
+
+| Profile evidence | Current experimental behavior |
+|---|---|
+| Polygons and mass/thrust only | Original fitted lift/drag polar and exponential thrust lapse. Current A-4E/X-31 imports use this path. |
+| Verified USNF `native` rows and structural-speed metadata | Both modes apply recovered G command limits, low-speed control reduction and altitude-dependent sound speed. They still differ in the lift-envelope boundary query. |
+| Native metadata plus `coefDrag` and `_gpullDrag` | Both modes also use recovered speed-dependent thrust and drag. Supplied loading coefficients reduce G authority and increase drag with fuel/payload weight. Current F-14 imports use this path. |
+
+The shared 52.5 m² area normalizes the lift fit; it is not a claim that all
+aircraft share a real wing area. Lift, attitude response, stall/poststall
+behavior, lateral damping and ground support remain original integration.
+Fractional devices and AB spool interpolate recovered force endpoints.
+
+Do not treat every G polygon as an exclusively sustained-turn boundary or
+cap an aircraft at the highest numbered row everywhere. The native caller
+classifies and interpolates the rows at the current altitude and true airspeed,
+then reduces the G request for loading and low speed. Its extra-G flag adds
+one G and clips to the PT range; the F-14's 9G maximum is not a universal normal
+flight limit. Our controller approaches the resulting G target through angle
+of attack; it does not clamp the HUD reading or directly clip lift forces.
+Transient overshoot and full native maneuver parity remain open.
+
+Preserve raw coefficient values and distinguish their recovered units:
+`coefDrag` is an 8.8 force normalization, not aerodynamic CD; `_gpullDrag` and
+device drag fields are 8.8 weight-relative force factors. `loadedDrag`,
+`loadedGpullDrag` and `loadedElevator` are percentage correction coefficients.
+Earlier exports may still label these probable/unknown; changing those labels
+does not require changing the numeric values. Fuel-only loading uses native
+whole-pound percentages. Aggregate payload lacks the original hardpoint
+partition and can differ by one percentage point from separate rounding.
 
 Do not add a `native` block to a new profile merely because its points convert.
 Recovered helper parity requires actual local x86 execution for the applicable
 game/aircraft/caller assumptions. Isolated helper parity still is not full flight
 parity. X-31 vectoring/paddle laws and ATF fuel-time convention reuse are examples
 of limitations that must remain explicit. See [flight dynamics](formats/flight-dynamics.md)
-and [native flight](formats/native-flight-code.md).
+and [native flight](formats/native-flight-code.md). The
+[native performance recovery](formats/native-performance.md) records the G,
+thrust/drag and loading callers, coefficient meanings and exact x86-oracle
+commands. Keep new ports within that verified scope; do not copy the F-14's
+native metadata into another aircraft to enable the selector.
 
 ## Moving surfaces, gear, hook and engine presentation
 
@@ -183,6 +212,7 @@ When adding an ID, update these linked components deliberately:
 | Catalog, names, capabilities, presentation scale, accepted profile identity | `engine/src/flight/aircraft-catalog.ts` |
 | Reviewed conversion recipe | `tools/flight/aircraft-recipes.ts` |
 | PT variant decoding/export and validation | `tools/retail/retail/pt.py`, `flight.py`; `engine/src/data/retail-flight.ts` |
+| Experimental performance integration and recovered helpers | `engine/src/sim/flight/index.ts`, `retail-dynamics.ts`, `native-g-limits.ts`, `native-drag.ts`, `native-power.ts` |
 | Static source projection / authored rig | `tools/retail/retail/sh_static.py` |
 | Surface mixing / special device geometry | `engine/src/flight/ControlSurfaces.ts`, `AircraftHook.ts`, `FlightLayer.ts` |
 | Model/audio parsing and selected paths | `RetailAircraft.ts`, `FlightAudio.ts`, `FlightLayer.ts` |
@@ -231,6 +261,58 @@ approach/landing, devices in intermediate/final poses, missing terrain and
 render-rate independence. Add per-aircraft assertions where meaningful; do not
 call a short advancing-flight smoke a complete maneuver acceptance. Inspect
 actual images and sound separately from parser/telemetry success.
+
+### Performance-envelope acceptance
+
+Start in still air and record **true airspeed**, altitude MSL, throttle/AB,
+fuel, payload and device positions. The HUD speed is TAS, so a tailwind does not
+explain excessive displayed TAS. Repeat level runs from above and below the
+expected equilibrium and record the final speed trend; merely passing through
+a speed does not establish sustained cruise.
+
+Compare partial dry throttle, full military power and afterburner where fitted,
+at low altitude and near the aircraft's upper operating range. Repeat at light
+and full fuel, and with payload when supported. Native load corrections mean
+full-fuel AB need not reach the unladen PT upper boundary. The unladen harness
+case intentionally suppresses fuel-exhaustion logic to isolate that boundary;
+it does not demonstrate flight with empty tanks in the app.
+
+For G response, test full pulls and pushovers at several initial speeds and
+altitudes. Record peak G, the changing available G range, speed loss and
+recovery. Distinguish instantaneous G from a sustained turn and from structural
+or damage limits. Keep the default assisted model as a separate comparison.
+
+The current F-14 checks are reproducible with the canonical local profile:
+
+```sh
+bun tools/harness/retail-flight.ts --profile extracted/flight/f14-flight.json --model retail-envelope --output extracted/flight-envelope-audit/acceptance-retail.json
+bun tools/harness/retail-flight.ts --profile extracted/flight/f14-flight.json --model recovered-envelope --output extracted/flight-envelope-audit/acceptance-recovered.json
+bun tools/harness/envelope-audit.ts extracted/flight/f14-flight.json extracted/flight-envelope-audit/f14.json
+bun run probe --fresh
+bun tools/flight/envelope-smoke.ts
+```
+
+The retail harness runs 15 cases for native profiles, including a separate
+unladen upper-boundary check. The envelope audit runs both models at 45/100%
+dry throttle and 36,000 ft from 450/770 KTAS, plus ten-second pulls from
+250/350/450/550 KTAS at 1,000 m. These are F-14-oriented scenarios; adapt their
+altitudes, speeds and burner assertions before applying them to a new aircraft.
+The audit reports observations rather than certifying game parity.
+
+The desktop smoke uses canonical `extracted/flight/` geometry/profile paths for
+F-14, A-4E and X-31. It checks advancing flight and renderer errors with ordinary
+key input, and F-14 G response in both experimental modes. Its short autopilot
+and pull segments are not the high-altitude performance test. For a new port,
+extend the smoke's aircraft/capability expectations and supply the reviewed
+bundle at its expected paths.
+
+For the corrected full-fuel F-14, the 2026-09-09 baseline records roughly
+390 KTAS at 45%/36,000 ft and 6G in the pull from 450 KTAS/1,000 m. Use
+[the phase 4 baseline](baselines/phase-4.md) for exact source, conditions and
+results. These are regression references for this port, not universal aircraft
+targets or proof of real-world F-14 performance. When porting more native
+arithmetic, run the applicable x86 oracle and its independent TypeScript
+comparison as well as the flight tests.
 
 Record commit, date, machine/tool versions, exact commands, dataset identity,
 source/output hashes, failures/skips, screenshots and remaining gaps. Use an

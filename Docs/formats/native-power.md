@@ -12,6 +12,17 @@ The local `USNF.SMS` address/name map identifies the named routines below.
 Executable bytes, disassembly and oracle results remain ignored under
 `extracted/native-flight/`; the committed fixtures are synthetic.
 
+## 2026-09-09 performance follow-up
+
+The original caller of the forward-speed bound is now traced and executed: it
+is the altitude-adjusted **1G upper envelope speed**, without structural clipping.
+The previous warning below records the earlier uncertainty, now resolved. Both
+experimental PT modes use recovered thrust/drag and G targets when the imported
+profile includes native metadata and coefficients. See
+[native performance](native-performance.md) for caller evidence, loading, new
+oracles and the limits of the SI integration. The preserved assisted model is
+unchanged.
+
 ## Verified arithmetic
 
 | Address | Routine | Implemented scope |

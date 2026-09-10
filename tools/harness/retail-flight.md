@@ -10,13 +10,16 @@ in `bun run check` or the original trainer's `bun run harness`.
 Missing/malformed input fails explicitly. All profile bytes and reports stay in
 ignored `extracted/`; no retail fixture is committed.
 
-Fourteen maneuvers exercise the real fixed 120 Hz solver, with feedback commands
+Fifteen maneuvers for a native profile (fourteen for a polygon-only profile) exercise the real fixed 120 Hz solver, with feedback commands
 and no mid-maneuver state or velocity edits:
 
 - Six 600-second level accelerations: military and afterburner at 100 m, 3,000 m
   and 10,972.8 m (36,000 ft). Clean gear/flaps/airbrake, empty plus full internal
-  fuel reference mass, original 52.5 m² wing-area assumption. AB equilibrium must
-  approach the imported 1 G upper polygon intersection within 5%; altitude
+  fuel reference mass, original 52.5 m² wing-area assumption. For polygon-only profiles, AB equilibrium must
+  approach the imported 1 G upper polygon intersection within 5%. Native profiles
+  apply fuel/load drag corrections, so full-fuel AB must remain below that
+  boundary; a separate 600-second unladen AB run checks the upper boundary within
+  5%. The unladen run intentionally suppresses fuel-exhaustion handling. Altitude
   excursion stays below 30 m, final load factor within 3% of 1 G, final 30-second
   speed change below 1.5 m/s. AB must exceed military speed by at least 10%.
 - Two equal-condition 60-second accelerations at full and empty internal fuel
@@ -35,7 +38,21 @@ assertions leave the error in command output and do not produce a passing report
 
 The solver is original code calibrated against native parameter data. These tests
 verify that calibration and physical trends; they do not establish native USNF97
-acceleration, handling, stall, fuel, stores or damage parity. Fixed exponential
-atmosphere/thrust lapse, wing area, control laws and some device semantics remain
-remake assumptions. G polygons are data bounds, not captured retail flight runs.
+acceleration, handling, stall, fuel, stores or damage parity. The exponential density model, wing area, attitude controller and some device
+semantics remain remake assumptions. Native profiles now use recovered
+speed-dependent thrust/drag, load corrections and G targets; polygon-only
+profiles retain the original fitted polar/lapse. G polygons are control bounds,
+not captured retail flight runs.
 The tests compare true speed in m/s, converted to knots only when reporting.
+
+## Partial-throttle and G diagnostics
+
+```sh
+bun tools/harness/envelope-audit.ts extracted/flight/f14-flight.json extracted/flight-envelope-audit/f14.json
+```
+
+Runs both modes in still air at fixed full-fuel mass: four 3600-second level
+trajectories per mode (45/100% dry throttle, from 450/770 KTAS at 36,000 ft),
+plus four ten-second full-pull tests from 250/350/450/550 KTAS at 1,000 m.
+Reports observed performance without blessing it as full game parity. It uses
+controls only after initialization and records source/dirty-tree/profile provenance.

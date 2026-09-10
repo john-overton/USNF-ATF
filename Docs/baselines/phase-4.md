@@ -1,5 +1,88 @@
 # Phase 4 baseline: original practice flight on Mac
 
+
+## 2026-09-09: Tomcat envelope controls, longitudinal forces and loading
+
+Source: working tree based on `8a4af2fa2c7b21331a5d24d2269a114d122b5de2`,
+including this performance change; no new source commit claimed. Mac Apple M3
+arm64, macOS 26.6.2, Bun 1.4.2, Electron 44.2.0, Chrome 152.0.7977.76,
+Unicorn 2.1.4. Profile: local `extracted/flight/f14-flight.json` with its source
+hash recorded in each JSON report. All data/output remain ignored.
+
+Full internal-fuel mass held fixed at 25,330.87 kg, no payload/burn, no wind,
+clean devices, fixed 120 Hz. Four 3,600-second level trajectories per model
+start at 450/770 KTAS, 36,000 ft, 45/100% dry throttle. Four ten-second full-pull
+trajectories per model start at 1,000 m and the speeds below. No state edits occur
+after initialization. Before: `f14.json`; after: `f14-final.json`, both under
+`extracted/flight-envelope-audit/`.
+
+| Measurement | Before retail / recovered | After retail / recovered |
+|---|---|---|
+| 45% dry equilibrium, KTAS | 680.91 / 680.96 | 390.45 / 390.45 |
+| 100% dry equilibrium, KTAS | 1100.05 / 1100.06 | 793.34 / 793.34 |
+| Peak G from 250 KTAS | 5.19 / 5.21 | 3.76 / 3.77 |
+| Peak G from 350 KTAS | 9.00 / 9.03 | 5.62 / 5.64 |
+| Peak G from 450 KTAS | 12.47 / 12.52 | 5.95 / 5.96 |
+| Peak G from 550 KTAS | 16.13 / 16.19 | 6.26 / 6.28 |
+
+After level altitude excursions stay below 10 m; final 30-second speed changes
+are below 0.01 KTAS. The 100% dry result is still supersonic according to the
+recovered sound-speed helper: this targets original-game behavior, not a
+real-world Tomcat performance reconstruction. Scalar x86 tests at unloaded
+coefficient state bracket 45% equilibrium at 400–450 KTAS; including full-fuel
+load corrections gives the lower runtime result above.
+
+The existing retail acceptance suite now has 15 cases per native profile.
+Full-fuel AB at 100/3,000/10,972.8 m reaches 683.73/731.13/1145.79 KTAS;
+unladen 36,000-ft AB reaches 1344.94 KTAS, preserving the clean 1G upper boundary.
+Full-fuel speed is no longer incorrectly required to reach that unladen bound.
+Weight acceleration, gear/flap/airbrake energy losses and low-speed departure
+checks pass in both models.
+
+Commands/results (all from this working tree):
+
+```sh
+bun run check
+bun run harness
+PYTHONPATH=tools/native extracted/native-flight/.venv/bin/python tools/native/g-limits-oracle.py --exe extracted/usnf97/SETUP.ESA/USNF.EXE --out extracted/native-flight/g-limits-synthetic.json
+bun tools/native/check-g-limits.ts extracted/native-flight/g-limits-synthetic.json
+PYTHONPATH=tools/native extracted/native-flight/.venv/bin/python tools/native/drag-oracle.py --exe extracted/usnf97/SETUP.ESA/USNF.EXE --out extracted/native-flight/drag-oracle.json
+bun tools/native/check-drag.ts extracted/native-flight/drag-oracle.json
+bun tools/harness/envelope-audit.ts extracted/flight/f14-flight.json extracted/flight-envelope-audit/f14-final.json
+bun tools/harness/retail-flight.ts --profile extracted/flight/f14-flight.json --output extracted/flight-envelope-audit/acceptance-retail-final.json
+bun tools/harness/retail-flight.ts --profile extracted/flight/f14-flight.json --model recovered-envelope --output extracted/flight-envelope-audit/acceptance-recovered-final.json
+bun run probe --fresh
+bun tools/flight/envelope-smoke.ts
+python3 -m py_compile tools/native/g-limits-oracle.py tools/native/drag-oracle.py
+git diff --check
+```
+
+- Check: 218 pass, typecheck/lint/format clean. Harness: all 16 pass.
+- Oracle: 600 G ranges, 108 low-speed reductions, 72 turn rates; 3,200 sound/drag
+  and 800 loading cases pass against actual x86, no import/arithmetic stubs.
+  Six separate native caller slices also verify forward-bound plumbing.
+- Mac fresh probe: hardware ANGLE Metal Apple M3, no software renderer.
+- Live desktop flight: all four cases passed, no renderer errors: F14 retail
+  peak 4.62G, F14 recovered 4.64G, A-4E retail 7.34G, X-31 retail 6.57G.
+  `extracted/flight-envelope-audit/desktop.txt` and `desktop-*/report.json` use
+  ordinary key input and a ten-second autopilot hold followed by a ten-second
+  pull from the standard 3,000-m/150-m/s airborne start, not high-altitude
+  performance acceptance. Recorded AP states stay level then switch off on
+  pitch input; hold altitude excursions 14.46/14.40/4.73/5.37 m respectively.
+  Screenshot inspection confirms the F14 HUD and aircraft rendered; captures
+  occurred at night and are not an exterior-art or frame-time acceptance.
+- No unavailable-media skips. Python retail/pipeline suites not run: no decoder
+  or terrain producer changes. Native oracle scripts execute against local media.
+- Initial failures, corrected: neutral-trim test retained the old body-up cosine;
+  G-to-turn helper returned JS negative zero; full-fuel AB acceptance assumed
+  unladen boundaries; one initial Prettier check. These are not remaining failures.
+
+Limits: original SI lift/rotation/contact/stall remain; helper parity is not
+complete game-flight parity. Payload mass is aggregated rather than partitioned
+into native hardpoint groups (up to one percentage point difference). The Extra G
+UI, damage and native NPC flight are absent. Preserved assisted source unchanged.
+No new installer packaging or x64 launch test. Linux deferred; Windows phase 9.
+
 ## 2026-09-09: wind is the only environment input to the flight model
 
 Source: dirty tree based on `0b10b548d8e6655466002819c3aa4cc0579d892b`.

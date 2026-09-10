@@ -233,3 +233,15 @@ PYTHONPATH=tools/native extracted/native-flight/.venv/bin/python tools/native/cl
 This is now direct native-code evidence for the time unit. Earlier labels of
 fuel consumption as "probable lb/s" accurately described the earlier research
 state; they are superseded for this specific executable and these fields.
+
+
+## 2026-09-09 correction: envelopes feed control G limits
+
+The original caller derives fractional minimum/maximum G from the envelope
+rows, applies loading and Extra G adjustments, then maps stick input into that
+range. Treating every higher-G row exclusively as a sustained-drag fitting
+point was an unverified assumption. The manual
+(`Docs/reference/JANES_US_NAVY_FIGHTERS_djvu.txt`, lines 2825–2888) describes
+instantaneous G decreasing through those envelopes as speed bleeds away.
+[Native performance](native-performance.md) records the newly executed callers
+and integration, including the missing thrust/drag behavior.

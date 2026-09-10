@@ -169,3 +169,14 @@ it does not require an uncommanded rotation. Leaving the raised practice deck
 can create an airborne state before lift supports weight. The pure six-case
 harness adds airborne flap deployment at fixed mass over flat terrain, excluding
 actuator transit, spool and fuel burn. Keep the two scopes distinct.
+
+## Envelope controls and forces smoke
+
+After `bun run probe --fresh`, run `bun tools/flight/envelope-smoke.ts`. This
+uses the fresh unpackaged Electron source, locally supplied F-14/A-4E/X-31
+profiles and geometry, still air, a ten-second autopilot segment, and a
+ten-second full-pull input. It checks both experimental F-14 modes, the other
+aircraft fitted modes, airborne continuity, F-14 G bounds and renderer errors.
+Reports/screenshots stay in `extracted/flight-envelope-audit/desktop-*`. The
+headless high-altitude performance audit is documented in
+[retail flight acceptance](../harness/retail-flight.md).

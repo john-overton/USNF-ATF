@@ -52,7 +52,8 @@ export interface EnvelopePolar extends EnvelopeBounds {
   cd0: number;
   inducedDragK: number;
   referenceMassKg: number;
-  /** Sustained G boundary used in the second fit; not an instantaneous G limit. */
+  /** Higher-G boundary assumed sustained by this fallback fit. Native callers
+   * instead derive control G limits; see Docs/formats/native-performance.md. */
   fitG: number | null;
   fitWarnings: string[];
 }

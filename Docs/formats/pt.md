@@ -205,3 +205,14 @@ avoids a zero-thrust fit without inventing an A-4 burner. The new profiles omit
 native-helper data: neither native X-31 vectoring nor full per-aircraft flight
 parity is established. PT facts and SI conversion are separate from the
 original envelope-fit force law; see [aircraft setup](../phase-4-aircraft.md).
+
+
+## 2026-09-09 coefficient interpretation correction
+
+Native callers now verify `coefDrag` as an 8.8 force normalization, not an
+aerodynamic drag coefficient. `_gpullDrag` and device drag fields are 8.8
+weight-relative force factors. `loadedDrag`, `loadedGpullDrag` and
+`loadedElevator` are **percentage correction coefficients**, not 8.8 values.
+Earlier generated profile metadata may still say probable/unknown; the raw
+values remain usable without reimporting. See [native performance](native-performance.md)
+for formulas, caller addresses, coverage and remaining unknowns.

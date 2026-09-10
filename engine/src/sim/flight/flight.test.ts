@@ -458,6 +458,26 @@ function recoveredAircraft() {
   return def;
 }
 
+test('both PT backends turn full stick into bounded G instead of an unrestricted pitch rate', () => {
+  for (const nativeEnvelope of [false, true]) {
+    const def = recoveredAircraft();
+    def.nativeEnvelope = nativeEnvelope;
+    def.retail!.rawFields.coefDrag = { value: 256 };
+    def.retail!.rawFields._gpullDrag = { value: 20 };
+    let state = createFlightState({ position: { x: 0, y: 1000, z: 0 }, airspeed: 230 });
+    let peakG = 0;
+    for (let tick = 0; tick < 6 * 120; tick++) {
+      const next = stepFlight(state, { ...NEUTRAL_CONTROLS, throttle: 1, pitch: 1 }, flat, def);
+      state = next.state;
+      expect(state.status).toBe('airborne');
+      peakG = Math.max(peakG, next.telemetry.loadFactor);
+    }
+    // Synthetic maximum row is 3G. Allow small actuator transients, not 9–12G.
+    expect(peakG).toBeGreaterThan(2.5);
+    expect(peakG).toBeLessThan(3.2);
+  }
+});
+
 test('recovered envelope mode applies native flap minimum-speed rule without changing the fitted mode', () => {
   const def = recoveredAircraft();
   const state = createFlightState({
@@ -512,7 +532,9 @@ test('experimental flap neutral trim balances the force polar on either side of 
           const alpha = (low + high) / 2;
           state.attitude = attitudeFromEuler(alpha, 0, 0);
           const load = sampleTelemetry(state, flat, def, { flaps }).loadFactor;
-          if (load * Math.cos(alpha) < 1) low = alpha;
+          // Horizontal airflow makes lift vertical; the recovered G controller
+          // targets 1G without the old body-up cosine correction.
+          if (load < 1) low = alpha;
           else high = alpha;
         }
         const alpha = (low + high) / 2;
