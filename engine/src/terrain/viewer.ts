@@ -20,6 +20,7 @@ import type { FsRoot, Platform } from '../platform/Platform';
 import { probeWebGL2 } from '../render/glProbe';
 import { ByteCache } from './cache';
 import { initialCamera } from './camera';
+import type { MissionParams } from '../sim/mission/params';
 import { WaterWorkerBuilder } from './water-worker-client';
 import { ShoreLayer } from './shoreline';
 import { parseShorelines } from './shoreline-data';
@@ -44,16 +45,10 @@ import { SourceTransition } from './transition';
 import { waypointDestination, type TeleportWaypoint } from './teleport';
 import { SkyLayer } from './sky';
 import { patchCloudShadow } from './cloud-shadow';
-import {
-  parseContrastQuery,
-  patchTerrainLightContrast,
-  setTerrainContrast,
-  TERRAIN_CONTRAST,
-} from './light-contrast';
+import { patchTerrainLightContrast, setTerrainContrast, TERRAIN_CONTRAST } from './light-contrast';
 import { marchedLayer } from '../sim/environment/clouds';
 import {
   Environment,
-  parseEnvironmentQuery,
   theaterCenterFromCrs,
   WEATHER_PRESETS,
   WIND_PRESETS,
@@ -159,6 +154,7 @@ export function startTerrainViewer(
   root: FsRoot,
   manifestPath: string,
   update: (d: TerrainDiagnostics) => void,
+  mission: MissionParams,
 ): {
   dispose(): void;
   setCockpitMirrors(layout: CockpitMirrorLayout): void;
@@ -171,10 +167,10 @@ export function startTerrainViewer(
   teleportToWaypoint(point: TeleportWaypoint): Promise<void>;
   setNavigationTarget(point: { id: number; x: number; z: number } | undefined): void;
 } {
-  const flightMode = new URLSearchParams(window.location.search).get('mode') === 'flight';
-  // Parsed before any GPU resource exists: an invalid parameter must surface
+  const flightMode = mission.mode !== 'explorer';
+  // Already parsed before any GPU resource exists: an invalid parameter surfaces
   // through the viewer's explicit error path without leaking a context.
-  const query = parseEnvironmentQuery(window.location.search);
+  const query = mission.environment;
   let flight: FlightLayer | undefined;
   const renderer = new WebGLRenderer({
     canvas,
@@ -200,7 +196,7 @@ export function startTerrainViewer(
   let cloudQuality: CloudQuality = query.clouds ?? 'half';
   // Parsed before any GPU resource exists, so a bad value surfaces through the
   // viewer's explicit error path rather than leaking a context.
-  const contrast = parseContrastQuery(window.location.search) ?? TERRAIN_CONTRAST;
+  const contrast = mission.contrast ?? TERRAIN_CONTRAST;
   setTerrainContrast(contrast);
   // Step count is a URL-only performance control; the panel exposes quality.
   const cloudSteps = query.cloudSteps ?? 40;
@@ -473,7 +469,7 @@ export function startTerrainViewer(
     const m = parseManifest(text);
     if (disposed) return;
     d.paintModes = [...(m.imagery ? ['satellite'] : []), ...Object.keys(m.colorMaps ?? {})];
-    const requestedPaint = new URLSearchParams(window.location.search).get('paint');
+    const requestedPaint = mission.paint;
     // The date picks the color map when the dataset has one; the manual
     // Ground colors selector still overrides it afterwards.
     const seasonal = environment.season;
@@ -507,7 +503,7 @@ export function startTerrainViewer(
         ),
       ),
     ];
-    const pose = initialCamera(m, window.location.search);
+    const pose = initialCamera(m, mission.camera);
     Object.assign(world, pose.position);
     yaw = pose.yaw;
     pitch = pose.pitch;
@@ -527,7 +523,7 @@ export function startTerrainViewer(
       );
     }
     if (flightMode) {
-      const layer = await FlightLayer.create(scene, m, platform, root, folder);
+      const layer = await FlightLayer.create(scene, m, platform, root, folder, mission);
       if (disposed) {
         layer.dispose();
         return;

@@ -1,12 +1,13 @@
 import type { CockpitMirrorLayout } from '../terrain/mirrors';
 import { CockpitOverlay, GunStatus } from '../flight/CockpitOverlay';
 import { AIRCRAFT } from '../flight/aircraft-catalog';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getPlatform } from '../platform';
 import { FlightNavigationOverlay } from '../flight/FlightNavigationOverlay';
 import type { FsRoot } from '../platform/Platform';
 import { startTerrainViewer, type TerrainDiagnostics } from '../terrain/viewer';
 import { ExplorerNavigationOverlay } from './ExplorerNavigationOverlay';
+import { DEFAULT_MISSION, parseMissionQuery, type MissionParams } from '../sim/mission/params';
 import type { MapWaypoint } from '../terrain/navigation-map';
 import {
   CLOUD_QUALITIES,
@@ -17,11 +18,23 @@ import {
   type WindPresetId,
 } from '../sim/environment';
 
-export function TerrainViewer() {
-  const params = new URLSearchParams(window.location.search);
-  const flightMode = params.get('mode') === 'flight';
-  const [root, setRoot] = useState<FsRoot>(params.get('root') === 'assets' ? 'assets' : 'appData');
-  const [path, setPath] = useState(params.get('manifest') ?? 'terrains/ukraine/manifest.json');
+export function TerrainViewer({ search }: { search: string }) {
+  // One parse, in one place. A bad parameter must still reach the panel's error text
+  // rather than blanking the app, so the failure is carried instead of thrown.
+  const parsed = useMemo((): { mission: MissionParams; parseError: string } => {
+    try {
+      return { mission: parseMissionQuery(search), parseError: '' };
+    } catch (err) {
+      return {
+        mission: DEFAULT_MISSION,
+        parseError: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }, [search]);
+  const { mission, parseError } = parsed;
+  const flightMode = mission.mode !== 'explorer';
+  const [root, setRoot] = useState<FsRoot>(mission.root);
+  const [path, setPath] = useState(mission.manifestPath);
   const [request, setRequest] = useState({ root, path, generation: 0 });
   const [stats, setStats] = useState<TerrainDiagnostics>();
   const [error, setError] = useState('');
@@ -51,7 +64,7 @@ export function TerrainViewer() {
     };
   }, [root]);
   useEffect(() => {
-    if (!canvas.current) return;
+    if (!canvas.current || parseError) return;
     let active = true;
     let viewer: ReturnType<typeof startTerrainViewer> | undefined;
     try {
@@ -61,6 +74,7 @@ export function TerrainViewer() {
         request.root,
         request.path,
         setStats,
+        { ...mission, root: request.root, manifestPath: request.path },
       );
       viewerRef.current = viewer;
     } catch (err) {
@@ -74,7 +88,7 @@ export function TerrainViewer() {
       viewer?.dispose();
       if (viewerRef.current === viewer) viewerRef.current = null;
     };
-  }, [request]);
+  }, [request, mission, parseError]);
   return (
     <div className="probe-root">
       {stats?.imageryAttribution && (
@@ -271,9 +285,9 @@ export function TerrainViewer() {
             </section>
           )}
           <p className="terrain-path">{rootPath}</p>
-          {(error || stats?.error) && (
+          {(parseError || error || stats?.error) && (
             <p className="probe-error">
-              {error || stats?.error}
+              {parseError || error || stats?.error}
               <br />
               Generate a theater using the terrain pipeline, then copy its folder under the data
               root shown above. Enter its relative manifest path and load again.

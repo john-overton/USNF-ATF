@@ -8,6 +8,6 @@ const root = document.getElementById('root');
 if (!root) throw new Error('#root missing');
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <App search={window.location.search} />
   </StrictMode>,
 );

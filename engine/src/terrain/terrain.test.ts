@@ -183,16 +183,13 @@ test('byte cache LRU refresh, eviction, replacement and disposal stay within bud
   expect(cache.size).toBe(0);
 });
 
-test('camera query accepts reproducible poses, clamps extents and refuses invalid inputs', () => {
-  const pose = initialCamera(manifest, '?x=-10&z=999999&y=1&yaw=3.14&pitch=-2');
+test('camera poses stay reproducible and clamp to the theater extents', () => {
+  // Rejecting an unreadable pose now happens once, in parseMissionQuery; see its test.
+  const pose = initialCamera(manifest, { x: -10, z: 999999, y: 1, yaw: 3.14, pitch: -2 });
   expect(pose).toEqual({ position: { x: 0, z: 7650, y: 25 }, yaw: 3.14, pitch: -1.5 });
-  expect(initialCamera(manifest, '?x=123&z=456&y=789&yaw=0.4&pitch=-0.3').position).toEqual({
-    x: 123,
-    z: 456,
-    y: 789,
-  });
-  for (const query of ['?x=NaN', '?y=Infinity', '?yaw=no', '?pitch='])
-    expect(() => initialCamera(manifest, query)).toThrow('finite');
+  expect(
+    initialCamera(manifest, { x: 123, z: 456, y: 789, yaw: 0.4, pitch: -0.3 }).position,
+  ).toEqual({ x: 123, z: 456, y: 789 });
 });
 test('water holes preserve dry islands through validation and triangulation', () => {
   const body: WaterBody = {

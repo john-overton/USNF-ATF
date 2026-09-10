@@ -1,6 +1,6 @@
 import { gunSight, type GunSightTarget } from './gun-sight';
 import { configureAircraftHook } from './AircraftHook';
-import { AIRCRAFT, aircraftId, validateAircraftProfile, type AircraftId } from './aircraft-catalog';
+import { AIRCRAFT, validateAircraftProfile, type AircraftId } from './aircraft-catalog';
 import {
   BoxGeometry,
   type BufferGeometry,
@@ -18,6 +18,7 @@ import type { AircraftDefinition } from '../data/aircraft';
 import { parseRetailFlightProfile, type RetailFlightProfile } from '../data/retail-flight';
 import type { FsRoot, Platform } from '../platform/Platform';
 import { FixedStepClock } from '../sim/FixedStepClock';
+import type { MissionParams } from '../sim/mission/params';
 import {
   createFlightState,
   stepFlight,
@@ -139,10 +140,8 @@ function windReadout(wind: { x: number; y: number; z: number } | undefined) {
 /** A thin rendering/input adapter; all forces and state evolution live in the pure sim. */
 export class FlightLayer {
   private controls: PilotControls = { pitch: 0, roll: 0, yaw: 0, throttle: 0, brake: false };
-  private readonly approach =
-    new URLSearchParams(window.location.search).get('flightStart') === 'approach';
-  private readonly airborneStart =
-    new URLSearchParams(window.location.search).get('flightStart') === 'airborne';
+  private readonly approach: boolean;
+  private readonly airborneStart: boolean;
   private readonly clock = new FixedStepClock();
   private readonly input = new FlightInput();
   private readonly aircraft = new Group();
@@ -165,7 +164,7 @@ export class FlightLayer {
   private autopilotHold: AutopilotHold | undefined;
   private autopilotEngaged: AutopilotMode = 'off';
   private navigationTarget: { id: number; x: number; z: number } | undefined;
-  private airborneArmed = this.approach || this.airborneStart;
+  private airborneArmed: boolean;
   private readonly environment: FlightEnvironment;
   /** The theater clock and wind field; the terrain viewer owns and advances it. */
   environmentModel: Environment | undefined;
@@ -177,6 +176,7 @@ export class FlightLayer {
     platform: Platform,
     root: FsRoot,
     folder: string,
+    mission: MissionParams,
   ): Promise<FlightLayer> {
     const ground = new GroundSampler(manifest, platform, root, folder);
     let model: RetailAircraft | undefined;
@@ -184,7 +184,7 @@ export class FlightLayer {
     let gun: FlightGun | undefined;
     try {
       const strip = await preparePractice(ground);
-      const id = aircraftId(new URLSearchParams(window.location.search).get('aircraft'));
+      const id = mission.aircraft;
       model = await RetailAircraft.load(platform, id);
       audio = await FlightAudio.create(platform, id);
       gun = await FlightGun.load(platform, id);
@@ -195,7 +195,7 @@ export class FlightLayer {
         profile = parseRetailFlightProfile(JSON.parse(text));
         validateAircraftProfile(id, profile);
       }
-      return new FlightLayer(scene, ground, strip, audio, gun, id, model, profile);
+      return new FlightLayer(scene, ground, strip, audio, gun, id, mission, model, profile);
     } catch (error) {
       model?.dispose();
       audio?.dispose();
@@ -217,17 +217,17 @@ export class FlightLayer {
     private readonly audio: FlightAudio,
     private readonly gun: FlightGun,
     readonly aircraftId: AircraftId,
+    mission: MissionParams,
     private readonly model?: RetailAircraft,
     private readonly profile?: RetailFlightProfile,
   ) {
-    const query = new URLSearchParams(window.location.search);
-    this.useNativeEnvelope = query.get('flightModel') === 'recovered-envelope' && !!profile?.native;
-    this.useRetail = query.get('flightModel') !== 'assisted' && !!profile;
-    const finite = (key: string, fallback: number) => {
-      const value = Number(query.get(key) ?? fallback);
-      return Number.isFinite(value) ? value : fallback;
-    };
-    this.resetFuelFraction = Math.max(0, Math.min(1, finite('flightFuel', 1)));
+    this.approach = mission.start === 'approach';
+    this.airborneStart = mission.start === 'airborne';
+    this.airborneArmed = this.approach || this.airborneStart;
+    this.useNativeEnvelope = mission.flightModel === 'recovered-envelope' && !!profile?.native;
+    this.useRetail = mission.flightModel !== 'assisted' && !!profile;
+    // Mission fuel is already clamped to 0..1; the payload limit needs this profile.
+    this.resetFuelFraction = mission.loadout.internalFuelFraction;
     this.fuel = createFuelState(profile?.fuelCapacityKg ?? 1500, this.resetFuelFraction);
     this.payloadMassKg =
       this.useRetail && profile
@@ -235,7 +235,7 @@ export class FlightLayer {
             0,
             Math.min(
               profile.maxTakeoffMassKg - profile.emptyMassKg - this.fuel.fuelKg,
-              finite('flightPayload', 0),
+              mission.loadout.payloadMassKg,
             ),
           )
         : 0;

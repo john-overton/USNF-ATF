@@ -1,20 +1,17 @@
 import type { TheaterManifest } from '../data';
+import type { CameraOverrides } from '../sim/mission/params';
 import type { WorldPosition } from './lod';
 
-/** URL poses are reproducible projected meters and radians, never renderer-local coordinates. */
+/**
+ * Deep-linked poses are reproducible projected meters and radians, never renderer-local
+ * coordinates. The overrides arrive already parsed and checked for finiteness; what is
+ * left here is the clamping, which needs the theater's extents.
+ */
 export function initialCamera(
   manifest: TheaterManifest,
-  query: string,
+  camera: CameraOverrides,
 ): { position: WorldPosition; yaw: number; pitch: number } {
-  const params = new URLSearchParams(query);
-  const value = (key: string, fallback: number): number => {
-    const text = params.get(key);
-    if (text === null) return fallback;
-    const n = Number(text);
-    if (!text.trim() || !Number.isFinite(n))
-      throw new Error(`Invalid camera ${key}: expected finite number`);
-    return n;
-  };
+  const value = (key: keyof CameraOverrides, fallback: number): number => camera[key] ?? fallback;
   return {
     position: {
       x: Math.max(0, Math.min(manifest.extents.width, value('x', manifest.extents.width * 0.5))),

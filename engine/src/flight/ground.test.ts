@@ -6,6 +6,7 @@ import type { Platform } from '../platform/Platform';
 import { containsWater, GroundSampler } from './GroundSampler';
 import { validatePractice } from './practice';
 import { deadzone, updateHeldPilotKeys } from './FlightInput';
+import { DEFAULT_MISSION } from '../sim/mission/params';
 
 async function fixture(
   lod: 0 | 1,
@@ -173,8 +174,9 @@ test('discarded asynchronous flight layer cannot replace accepted diagnostics', 
   } as unknown as Platform;
   let accepted: FlightLayer | undefined;
   try {
-    const outdated = FlightLayer.create(new Scene(), manifest, oldPlatform, 'appData', '');
-    accepted = await FlightLayer.create(new Scene(), manifest, newPlatform, 'appData', '');
+    const mission = DEFAULT_MISSION;
+    const outdated = FlightLayer.create(new Scene(), manifest, oldPlatform, 'appData', '', mission);
+    accepted = await FlightLayer.create(new Scene(), manifest, newPlatform, 'appData', '', mission);
     expect(window.__flightDiagnostics).toBeUndefined();
     accepted.activate();
     const snapshot = window.__flightDiagnostics;
