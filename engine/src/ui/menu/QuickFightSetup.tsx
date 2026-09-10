@@ -1,5 +1,10 @@
 import { AIRCRAFT, type AircraftId } from '../../flight/aircraft-catalog';
-import { MAX_OPPONENTS, type AiSkill, type MissionParams } from '../../sim/mission/params';
+import {
+  ENCOUNTER_ORIENTATIONS,
+  MAX_OPPONENTS,
+  type AiSkill,
+  type MissionParams,
+} from '../../sim/mission/params';
 import { MenuScreen } from './MenuScreen';
 import { MenuRocker } from './MenuControls';
 import type { MenuAssets } from './assets';
@@ -10,6 +15,12 @@ const IDS = Object.keys(AIRCRAFT) as AircraftId[];
 const WEATHER = ['clear', 'scattered', 'broken', 'overcast', 'storm'] as const;
 const TIMES = [6, 12, 18, 22] as const;
 const TIME_LABELS = ['Dawn · 06:00', 'Noon · 12:00', 'Dusk · 18:00', 'Night · 22:00'];
+const ORIENTATION_LABELS = {
+  'head-on': 'Head-on · ahead, inbound',
+  'tail-chase': 'Pursuit · ahead, outbound',
+  behind: 'Defensive · enemy behind',
+  crossing: 'Crossing · from your right',
+};
 const next = <T,>(items: readonly T[], value: T, direction: number): T =>
   items[(Math.max(0, items.indexOf(value)) + direction + items.length) % items.length]!;
 
@@ -34,6 +45,9 @@ export function QuickFightSetup({
     });
   const weather = mission.environment.weather ?? 'scattered';
   const time = mission.environment.timeOfDayHours ?? 12;
+  const encounter = mission.encounter;
+  const setEncounter = (patch: Partial<MissionParams['encounter']>) =>
+    onMission({ ...mission, encounter: { ...encounter, ...patch } });
   return (
     <MenuScreen
       screen="quick-fight"
@@ -84,8 +98,39 @@ export function QuickFightSetup({
             />
           </div>
           <div className="mission-field">
-            <label>Wing size</label>
-            <span className="mission-readout">1 aircraft · You are flight lead</span>
+            <label>Start position</label>
+            <MenuRocker
+              label="Start position"
+              command="flight-start"
+              value={
+                mission.start === 'runway'
+                  ? 'On runway'
+                  : mission.start === 'approach'
+                    ? 'Final approach'
+                    : 'In the air'
+              }
+              onStep={() =>
+                onMission({ ...mission, start: mission.start === 'runway' ? 'airborne' : 'runway' })
+              }
+            />
+          </div>
+          <div className="mission-field">
+            <label>Air start height above terrain</label>
+            <MenuRocker
+              label="Airborne altitude"
+              command="start-altitude"
+              disabled={mission.start !== 'airborne'}
+              value={
+                mission.start === 'runway'
+                  ? 'Not used · runway start'
+                  : `${encounter.altitudeM} m AGL`
+              }
+              onStep={(direction) =>
+                setEncounter({
+                  altitudeM: Math.max(500, Math.min(8000, encounter.altitudeM + direction * 500)),
+                })
+              }
+            />
           </div>
           <div className="mission-field">
             <label>Weather</label>
@@ -125,8 +170,27 @@ export function QuickFightSetup({
             />
           </div>
           <div className="mission-field">
-            <label>Theater</label>
-            <span className="mission-readout">{mission.theater}</span>
+            <label>Runway departure grace</label>
+            <MenuRocker
+              label="Departure grace"
+              command="departure-grace"
+              disabled={mission.start !== 'runway'}
+              value={
+                mission.start !== 'runway'
+                  ? 'Not used · air start'
+                  : encounter.departureGraceSeconds === 0
+                    ? 'Off · immediate combat'
+                    : `${encounter.departureGraceSeconds} s above 100 m AGL`
+              }
+              onStep={(direction) =>
+                setEncounter({
+                  departureGraceSeconds: Math.max(
+                    0,
+                    Math.min(120, encounter.departureGraceSeconds + direction * 15),
+                  ),
+                })
+              }
+            />
           </div>
         </section>
         <section className="quick-force quick-hostile" aria-label="Hostile forces">
@@ -148,7 +212,7 @@ export function QuickFightSetup({
               value={String(count)}
               onStep={(direction) =>
                 set(
-                  Math.max(1, Math.min(MAX_OPPONENTS - 1, count + direction)),
+                  Math.max(1, Math.min(MAX_OPPONENTS, count + direction)),
                   first.aircraft,
                   first.skill,
                 )
@@ -170,12 +234,65 @@ export function QuickFightSetup({
               }
             />
           </div>
-          <p className="quick-limit">
-            <strong>Mock quick fight.</strong> Opponents fly fixed courses. They do not pursue or
-            fire, and weapons cause no damage. Skill selection has no effect yet.
-          </p>
+          <div className="mission-field">
+            <label>Encounter distance</label>
+            <MenuRocker
+              label="Encounter distance"
+              command="encounter-distance"
+              value={`${(encounter.distanceM / 1000).toFixed(0)} km`}
+              onStep={(direction) =>
+                setEncounter({
+                  distanceM: Math.max(
+                    2000,
+                    Math.min(40000, encounter.distanceM + direction * 2000),
+                  ),
+                })
+              }
+            />
+          </div>
+          <div className="mission-field">
+            <label>Orientation to target</label>
+            <MenuRocker
+              label="Encounter orientation"
+              command="encounter-orientation"
+              value={ORIENTATION_LABELS[encounter.orientation]}
+              onStep={(direction) =>
+                setEncounter({
+                  orientation: next(ENCOUNTER_ORIENTATIONS, encounter.orientation, direction),
+                })
+              }
+            />
+          </div>
+          <div className="mission-field">
+            <label>Enemy altitude relative to you</label>
+            <MenuRocker
+              label="Enemy altitude offset"
+              command="altitude-offset"
+              value={
+                encounter.altitudeOffsetM === 0
+                  ? 'Same altitude'
+                  : `${encounter.altitudeOffsetM > 0 ? '+' : ''}${encounter.altitudeOffsetM} m`
+              }
+              onStep={(direction) =>
+                setEncounter({
+                  altitudeOffsetM: Math.max(
+                    -3000,
+                    Math.min(3000, encounter.altitudeOffsetM + direction * 500),
+                  ),
+                })
+              }
+            />
+          </div>
         </section>
-        <p className="quick-count">{count + 1} aircraft in the sky, including you</p>
+        <p className="quick-limit">
+          Guns-only quick fight · original tactics, no missiles.{' '}
+          {mission.start === 'runway' && encounter.departureGraceSeconds > 0
+            ? 'Enemies enter after your departure grace.'
+            : 'Enemies enter immediately.'}
+        </p>
+        <p className="quick-count">
+          {count + 1} aircraft · {mission.theater}
+        </p>
       </div>
     </MenuScreen>
   );

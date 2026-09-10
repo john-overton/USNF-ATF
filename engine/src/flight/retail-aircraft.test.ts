@@ -1,6 +1,7 @@
 import type { Platform } from '../platform/Platform';
 import { expect, test } from 'bun:test';
 import { parseRetailAircraft } from './RetailAircraft';
+import type { DataTexture, Mesh, MeshStandardMaterial } from 'three';
 
 const triangle = {
   version: 1,
@@ -45,4 +46,28 @@ test('selected aircraft reads its own model and missing imports remain explicit'
   expect(aircraftId(null)).toBe('f14');
   for (const value of ['../f14', 'constructor', 'unknown', ''])
     expect(() => aircraftId(value)).toThrow('Unknown aircraft');
+});
+
+test('texture cutouts retain alpha testing and opaque depth writes', async () => {
+  const { RetailAircraft } = await import('./RetailAircraft');
+  const data = {
+    ...triangle,
+    uvs: [0, 0, 1, 0, 0, 1],
+    texture: { width: 2, height: 1, rgba: [255, 255, 255, 0, 255, 255, 255, 255] },
+  };
+  const platform = {
+    fs: {
+      exists: () => Promise.resolve(true),
+      readText: () => Promise.resolve(JSON.stringify(data)),
+    },
+  } as unknown as Platform;
+  const model = await RetailAircraft.load(platform);
+  const mesh = model!.parts.get(triangle.name)!.children[0] as Mesh;
+  const material = mesh.material as MeshStandardMaterial;
+  expect(material.alphaTest).toBe(0.5);
+  expect(material.transparent).toBe(false);
+  expect(material.depthWrite).toBe(true);
+  expect((material.map as DataTexture).image.data![3]).toBe(0);
+  expect((material.map as DataTexture).image.data![7]).toBe(255);
+  model!.dispose();
 });

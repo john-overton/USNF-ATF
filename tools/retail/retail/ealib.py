@@ -94,9 +94,12 @@ class EALib:
         except ValueError:
             f.close()
             raise EALibError(f"{path}: empty file")
-        lib = cls(mm, os.path.basename(str(path)))
-        lib._file = f  # keep alive with the mapping
-        return lib
+        f.close()  # mmap owns its descriptor; do not leak one per imported archive.
+        try:
+            return cls(mm, os.path.basename(str(path)))
+        except Exception:
+            mm.close()
+            raise
 
     # -- access ---------------------------------------------------------------
 

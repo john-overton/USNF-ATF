@@ -10,6 +10,37 @@ export interface FlightClip {
   pcm: number[];
 }
 export type FlightSamples = Record<ClipRole, FlightClip>;
+export type EnvironmentSamples = Record<'wind' | 'rolling', FlightClip>;
+export function parseEnvironmentSamples(value: unknown): EnvironmentSamples {
+  const data = value as {
+    schemaVersion?: number;
+    source?: string;
+    clips?: Record<string, FlightClip[]>;
+  };
+  if (data?.schemaVersion !== 1 || data.source !== 'retail-pcm' || !data.clips)
+    throw new Error('Invalid environment audio manifest');
+  const result = {} as EnvironmentSamples;
+  for (const role of ['wind', 'rolling'] as const) {
+    const group = data.clips[role];
+    if (!Array.isArray(group) || group.length !== 1) throw new Error('Invalid environment group');
+    const clip = group[0] as FlightClip & { encoding?: string };
+    if (
+      !clip ||
+      typeof clip.source !== 'string' ||
+      clip.source.length > 80 ||
+      !/^[a-f0-9]{64}$/.test(clip.sha256) ||
+      clip.encoding !== 'unsigned8-mono' ||
+      ![5512, 8010, 11025].includes(clip.sampleRate) ||
+      !Array.isArray(clip.pcm) ||
+      clip.pcm.length < 2 ||
+      clip.pcm.length > 1000000 ||
+      !clip.pcm.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)
+    )
+      throw new Error('Invalid environment PCM');
+    result[role] = clip;
+  }
+  return result;
+}
 export function parseFlightSamples(value: unknown): FlightSamples {
   const data = value as { schemaVersion?: number; clips?: Record<string, unknown> };
   if (data?.schemaVersion !== 1 || !data.clips) throw new Error('Invalid flight audio manifest');
@@ -21,7 +52,7 @@ export function parseFlightSamples(value: unknown): FlightSamples {
       typeof c.source !== 'string' ||
       !/^[a-f0-9]{64}$/.test(c.sha256) ||
       c.encoding !== 'unsigned8-mono' ||
-      ![5512, 8000, 11025].includes(c.sampleRate) ||
+      ![5512, 8000, 8010, 11025].includes(c.sampleRate) ||
       !Array.isArray(c.pcm) ||
       c.pcm.length < 2 ||
       c.pcm.length > 1000000 ||
@@ -92,6 +123,9 @@ export interface FlightAudioState {
   gear: number;
   hook: number;
   status: string;
+  groundSpeed?: number;
+  retailActuators?: boolean;
+  retailTouchdown?: boolean;
 }
 const unit = (n: number): number => (Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0);
 export function flightAudioLevels(state: FlightAudioState): {
@@ -120,6 +154,7 @@ export class FlightAudio {
   private burner?: GainNode;
   private actuator?: GainNode;
   private impact?: GainNode;
+  private rolling?: GainNode;
   private buffers: Partial<Record<ClipRole, AudioBuffer>> = {};
   private transition?: AudioBufferSourceNode;
   private transitionGain?: GainNode;
@@ -128,6 +163,7 @@ export class FlightAudio {
   static async create(platform: Platform, id: AircraftId = 'f14'): Promise<FlightAudio> {
     let samples: FlightSamples | undefined;
     let error: string | undefined;
+    let environment: EnvironmentSamples | undefined;
     try {
       if (await platform.fs.exists('appData', `audio/${id}.json`)) {
         const text = await platform.fs.readText('appData', `audio/${id}.json`);
@@ -137,7 +173,16 @@ export class FlightAudio {
     } catch (e) {
       error = String(e);
     }
-    const audio = new FlightAudio(samples);
+    try {
+      if (await platform.fs.exists('appData', 'audio/environment.json')) {
+        const text = await platform.fs.readText('appData', 'audio/environment.json');
+        if (text.length > 8000000) throw new Error('Environment audio manifest too large');
+        environment = parseEnvironmentSamples(JSON.parse(text));
+      }
+    } catch (e) {
+      error = String(e);
+    }
+    const audio = new FlightAudio(samples, environment);
     audio.error = error;
     return audio;
   }
@@ -165,7 +210,10 @@ export class FlightAudio {
     }
     this.unlock();
   };
-  constructor(private readonly samples?: FlightSamples) {
+  constructor(
+    private readonly samples?: FlightSamples,
+    private readonly environment?: EnvironmentSamples,
+  ) {
     // Creating the context only inside a real gesture avoids autoplay warnings.
     window.addEventListener('pointerdown', this.gesture);
     window.addEventListener('keydown', this.gesture);
@@ -217,6 +265,23 @@ export class FlightAudio {
     // No tonal oscillator: the former low sine added an artificial buzz.
     this.sources = [noise];
     noise.start();
+    if (this.environment) {
+      this.wind.disconnect();
+      for (const role of ['wind', 'rolling'] as const) {
+        const clip = this.environment[role];
+        const pcm = resampleFlightPcm(flightPcm(clip, true), clip.sampleRate, context.sampleRate);
+        const source = context.createBufferSource();
+        source.buffer = context.createBuffer(1, pcm.length, context.sampleRate);
+        source.buffer.getChannelData(0).set(pcm);
+        source.loop = true;
+        const gain = context.createGain();
+        gain.gain.value = 0;
+        source.connect(gain).connect(master);
+        this[role] = gain;
+        this.sources.push(source);
+        source.start();
+      }
+    }
     if (this.samples) {
       for (const role of ['jet', 'burner', 'start', 'stop'] as const) {
         const clip = this.samples[role];
@@ -305,6 +370,12 @@ export class FlightAudio {
     ramp(this.jet, this.levels.jet);
     ramp(this.wind, this.levels.wind);
     ramp(this.burner, this.levels.burner);
+    ramp(
+      this.rolling,
+      state.status === 'grounded' && state.gear >= 0.99
+        ? unit((state.groundSpeed ?? 0) / 50) * 0.09
+        : 0,
+    );
     const event = engineAudioEvent(previous, state);
     if (event && state.status !== 'waiting-terrain' && state.status !== 'crashed')
       this.playTransition(event);
@@ -313,10 +384,14 @@ export class FlightAudio {
           Math.abs(unit(state.hook) - unit(previous.hook))) /
         Math.max(0.001, Number.isFinite(dt) ? dt : 1 / 60)
       : 0;
-    ramp(this.actuator, state.status === 'waiting-terrain' ? 0 : unit(motion * 2) * 0.035);
+    ramp(
+      this.actuator,
+      state.status === 'waiting-terrain' || state.retailActuators ? 0 : unit(motion * 2) * 0.035,
+    );
     // First ground spawn is quiet. Only an airborne-to-contact change gets a bump.
     if (
       previous?.status === 'airborne' &&
+      !state.retailTouchdown &&
       (state.status === 'grounded' || state.status === 'crashed') &&
       this.impact
     ) {
@@ -336,6 +411,8 @@ export class FlightAudio {
     clips: Partial<Record<ClipRole, { source: string; sha256: string }>>;
     transitionEvents: { start: number; stop: number };
     lastTransition: 'start' | 'stop' | undefined;
+    environmentSource: 'retail-pcm' | 'original-filtered-noise';
+    environmentClips: string[];
   } {
     return {
       muted: muteControl.muted,
@@ -353,6 +430,10 @@ export class FlightAudio {
         : {},
       transitionEvents: { ...this.transitionEvents },
       lastTransition: this.lastTransition,
+      environmentSource: this.environment ? 'retail-pcm' : 'original-filtered-noise',
+      environmentClips: this.environment
+        ? Object.values(this.environment).map((clip) => clip.source)
+        : [],
     };
   }
   dispose(): void {

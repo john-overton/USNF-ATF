@@ -471,7 +471,7 @@ th {
   left: 54%;
 }
 .quick-force h2 {
-  margin: 0 0 2cqw;
+  margin: 0 0 1cqw;
   padding-bottom: 0.8cqw;
   border-bottom: 0.2cqw solid #40483b;
   font-size: 2.4cqw;
@@ -480,6 +480,9 @@ th {
 }
 .mission-field {
   margin-bottom: 1.8cqw;
+}
+.quick-force .mission-field {
+  margin-bottom: 0.65cqw;
 }
 .mission-field > label {
   display: block;
@@ -512,9 +515,13 @@ th {
   font-size: 1.6cqw;
 }
 .quick-limit {
-  font-size: 1.7cqw;
-  line-height: 1.45;
-  margin-top: 2.5cqw;
+  position: absolute;
+  left: 5.5%;
+  right: 5%;
+  top: 83%;
+  font-size: 1.3cqw;
+  line-height: 1.25;
+  margin: 0;
 }
 .quick-limit strong {
   display: block;

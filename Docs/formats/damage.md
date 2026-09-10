@@ -1,5 +1,35 @@
 # Damage model as it exists in the data files
 
+## 2026-09-10 runtime guns-only integration
+
+`sim/combat/world.ts` now consumes `damage.ts` and `hits.ts`. Locally ported loadouts
+provide aircraft hit points; the gun porter now exports the JT five-entry damage
+table. Legacy gun manifests may obtain the same table from their loadout's internal
+gun record. No valid data means labelled original defaults (100 HP, 10 HP/round).
+Aircraft use slot 0 as an **authored soft-target mapping**, not a recovered class
+dispatcher. There is one airframe pool; the 45 subsystem entries are not simulated.
+
+The four damage multipliers affect native-envelope G/speed bounds and baseline/G-pull
+drag. The adjusted forward speed bound must remain a signed integer: the remake
+truncates the scaled value before native thrust/drag calls. Passing the fractional
+product caused the reproduced first-hit frame freeze; native validation is retained.
+Assisted comparison source is unchanged: only damaged assisted aircraft receive
+a derived definition with reduced control rates and increased drag. This approximation
+does not reproduce every native damage effect. Original kinematic opponents lose
+turn authority and speed with damage. Destruction disables flight/firing, hides the
+airframe and emits a bounded event for effects/debrief. The later visual adapter
+splits imported geometry into six authored fracture zones and integrates bounded
+debris at120Hz. This is not recovered native breakup or subsystem damage.
+
+Rounds retain emission fractions and previous positions; moving-capsule sweeps use
+the corresponding fraction of target movement. First capsule entry orders hits,
+with stable ID tie-breaks and one consumption per round. Terrain samples stop bullets;
+missing terrain is not substituted with sea level. Ground collision is processed
+alongside projectile hits so an earlier gun hit can receive kill credit. Rotational
+sweeps remain approximated by the target's end-of-step orientation.
+
+Verification: [phase 6 baseline](../baselines/phase-6.md).
+
 Status: **partial** (every field is located and named, and the aggregate
 value distributions below are measured; the *meaning* of the two arrays
 that matter most — `damage[0..4]` and `systemDamage[0..44]` — is not

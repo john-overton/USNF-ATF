@@ -18,6 +18,12 @@ export function debriefLines(summary: FlightSummary | undefined): string[] {
     `Takeoffs ${summary.takeoffs} · landings ${summary.landings}`,
     `Rounds fired ${summary.roundsFired}`,
     `Fuel remaining ${(summary.fuelFraction * 100).toFixed(0)}%`,
+    ...(summary.combat
+      ? [
+          `${summary.combat.outcome.toUpperCase()} · hits ${summary.combat.hits} · kills ${summary.combat.kills}`,
+          `Airframe damage ${Math.round(summary.combat.damagePercent)}%`,
+        ]
+      : []),
   ];
 }
 
@@ -42,7 +48,7 @@ export function Debrief({
       {...(assets ? { assets } : {})}
       onCommand={onCommand}
     >
-      <p className="menu-summary">Damage is not modelled yet, so no aircraft is ever lost here.</p>
+      <p className="menu-summary">Guns-only combat · original pursuit tactics.</p>
     </MenuScreen>
   );
 }

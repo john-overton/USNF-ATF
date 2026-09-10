@@ -1,5 +1,16 @@
 import type { FlightClip } from '../flight/FlightAudio';
-export interface RetailGun {
+/** Ballistics shared by imported guns and explicitly authored fallback guns. */
+export interface GunDefinition {
+  name: string;
+  capacity: number;
+  muzzleSpeedMps: number;
+  roundsPerSecond: number;
+  tracerEvery: number;
+  tracerColor: 'red' | 'green';
+  mounts: [number, number, number][];
+  damage?: [number, number, number, number, number];
+}
+export interface RetailGun extends GunDefinition {
   schemaVersion: 1;
   aircraftSource: string;
   aircraftSha256: string;
@@ -31,6 +42,10 @@ export function parseRetailGun(value: unknown): RetailGun {
     !Number.isInteger(g.tracerEvery) ||
     !range(g.tracerEvery, 1, 20) ||
     !['red', 'green'].includes(g.tracerColor) ||
+    (g.damage !== undefined &&
+      (!Array.isArray(g.damage) ||
+        g.damage.length !== 5 ||
+        !g.damage.every((n) => Number.isInteger(n) && range(n, 0, 65535)))) ||
     !Array.isArray(g.mounts) ||
     g.mounts.length < 1 ||
     g.mounts.length > 2 ||
@@ -41,7 +56,7 @@ export function parseRetailGun(value: unknown): RetailGun {
     typeof c.source !== 'string' ||
     !hash(c.sha256) ||
     c.encoding !== 'unsigned8-mono' ||
-    ![5512, 8000, 11025].includes(c.sampleRate) ||
+    ![5512, 8000, 8010, 11025].includes(c.sampleRate) ||
     !Array.isArray(c.pcm) ||
     c.pcm.length < 2 ||
     c.pcm.length > 1000000 ||

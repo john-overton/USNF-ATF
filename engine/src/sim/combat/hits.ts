@@ -72,43 +72,51 @@ export function closestApproach(from: Vec3, to: Vec3, capsule: Capsule): Closest
     dr = dot(d, r),
     ar = dot(a, r),
     aa = dot(a, a);
-  // Degenerate round path: the round did not move this step.
-  let t = 0;
-  let s = 0;
+  // Check the interior minimum and all four edges of the parameter rectangle.
+  // Clamping both unconstrained parameters once can miss the true endpoint minimum.
+  const candidates: { t: number; s: number }[] = [];
+  const clampT = (t: number) => Math.min(1, Math.max(0, t));
+  const clampS = (s: number) => Math.min(h, Math.max(-h, s));
+  for (const t of [0, 1]) candidates.push({ t, s: clampS(aa > 1e-12 ? (ar + da * t) / aa : 0) });
+  for (const s of [-h, h]) candidates.push({ t: clampT(dd > 1e-12 ? (da * s - dr) / dd : 0), s });
   const denominator = dd * aa - da * da;
-  if (dd <= 1e-12) {
-    s = aa <= 1e-12 ? 0 : ar / aa;
-  } else if (Math.abs(denominator) <= 1e-9) {
-    // Parallel: pin the round to the segment start and slide along the axis.
-    t = 0;
-    s = aa <= 1e-12 ? 0 : ar / aa;
-  } else {
-    t = (da * ar - dr * aa) / denominator;
-    s = (da * t + ar) / (aa <= 1e-12 ? 1 : aa);
+  if (denominator > 1e-9) {
+    const t = (da * ar - dr * aa) / denominator;
+    const s = (da * t + ar) / aa;
+    if (t >= 0 && t <= 1 && s >= -h && s <= h) candidates.push({ t, s });
   }
-  t = Math.min(1, Math.max(0, t));
-  s = Math.min(h, Math.max(-h, s));
-  // Re-solve the round parameter against the clamped axis point so a clamped
-  // capsule end still reports the true nearest point on the round's path.
-  if (dd > 1e-12) {
-    const axisPoint = {
-      x: capsule.center.x + a.x * s,
-      y: capsule.center.y + a.y * s,
-      z: capsule.center.z + a.z * s,
-    };
-    t = Math.min(1, Math.max(0, dot(sub(axisPoint, from), d) / dd));
+  let best: ClosestApproach = { t: 0, s: 0, distance: Infinity };
+  for (const { t, s } of candidates) {
+    const distance = Math.hypot(
+      r.x + d.x * t - a.x * s,
+      r.y + d.y * t - a.y * s,
+      r.z + d.z * t - a.z * s,
+    );
+    if (distance < best.distance) best = { t, s, distance };
   }
-  const point = { x: from.x + d.x * t, y: from.y + d.y * t, z: from.z + d.z * t };
-  const axisPoint = {
-    x: capsule.center.x + a.x * s,
-    y: capsule.center.y + a.y * s,
-    z: capsule.center.z + a.z * s,
-  };
-  return {
-    t,
-    s,
-    distance: Math.hypot(point.x - axisPoint.x, point.y - axisPoint.y, point.z - axisPoint.z),
-  };
+  return best;
+}
+
+/** First hull entry, for ordering multiple targets along a shot. */
+export function capsuleEntry(from: Vec3, to: Vec3, capsule: Capsule): Hit | undefined {
+  const hit = capsuleHit(from, to, capsule);
+  if (!hit) return undefined;
+  const pointAt = (t: number) => ({
+    x: from.x + (to.x - from.x) * t,
+    y: from.y + (to.y - from.y) * t,
+    z: from.z + (to.z - from.z) * t,
+  });
+  let lo = 0,
+    hi = hit.t;
+  if (capsuleHit(from, from, capsule)) hi = 0;
+  else
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2;
+      const p = pointAt(mid);
+      if (capsuleHit(p, p, capsule)) hi = mid;
+      else lo = mid;
+    }
+  return { ...hit, t: hi, point: pointAt(hi) };
 }
 
 export interface Hit {
@@ -148,6 +156,7 @@ export function capsuleHit(from: Vec3, to: Vec3, capsule: Capsule): Hit | undefi
 export function movingCapsuleHit(
   round: { from: Vec3; to: Vec3 },
   target: { previousPosition: Vec3; capsule: Capsule },
+  firstEntry = false,
 ): Hit | undefined {
   // The target sweeps `previousPosition` -> `capsule.center` while the round
   // sweeps `from` -> `to`. Measured against the end-of-step capsule, the round's
@@ -155,7 +164,7 @@ export function movingCapsuleHit(
   // from `from + drift` to `to`.
   const drift = sub(target.capsule.center, target.previousPosition);
   const from = { x: round.from.x + drift.x, y: round.from.y + drift.y, z: round.from.z + drift.z };
-  const hit = capsuleHit(from, round.to, target.capsule);
+  const hit = (firstEntry ? capsuleEntry : capsuleHit)(from, round.to, target.capsule);
   if (!hit) return undefined;
   // Undo the shift so the reported point lies on the round's real world path.
   return {

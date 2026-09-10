@@ -1,4 +1,5 @@
 import rawAircraft from '../../data/placeholder-aircraft.json';
+import type { DamageEffects } from '../combat/damage';
 import { fitEnvelopeAero } from './retail-envelope';
 import { recoveredEnvelopeBounds } from './native-envelope-adapter';
 import { recoveredFlightPoint, recoveredLongitudinalForces } from './retail-dynamics';
@@ -22,6 +23,7 @@ export interface GroundSample {
 export interface FlightEnvironment {
   sampleGround(x: number, z: number): GroundSample | undefined;
   wind?: Vec3;
+  damage?: DamageEffects;
 }
 export interface FlightControls {
   pitch: number;
@@ -390,6 +392,14 @@ export function stepFlight(
   const nativePoint = def.retail
     ? recoveredFlightPoint(def.retail, state.position.y, a.speed, flap > 0.5, def.massKg)
     : undefined;
+  if (nativePoint && env.damage) {
+    nativePoint.minimumG *= env.damage.gScale;
+    nativePoint.maximumG *= env.damage.gScale;
+    nativePoint.forwardSpeedBound = Math.max(
+      1,
+      Math.trunc(nativePoint.forwardSpeedBound * env.damage.speedScale),
+    );
+  }
   const neutralG = 1 / Math.max(0.4, Math.abs(nativePoint ? a.liftDirection.y : a.up.y));
   const targetG =
     nativePoint && !onGround
@@ -433,7 +443,8 @@ export function stepFlight(
   // Preserve the existing high-speed rate limits, but remove invented control
   // authority at rest. q uses true air velocity (including wind) and density.
   const dynamicPressure = a.qArea / def.wingAreaM2;
-  const authority = clamp(dynamicPressure / (0.5 * 1.225 * 65 ** 2), 0, 1),
+  const authority =
+      clamp(dynamicPressure / (0.5 * 1.225 * 65 ** 2), 0, 1) * (env.damage?.gScale ?? 1),
     bank = -flightEuler(state.attitude).rollRad;
   const currentLift =
     a.qArea *
@@ -552,7 +563,10 @@ export function stepFlight(
     extraInducedDrag +
     airbrake * deviceDragCoefficient('airBrakesDrag', 0.12) +
     gear * deviceDragCoefficient('gearDrag', 0.02);
-  let drag = a.qArea * (a.cd + deviceDrag);
+  let drag =
+    a.qArea *
+    ((a.cd + deviceDrag) * (env.damage?.dragScale ?? 1) +
+      (a.fit?.inducedDragK ?? 0.06) * a.cl ** 2 * ((env.damage?.gPullDragScale ?? 1) - 1));
   if (nativePoint && def.retail) {
     const recovered = recoveredLongitudinalForces(def.retail, nativePoint, {
       throttle: clamp(controls.throttle, 0, 1),
@@ -564,6 +578,7 @@ export function stepFlight(
       gear,
       flap,
       airbrake,
+      ...(env.damage ? { damage: env.damage } : {}),
     });
     if (recovered) {
       thrust = recovered.thrustN;
@@ -588,12 +603,27 @@ export function stepFlight(
     const n = unit(ground.normal),
       normalAcceleration = dot(acceleration, n);
     if (normalAcceleration < 0) acceleration = add(acceleration, scale(n, -normalAcceleration));
-    const tangent = add(state.velocity, scale(n, -dot(state.velocity, n))),
-      speed = length(tangent);
-    const friction =
-      def.landing.rollingFriction * G + (controls.brake ? def.landing.brakeDecelerationMps2 : 0);
-    if (speed > 0.001)
-      acceleration = add(acceleration, scale(unit(tangent), -Math.min(friction, speed / dt)));
+    // Resolve tire impulses against the predicted velocity, including this tick's
+    // wind force. Friction against only the previous velocity cannot hold at rest.
+    // Wheels roll along the fuselage but resist sideways slipping much more.
+    const forward = unit(add(a.forward, scale(n, -dot(a.forward, n))));
+    const lateral = unit({
+      x: forward.y * n.z - forward.z * n.y,
+      y: forward.z * n.x - forward.x * n.z,
+      z: forward.x * n.y - forward.y * n.x,
+    });
+    const supportedG = Math.max(0, -normalAcceleration);
+    const rolling =
+      def.landing.rollingFriction * supportedG +
+      (controls.brake ? (def.landing.brakeDecelerationMps2 * supportedG) / G : 0);
+    // Authored dry-tire lateral grip; not a recovered native coefficient.
+    for (const [axis, limit] of [
+      [forward, rolling],
+      [lateral, 0.7 * supportedG],
+    ] as const) {
+      const predicted = dot(add(state.velocity, scale(acceleration, dt)), axis);
+      acceleration = add(acceleration, scale(axis, -clamp(predicted / dt, -limit, limit)));
+    }
   }
   let velocity = add(state.velocity, scale(acceleration, dt)),
     position = add(state.position, scale(velocity, dt));

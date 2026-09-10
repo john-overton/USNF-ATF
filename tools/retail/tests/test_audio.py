@@ -7,7 +7,7 @@ from retail.audio import decode_pcm, export
 
 class AudioTest(unittest.TestCase):
     def test_unsigned_raw_pcm_retains_bytes_and_rates(self):
-        for ext, rate in [('.5k', 5512), ('.8K', 8000), ('.11K', 11025)]:
+        for ext, rate in [('.5k', 5512), ('.8K', 8010), ('.11K', 11025)]:
             clip = decode_pcm(bytes([0, 128, 255]), 'synthetic' + ext)
             self.assertEqual(clip['pcm'], [0, 128, 255])
             self.assertEqual(clip['sampleRate'], rate)

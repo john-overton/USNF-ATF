@@ -158,6 +158,8 @@ export function startTerrainViewer(
 ): {
   dispose(): void;
   setPaused(paused: boolean): void;
+  setMusicEnabled(enabled: boolean): void;
+  setMusicVolume(volume: number): void;
   setCockpitMirrors(layout: CockpitMirrorLayout): void;
   setFuelFraction(fraction: number): void;
   setTimeOfDay(hours: number): void;
@@ -884,6 +886,12 @@ export function startTerrainViewer(
   }
   raf = requestAnimationFrame(frame);
   return {
+    setMusicEnabled(enabled: boolean): void {
+      flight?.setMusicEnabled(enabled);
+    },
+    setMusicVolume(volume: number): void {
+      flight?.setMusicVolume(volume);
+    },
     setCockpitMirrors(layout: CockpitMirrorLayout): void {
       mirrors?.setLayout(layout);
     },

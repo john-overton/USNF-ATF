@@ -74,6 +74,7 @@ export interface FlightSummary {
   landings: number;
   roundsFired: number;
   fuelFraction: number;
+  combat?: { outcome: string; hits: number; kills: number; damagePercent: number };
 }
 
 export interface ShellState {
@@ -99,6 +100,16 @@ export function flightSummary(diagnostics: unknown): FlightSummary | undefined {
     landings: d.landings ?? 0,
     roundsFired: d.gun?.fired ?? 0,
     fuelFraction: d.fuelFraction ?? 0,
+    ...(d.combat
+      ? {
+          combat: {
+            outcome: d.combat.outcome,
+            hits: d.combat.hits,
+            kills: d.combat.kills,
+            damagePercent: d.combat.damagePercent,
+          },
+        }
+      : {}),
   };
 }
 
@@ -126,7 +137,7 @@ export const MAIN_MENU_ITEMS: readonly MenuItem[] = [
     command: 'quick-mission',
     label: 'Create Quick Mission',
     enabled: true,
-    note: 'Mock quick fight: fixed-course opponents, no weapons damage',
+    note: 'Guns-only combat with configurable encounters',
   },
   {
     command: 'pro-mission',
@@ -185,10 +196,11 @@ export function nextMission(action: MenuAction, mission: MissionParams): Mission
     case 'free-flight':
       return { ...mission, mode: 'free-flight', opponents: [] };
     case 'quick-mission':
-      // One opponent by default; the setup screen and real opponents are still to come.
+      // Start ready to fight on first entry; preserve a previously chosen quick setup.
       return {
         ...mission,
         mode: 'quick-fight',
+        start: mission.mode === 'quick-fight' ? mission.start : 'airborne',
         opponents: mission.opponents.length ? mission.opponents : [{ aircraft: 'f14', skill: 2 }],
       };
     case 'terrain-explorer':

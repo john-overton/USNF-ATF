@@ -2,6 +2,28 @@
 
 Companion to `usnf-atf-plan.md` (the brief). The brief says what and why. This document says in what order, what "done" means for each phase, and which decisions are already made. When the two disagree, this one wins for sequencing.
 
+**2026-09-10 user priority:** damage, cockpit cutouts/flap placement, and a complete
+guns-only combat slice are brought forward ahead of the phase 5 in-app importer.
+The quick fight now uses original pursuit with visual contacts, gun hits, damage,
+destruction and debrief. This does not complete phase 6's radar/RWR/missiles or
+phase 7's retail AI/wingmen/SAM/ship scope. Current implementation and Linux evidence
+are in [phase 6 baseline](baselines/phase-6.md); the status paragraph below is the
+historical pre-combat snapshot.
+
+**Later 2026-09-10 priority:** destruction, quick-start controls, engine situation
+music and recovery of all audio were brought forward. Standalone audio catalogs
+and retail combat playback are implemented; video audio, controller-aware MIDI
+synthesis and the complete native score dispatcher remain open. This is not full
+audio/game parity or completion of the in-app importer.
+
+**Audio continuation, same date:** gameplay warning/speech/environment/weapon cues,
+CB8 audio demux and native MUS opcode execution have now progressed. Missing ATF
+media, native host situation state, instrument-bank choice and unsupported MIDI
+controllers remain explicit boundaries. Current work does not authorize inventing
+missile/radar/carrier/ejection gameplay merely to use recovered clips. See current
+handoff and phase6 evidence; the previous “video audio open” status is superseded
+for the49 recovered soundtracks, not for full movie playback.
+
 Status updated 2026-09-09: phase 0 toolkit remains partial. Phase 1 code fixes and macOS packaging are verified; Linux testing is deferred by user decision. Phase 2 pipeline and phase 3 terrain explorer are implemented, with the real Ukraine dataset and packaged Mac 1440p coast/detail runs verified; Native GPU external-memory bandwidth is captured and source transitions are polished/verified on Mac. The measurements do not isolate physical DRAM traffic; live in-app counters and fine-edge refinement remain open. Linux testing is deferred. Phase 4 now implements original assisted dynamics, selectable locally converted F-14/A-4E/X-31 exteriors and separate per-aircraft experimental PT envelope profiles, terrain contact, practice starts, throttle/engine/gear/hook/flap/brake controls, PT-selected retail engine samples, a vector HUD, bracket-selected navigation destinations, a shared explorer/flight MFD map with zoom, compass, heading orientation and waypoint teleport, movable exterior surfaces and F2/F3 chase cameras and a passing maneuver harness; packaged acceptance is recorded in its baseline, while physical gamepad/USNF feel checks remain open. Phases 5–10 remain planned. Outside this phase numbering, the game shell landed on 2026-09-10 — a main menu, an explicit terrain-explorer mode, a loadout screen over recovered hardpoints, and a mocked quick fight whose opponents fly fixed profiles; it is sequenced by [game-shell-plan.md](game-shell-plan.md) and measured in [baselines/game-shell.md](baselines/game-shell.md). It adds no combat: phases 6 and 7 are untouched by it. See [progress.md](progress.md) and per-phase baselines for measured acceptance. Written 2026-09-08 after inventorying the retail media in `/gameassets`.
 
 ---

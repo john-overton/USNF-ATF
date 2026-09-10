@@ -7,6 +7,119 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-10
 
+**Commit checkpoint:** user authorized commit/push of the accumulated combat,
+aircraft, mission and audio work. Final verification:415 Bun pass/3 existing skips,
+50 targeted Python pass,16 harness cases pass, fresh build and serial live cue,
+music and destruction checks pass. Scope excludes retail outputs and unrelated work;
+see [phase6](baselines/phase-6.md) for commands and limitations.
+
+**Newest audio continuation:** original actuator/stall/hit/fuel-empty/touchdown,
+wind/tire and bullet-terrain clips are now connected to actual gameplay. Recovered
+49 CB8 soundtracks from fresh media; all355 VDO segments have external speech.
+Seven truncated ATF video ranges remain missing. MUS runtime choices/jumps/stops
+and MIDI expression/pan/bend now work; host situation policy and instrument timbres
+remain approximate.415 Bun pass/3 skips; targeted Python31 pass. Fresh Linux cue
+and music checks pass. Details and remaining acceptance scope: [phase6](baselines/phase-6.md).
+
+## 2026-09-10: Native audio hooks, CB8 demux and MUS runtime
+
+Native evidence now ties actuator, stall, tires/wind and speech resources to actual
+call sites/text pairs. ^OUTGAS is fuel-empty speech; ^OUTFUEL announces ejection and
+is intentionally unused. No unsupported wingman/radar/missile behaviors invented.
+Optional cue groups keep old imports working. Native score opcodes run with bounded
+control flow; controller timelines preserve expressive MIDI events without a new
+instrument-bank claim. Independent review caught music phrase-boundary downbeat
+loss, distant impact cooldown suppression and overly permissive header-only movie
+acceptance; all corrected with regression tests. CB8 is audio demux, not complete
+video/index validation. Exact live results and earlier failed checks are in phase6.
+
+**Latest: original audio recovery and situation music:** combat effects now use
+retail hit/air-explosion/crash/water samples when installed. Entire identified
+standalone audio libraries recovered: USNF809 waveform entries, ATF1,037, plus
+all XMI and MUS files. ATF's damaged video archive required explicitly bounded
+salvage; all standalone sound ranges are intact. Video-embedded audio is still
+undecoded and unused speech/events are not yet wired. Flight music supports
+N/volume/M/pause/reset and imported XMI notes. Native MUS bytecode/track groups
+are recovered, but host dispatch and instrument rendering remain partial.
+405 Bun tests pass/3 existing skips; fresh Linux retail destruction/music checks
+pass. See [phase6](baselines/phase-6.md), [audio](formats/audio.md), [music](formats/music.md).
+
+## 2026-09-10: Whole-library audio recovery, original combat samples and music
+
+Independent native review tied PT/JT expType to the executable sound-pointer table,
+confirmed crash references, and corrected raw .8K nominal rate to8010Hz. RIFF
+headers override extensions; header/chunk/frame bounds are checked, including the
+observed final odd unpadded ATF data chunk. Review caught silent acceptance of
+truncated WAV and FFmpeg streaming-length headers; both were corrected and tested.
+Export retains original hashes/archive entry identity and does not use source
+filenames as output paths. Partial ATF ranges never synthesize missing bytes.
+MUS CFG decoding preserves chances/jumps/choices and reports unreachable trailers.
+Original AIR34 victory/AIR35 defeat presets were not native; current representatives
+come from recovered groups. No game-owned instrument bank established: native
+InitMusic opens Windows MIDI Mapper. Ancillary DirectX SBK copies are preserved
+but not attributed to the game's synth. Next: native host situation transitions,
+controller-aware MIDI rendering, remaining gameplay sound hooks, video demux.
+
+**Earlier this pass: destruction/quick mission controls:** damaged skins, smoke/fire, fractured
+imported geometry, tumbling debris and original synthesized impact/explosion sound
+now cover both gun destruction and ground crashes. Quick missions expose air/runway
+start, altitude, separation, orientation, offset and configurable departure grace;
+default airborne, and terrain controls initially collapsed. First desktop pass
+verifies gun/ground destruction, audio, pause and reset. Details in phase6 baseline.
+
+## 2026-09-10: Destruction and quick mission follow-up
+
+Fracture zones/material treatments are authored, not native damaged-model recovery.
+Review caught material cloning serializing the afterburner texture cache; its actual
+texture reference is preserved and regression-tested. Enemy spawn admission waits
+for terrain and adjusts unsafe altitude offsets upward. Placeholder geometry now
+cleans up at reset; shared imported geometry stays alive until layer disposal.
+Departure instructions are hidden after death. Model/source and motion tests pass;
+local desktop effects and UI evidence remain ignored under extracted/.
+
+**Follow-up: combat freeze and ground wind:** reproduced an imported F14 freeze
+at the first damaging hit. Damage multiplied the signed-integer native speed bound
+by a fractional scale; native thrust validation threw and stopped the frame loop.
+The bound is now truncated at the damage adapter, preserving native validation.
+Ground tire impulses now include the current tick's forces and separate lateral
+grip from rolling/braking resistance. See the follow-up in the phase 6 baseline.
+
+**Latest, guns-only combat:** the former quick-fight mock now has a shared combat
+world, original pursuit/return fire, visual contacts/target selection, swept gun hits,
+airframe HP/drag/control damage, destruction, effects and combat debrief. C cycles
+targets. Gun/loadout port data supplies damage and HP; missing values are labelled
+original defaults. Retail AI, radar/RWR, missiles, subsystem damage and campaign remain
+unimplemented. The old phase table below predates this slice; its statements that
+combat is unwired or that a loadout screen/world does not exist are superseded here.
+
+**Aircraft corrections:** reviewed 4c/6c texture cutouts fix exterior cockpit/frame
+transparency. A4 root walls no longer move as flaps; F14 aft-quarter flap placement
+follows the taper to the tip break; X31 trailing surfaces extend inboard. Neutral
+source geometry is conserved. Updated imports installed locally with backups.
+See [phase 6 baseline](baselines/phase-6.md) for current checks and limitations.
+
+## 2026-09-10: First guns-only combat slice and aircraft cutouts/surfaces
+
+Implemented the user-requested damage/combat integration ahead of the in-app importer.
+Runtime now consumes the damage/hit helpers and binds the gun target; the retail AI
+VM remains separate from the authored controller. Sweeps retain emission times and
+relative target movement, select first hull entry, consume hit rounds, and attribute
+kills once. A reviewed endpoint-clamping defect and same-step terrain-death ordering
+defect were fixed with regressions. Healthy flight behavior remains unchanged, including
+the preserved assisted source file. Data/render integration, reset/pause and debrief
+are covered by the new headless and Electron checks in the phase 6 baseline.
+
+The first desktop combat run timed out because the original pursuit controller fell
+behind and fired too loosely. Speed matching and a tighter ballistic firing solution
+fixed it; the subsequent real Electron fight reached defeat through ten projectile
+hits. Initial visual captures did not wait for flight readiness; the poll was corrected
+and all three aircraft were captured again with real cockpit art and deployed surfaces.
+The Python gun test alone needs `PYTHONPATH=tools/retail`; its initial import error
+was corrected by using that invocation. Earlier full Python retail testing still has
+the unrelated local ATF_10.LIB offset error, so no full-Python-green claim is made.
+
+## Earlier snapshot and acceptance history (before guns-only combat)
+
 **Commit handoff:** final checks rerun after all rocker refinements: 371 Bun tests
 pass, 3 existing imported-mount fixture skips, 0 failures; typecheck/lint/format
 pass; four Python menu tests pass. User requested docs, commit and push. Retail

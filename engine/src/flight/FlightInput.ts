@@ -57,6 +57,7 @@ export function deadzone(value: number, zone = 0.12): number {
   return Math.sign(value) * Math.min(1, (Math.abs(value) - zone) / (1 - zone));
 }
 const PILOT_KEYS = new Set([
+  'KeyC',
   'KeyA',
   'BracketLeft',
   'BracketRight',
@@ -173,6 +174,7 @@ export class FlightInput {
   }
   autopilot: AutopilotMode = 'off';
   resetRequested = false;
+  targetRequested = false;
   waypointIndex = 0;
   gamepadConnected = false;
   private paused = false;
@@ -193,6 +195,8 @@ export class FlightInput {
     if (!editing) applyPilotAction(this, event);
     if (!editing) applyViewAction(this, event);
     if (!editing) applyWaypointAction(this, event);
+    if (!editing && event.type === 'keydown' && !event.repeat && event.code === 'KeyC')
+      this.targetRequested = true;
   };
   private focus = (event: FocusEvent): void => {
     if (

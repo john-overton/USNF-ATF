@@ -4,9 +4,13 @@
 
 - Read [README.md](README.md), the current snapshot in [Docs/progress.md](Docs/progress.md), and [Docs/build-plan.md](Docs/build-plan.md) before planning work.
 - `Docs/build-plan.md` owns phase numbering, sequencing, decisions, and exit criteria. `Docs/usnf-atf-plan.md` is the original design brief; its older build order is superseded.
-- This is an early fan remake: the runnable app has a main menu, a mocked quick fight, a terrain explorer, original practice flight with a loadout screen, and a renderer probe. Python retail research is substantially ahead of the TypeScript importer. The original flight model and maneuver harness are implemented; retail importing and combat remain planned; see the current progress snapshot for acceptance status.
+- This is an early fan remake: the runnable app has a main menu, guns-only quick fight, terrain explorer, practice flight, loadout screen and renderer probe. `sim/combat/world.ts` owns combat state; its pursuit/visual detection is authored, not the retail AI host. Python retail research is ahead of the TypeScript importer. Radar/RWR, missiles, native AI, subsystem damage and campaigns remain planned; see the current progress snapshot for acceptance status.
 
 ## Development machine and commands
+
+Current development is Linux/Omarchy as of 2026-09-10. Guns-only combat and aircraft
+visual checks run here; historical Mac/platform deferrals below do not override the
+current user-requested Linux work or establish full cross-platform acceptance.
 
 This checkout is on a macOS Apple Silicon dev box, using zsh. Homebrew is normally at `/opt/homebrew`. Use Bun for workspace scripts and the existing `bun.lock`; Node 22+ supports the build tooling. The retail Python toolkit requires 3.11+ and uses the standard library. The terrain pipeline uses pinned rasterio/numpy/scipy dependencies in `terrain-pipeline/requirements.txt`; Python 3.14 wheels are verified on this Mac. Use a project `.venv` when installing Python dependencies; do not change system Python.
 

@@ -1,5 +1,7 @@
 /**
- * The other aircraft in the sky.
+ * Deterministic spawn layouts and the preserved straight-course test fixture.
+ * Runtime opponents now live in sim/combat/world.ts. The mock stepping helpers
+ * below remain useful for checking spawn/clock behavior independently of combat.
  *
  * This is a **mock**, and the plan it comes from says so plainly: what is real is
  * the entity list, the deterministic spawn, and the fact that everything steps
@@ -69,23 +71,36 @@ const velocityFor = (profile: EntityProfile): Vector3Like => ({
 });
 
 /**
- * Head-on and co-altitude, offset a little to either side so two opponents are not
- * in the same piece of sky. The player's own state supplies the reference.
+ * Configurable encounter geometry, relative to the player's initial bearing.
+ * Wingmen have deterministic lateral spacing; the selected range/altitude apply
+ * exactly to the formation leader. Terrain clearance is checked by the world.
  */
 export function spawnEntities(
   mission: MissionParams,
   player: { position: Vector3Like; headingRad: number },
 ): WorldEntity[] {
   return mission.opponents.map((slot, index) => {
-    const spread = (seededUnit(mission.seed, index) - 0.5) * 2 * SPAWN_SPREAD_M;
-    const altitude = Math.max(
-      MIN_ALTITUDE_M,
-      player.position.y + (seededUnit(mission.seed, index + 64) - 0.5) * 2 * 200,
-    );
-    const heading = player.headingRad + Math.PI;
+    const encounter = mission.encounter;
+    const spread =
+      index === 0 ? 0 : (index % 2 ? 1 : -1) * (400 + seededUnit(mission.seed, index) * 800);
+    const altitude = Math.max(MIN_ALTITUDE_M, player.position.y + encounter.altitudeOffsetM);
+    const heading =
+      player.headingRad +
+      (encounter.orientation === 'head-on'
+        ? Math.PI
+        : encounter.orientation === 'crossing'
+          ? -Math.PI / 2
+          : 0);
+    const bearing =
+      player.headingRad +
+      (encounter.orientation === 'behind'
+        ? Math.PI
+        : encounter.orientation === 'crossing'
+          ? Math.PI / 2
+          : 0);
     const ahead = {
-      x: player.position.x - Math.sin(player.headingRad) * SPAWN_RANGE_M,
-      z: player.position.z + Math.cos(player.headingRad) * SPAWN_RANGE_M,
+      x: player.position.x - Math.sin(bearing) * encounter.distanceM,
+      z: player.position.z + Math.cos(bearing) * encounter.distanceM,
     };
     // Offset across the player's track, so the spread is lateral at any heading.
     const across = { x: Math.cos(player.headingRad), z: Math.sin(player.headingRad) };

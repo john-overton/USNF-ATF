@@ -10,8 +10,8 @@ import {
   RGBAFormat,
 } from 'three';
 import type { Platform } from '../platform/Platform';
-import { parseRetailGun, type RetailGun } from '../data/retail-gun';
-import { createGunState, MAX_GUN_ROUNDS, stepGun } from '../sim/flight/gun';
+import { parseRetailGun, type RetailGun, type GunDefinition } from '../data/retail-gun';
+import { createGunState, MAX_GUN_ROUNDS, stepGun, type GunState } from '../sim/flight/gun';
 import type { FlightState } from '../sim/flight';
 import type { AircraftId } from './aircraft-catalog';
 import { flightPcm, resampleFlightPcm } from './FlightAudio';
@@ -29,6 +29,7 @@ export class FlightGun {
   private source?: AudioBufferSourceNode;
   private gain?: GainNode;
   private firing = false;
+  private lastFired = 0;
   private disposed = false;
   private paused = false;
   setPaused(value: boolean): void {
@@ -48,8 +49,12 @@ export class FlightGun {
         /* A closed audio context can race scene disposal. */
       });
   };
-  private constructor(readonly data?: RetailGun) {
-    this.state = createGunState(data);
+  private constructor(
+    readonly data?: GunDefinition,
+    state?: GunState,
+    audio = true,
+  ) {
+    this.state = state ?? createGunState(data);
     this.geometry.setAttribute('position', new BufferAttribute(this.positions, 3));
     this.geometry.setDrawRange(0, 0);
     this.lines = new LineSegments(
@@ -91,14 +96,15 @@ export class FlightGun {
     );
     this.glow.frustumCulled = false;
     this.lines.add(this.glow);
-    if (data && typeof AudioContext !== 'undefined') {
+    if (audio && data && 'clip' in data && typeof AudioContext !== 'undefined') {
+      const clip = (data as RetailGun).clip;
       this.context = new AudioContext();
       const pcm = resampleFlightPcm(
-        flightPcm(data.clip, true),
-        data.clip.sampleRate,
-        Math.max(8000, data.clip.sampleRate),
+        flightPcm(clip, true),
+        clip.sampleRate,
+        Math.max(8000, clip.sampleRate),
       );
-      const buffer = this.context.createBuffer(1, pcm.length, Math.max(8000, data.clip.sampleRate));
+      const buffer = this.context.createBuffer(1, pcm.length, Math.max(8000, clip.sampleRate));
       buffer.copyToChannel(new Float32Array(pcm), 0);
       this.source = this.context.createBufferSource();
       this.source.buffer = buffer;
@@ -111,6 +117,9 @@ export class FlightGun {
       window.addEventListener('keydown', this.wake);
       window.addEventListener('pointerdown', this.wake);
     }
+  }
+  static combat(data: GunDefinition, state?: GunState, audio = false): FlightGun {
+    return new FlightGun(data, state, audio);
   }
   static async load(platform: Platform, id: AircraftId): Promise<FlightGun> {
     const path = `aircraft/${id}-gun.json`;
@@ -128,6 +137,8 @@ export class FlightGun {
     this.firing ||= before !== this.state.fired;
   }
   audioUpdate(muted = false): void {
+    this.firing ||= this.state.fired > this.lastFired;
+    this.lastFired = this.state.fired;
     if (this.context && this.gain)
       this.gain.gain.setTargetAtTime(
         this.firing && !muted ? 0.18 : 0,
@@ -139,6 +150,7 @@ export class FlightGun {
   reset(): void {
     Object.assign(this.state, createGunState(this.data));
     this.firing = false;
+    this.lastFired = 0;
     this.audioUpdate();
   }
   render(origin: { x: number; z: number }): void {

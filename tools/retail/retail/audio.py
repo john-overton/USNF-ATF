@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from .pt import load_pt
 
-RATES = {'.5K': 5512, '.8K': 8000, '.11K': 11025}
+RATES = {'.5K': 5512, '.8K': 8010, '.11K': 11025}
 ROLES = {'jet': 'loopSound', 'burner': 'secondSound',
          'start': 'engineOnSound', 'stop': 'engineOffSound'}
 

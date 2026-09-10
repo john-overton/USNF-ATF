@@ -100,6 +100,10 @@ test('commands change the mission as well as the screen', () => {
   expect(nextMission({ command: 'terrain-explorer' }, DEFAULT_MISSION).mode).toBe('explorer');
   const quick = nextMission({ command: 'quick-mission' }, DEFAULT_MISSION);
   expect(quick.mode).toBe('quick-fight');
+  expect(quick.start).toBe('airborne');
+  expect(nextMission({ command: 'quick-mission' }, { ...quick, start: 'runway' }).start).toBe(
+    'runway',
+  );
   expect(quick.opponents).toHaveLength(1);
   expect(
     nextMission({ command: 'choose-aircraft', aircraft: 'x31' }, DEFAULT_MISSION).aircraft,

@@ -34,12 +34,16 @@ over the whole disc (ESA-embedded LIBs, root LIBs, and loose ESA files).
 | HUD | identified | PL/PE-like i386 plug-in; original practice HUD ([hud.md](hud.md)) | 16 / 65,536 | 37 / 170,496 |
 | MNU / DLG | decoded | [mnu.md](mnu.md) data-only PL images; a widget table whose classes are `main.dll` imports | 10+76 / 364,544 | 12+88 / 477,184 |
 | LAY | identified | **not UI**: sky and sea layer plug-ins naming `wave1.SH` and `ocean*06.PIC`, selected by a mission's `layer` key ([mission.md](mission.md)) | 8 / 147,456 | 20 / 378,880 |
-| 5K / 8K / 11K | unknown | audio | 594+1+213 / 60,682,679 | 781+1+255 / 83,581,983 |
-| XMI | unknown | music (XMIDI) | 104 / 495,528 | 102 / 534,492 |
+| 5K / 8K / 11K | partial: PCM/WAV recovered | audio | 594+1+213 / 60,682,679 | 781+1+255 / 83,581,983 |
+| XMI | partial: notes/channel events decoded, controller subset rendered | music (XMIDI) | 104 / 495,528 | 102 / 534,492 |
 | SEQ | unknown | | 104 / 10,347 | 32 / 6,434 |
-| VDO / FBC / CB8 | unknown | video | 355+355+23 / 542,432,692 | 0+0+35 / 486,496,234 |
+| VDO / FBC / CB8 | partial: VDO sidecars mapped, CB8 audio demux | video | 355+355+23 / 542,432,692 | 0+0+35 / 486,496,234 |
 
-Other extensions seen, all unknown: `MM`, `PTS` (PE plug-in, not plane data), `MUS`,
+MUS is now partially recovered: USNF score opcodes execute; host dispatch remains
+partial. CB8 audio recovery uses only28 complete ATF ranges; seven entries in the
+historical35-entry census above are unavailable on the truncated current disc.
+
+Other extensions seen, all unknown: `MM`, `PTS` (PE plug-in, not plane data),
 `HGR`, `BIN`, `INF` (encyclopedia text), `SMS`,
 plus the Windows `EXE`/`DLL`/`TXT`/`URL` loose files in the ESA.
 `MC` (19 / 81,920 and 4 / 18,432) and `CAM` (3 / 16,384 and 3 / 26,112) are
@@ -63,7 +67,8 @@ channel; scale by 4 or `v * 255 // 63` for 8-bit). Entry 0 is black and
 entries 1..15 are all (63, 0, 63), the usual magenta placeholder for the
 reserved low slots. PIC decoding is implemented; runtime palette gaps remain (see [pic.md](pic.md) and [pal.md](pal.md)).
 
-- [Flight audio](audio.md): PT-selected raw PCM, inferred rates and local playback.
+- [Audio recovery](audio.md): whole-disc catalogs, gameplay hooks, CB8 audio/VDO sidecars and missing media.
+- [Music](music.md): XMIDI notes/controllers, native score VM and instrument/host-dispatch limits.
 
 - [Native ground and gear pitch](native-gear-pitch.md): speed-dependent display offset, terrain slope, F-14 zero field and 1,021 isolated x86 checks.
 

@@ -185,10 +185,14 @@ def f14_surfaces(model: dict) -> dict:
         suffix = 'left' if side < 0 else 'right'
         name, planes, pivot, axis, parent = '', [], None, None, None
         if polygon['part'].startswith('part-'):
-            # Spanwise aft strip; keep the outer wingtip and root intact.
+            # Follow the aft quarter of the tapered wing, from the root break to
+            # the tip break. The old constant-chord cut stopped short of the tip
+            # and took disproportionately much of the narrow outer wing.
             name = f'flap-{suffix}'
-            planes = [(side, 0, 0, -30), (-side, 0, 0, 80), (-side * 5 / 28, -1, 0, 9)]
-            pivot, axis = (side * 30, 9 - 30 * 5 / 28, 2), (1, 0, side * 5 / 28)
+            slope = .75 * (5 / 28) + .25 * (29 / 64)
+            intercept = .75 * (30 * 5 / 28 - 2) + .25 * (29 + 23 * 29 / 64)
+            planes = [(side, 0, 0, -30), (-side, 0, 0, 86), (-side * slope, -1, 0, intercept)]
+            pivot, axis = (side * 30, intercept - 30 * slope, 2), (1, 0, side * slope)
             parent = f'wing-{suffix}-color'
         elif lo[2] == hi[2] == -2 and hi[1] < -10 and min(abs(v[0]) for v in vertices) >= 18:
             name, pivot, axis = f'taileron-{suffix}', (side * 22, -30, -2), (1, 0, 0)
@@ -239,7 +243,7 @@ def fixed_wing_surfaces(model: dict, aircraft: str) -> dict:
                 candidates = [(f'elevator-{suffix}', [(side, 0, 0, -1.5), (0, -1, 0, -53)],
                                (side * 2, -53, 7), (1, 0, 0))]
             # Wings: inboard flaps and distinct outboard trailing ailerons.
-            elif lo[2] >= -8 and hi[2] <= -3 and lo[1] >= -25 and hi[1] <= 14:
+            elif lo[2] >= -8 and hi[2] <= -3 and lo[1] >= -25 and hi[1] <= 14 and hi[0] - lo[0] >= 8:
                 candidates = [
                     (f'flap-{suffix}', [(side, 0, 0, -6), (-side, 0, 0, 21), (0, -1, 0, -12)],
                      (side * 6, -12, -7), (1, 0, 0)),
@@ -259,8 +263,10 @@ def fixed_wing_surfaces(model: dict, aircraft: str) -> dict:
             if polygon['part'].startswith('part-') and lo[1] > 40:
                 candidates = [(f'canard-{suffix}', [], model['parts'][polygon['part']], (1, 0, 0))]
             elif polygon['part'] == 'body' and lo[2] >= -6 and hi[2] <= -3 and hi[1] <= 10:
-                candidates = [(f'elevon-{suffix}', [(side, 0, 0, -10), (0, -1, 0, -17)],
-                               (side * 10, -17, -6), (1, 0, 0))]
+                # Include the inboard trailing edge, not only the two small
+                # outboard tabs behind y=-17. Keep the fuselage center fixed.
+                candidates = [(f'elevon-{suffix}', [(side, 0, 0, -7), (0, -1, 0, -14)],
+                               (side * 7, -14, -5.5), (1, 0, 0))]
             elif lo[0] == hi[0] == 0 and lo[2] >= 8 and hi[1] <= -19:
                 candidates = [('rudder-center', [(0, -1, -.35, -28)],
                                (0, -32.2, 12), (0, 1, .35))]
@@ -288,6 +294,11 @@ def fixed_wing_surfaces(model: dict, aircraft: str) -> dict:
             remaining = outside_pieces
         polygons.extend(remaining)
     return {**model, 'polygons': polygons, 'parts': pivots, 'rig': rig}
+
+
+def texture_rgba(pixels, palette, masked: bool) -> list[int]:
+    """Index-keyed cutouts: opaque white at any other palette index survives."""
+    return [component for index in pixels for component in (*palette[index], 0 if masked and index == 255 else 255)]
 
 
 def export(source: Path, palette_path: Path, output: Path, length_metres: float = 19.1, name: str | None = None, wingspan_metres: float | None = None) -> dict:
@@ -323,19 +334,24 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
             # Keep them separate so authored engine state can darken an idle nozzle.
             x = sum(v[0] for v in polygon['vertices']) / len(polygon['vertices'])
             component = 'exhaust-left' if x < 0 else 'exhaust-right'
-        key = (component, polygon['texture'] if polygon['uvs'] else '')
+        # Inspected 4c/6c frame/pilot billboards use palette-index-255 cutouts.
+        # Other textured opcodes have opaque skin/fallback-color semantics.
+        masked = polygon['subtype'] in (0x4c, 0x6c) and bool(polygon['uvs'])
+        key = (component, polygon['texture'] if polygon['uvs'] else '', masked)
         if key not in groups:
             groups[key] = {'name': key[0], 'positions': [], 'colors': [], 'pivot': convert(model['parts'].get(key[0], center))}
             if key[0].startswith('part-') and source.stem.upper() == 'F14':
                 groups[key]['name'] = 'wing-left' if model['parts'][key[0]][0] < 0 else 'wing-right'
             groups[key]['name'] += '-textured' if key[1] else '-color'
+            if masked:
+                groups[key]['name'] += '-cutout'
             if key[0] in model.get('rig', {}):
                 groups[key].update(model['rig'][key[0]])
             if key[1]:
                 groups[key]['uvs'] = []
                 pic = parse_pic((source.parent / key[1].upper()).read_bytes())
                 pal = overlay(palette, pic.palette or [])
-                rgba = [component for index in pic.pixels for component in (*pal[index], 255)]
+                rgba = texture_rgba(pic.pixels, pal, masked)
                 groups[key]['texture'] = {'width': pic.width, 'height': pic.height, 'rgba': rgba}
         group = groups[key]
         n = len(polygon['vertices'])
@@ -370,6 +386,7 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
             'Static exterior only; control surfaces, gear and engine animation are not recovered.']
     if source.stem.upper() in ('A4', 'F31'):
         result['limitations'][-1] = 'Retail faces use authored control-surface hinges/mixing; native animation and thrust vectoring are not recovered.'
+    result['limitations'].append('Reviewed 4c/6c cockpit/frame/pilot faces use index-255 alpha cutouts; native material dispatch remains partial.')
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, separators=(',', ':')) + '\n')
     return result

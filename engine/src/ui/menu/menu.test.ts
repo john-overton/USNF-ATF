@@ -33,7 +33,13 @@ test('paused briefing has resume and menu actions plus a two-page rocker', () =>
         onCommand: () => undefined,
       }),
     );
-  expect(commands(render(0))).toEqual(['resume', 'main-menu', 'brief-page-down', 'brief-page-up']);
+  expect(commands(render(0))).toEqual([
+    'resume',
+    'main-menu',
+    'end-flight',
+    'brief-page-down',
+    'brief-page-up',
+  ]);
   expect(render(0)).toContain('Mission orders');
   expect(render(0)).toContain('1 of 2');
   expect(render(1)).toContain('Flight status');
@@ -166,10 +172,10 @@ test('the debrief reads back the flight it was given, and says so when there was
   expect(markup).toContain('A-4E Skyhawk');
   expect(markup).toContain('Time aloft 1:00');
   expect(commands(markup)).toEqual(['main-menu']);
-  expect(markup).toContain('Damage is not modelled yet');
+  expect(markup).toContain('Guns-only combat');
 });
 
-test('the quick fight setup says it is a mock, and its rockers describe the sky', () => {
+test('the quick fight setup describes guns and original tactics, and its rockers describe the sky', () => {
   const markup = renderToStaticMarkup(
     createElement(QuickFightSetup, {
       mission: {
@@ -186,24 +192,37 @@ test('the quick fight setup says it is a mock, and its rockers describe the sky'
   );
   expect(markup).toContain('data-menu-screen="quick-fight"');
   expect(markup).toContain('data-menu-rocker="opponent-count"');
-  expect(markup).toContain('3 aircraft in the sky, including you');
+  expect(markup).toContain('3 aircraft · ukraine');
   expect(markup).toContain('X-31 EFM');
   expect(markup).toContain(SKILLS[3]);
-  expect(markup).toContain('Mock quick fight.');
+  expect(markup).toContain('Guns-only quick fight');
+  expect(markup).toContain('Enemies enter after your departure grace');
   expect(commands(markup)).toEqual([
     'continue',
     'back',
     'player-aircraft-down',
     'player-aircraft-up',
+    'flight-start-down',
+    'flight-start-up',
+    'start-altitude-down',
+    'start-altitude-up',
     'weather-down',
     'weather-up',
     'time-down',
     'time-up',
+    'departure-grace-down',
+    'departure-grace-up',
     'opponent-aircraft-down',
     'opponent-aircraft-up',
     'opponent-count-down',
     'opponent-count-up',
     'opponent-skill-down',
     'opponent-skill-up',
+    'encounter-distance-down',
+    'encounter-distance-up',
+    'encounter-orientation-down',
+    'encounter-orientation-up',
+    'altitude-offset-down',
+    'altitude-offset-up',
   ]);
 });

@@ -458,6 +458,29 @@ function recoveredAircraft() {
   return def;
 }
 
+test('damage keeps native speed bounds integer in both PT backends', () => {
+  for (const nativeEnvelope of [false, true]) {
+    const def = recoveredAircraft();
+    def.nativeEnvelope = nativeEnvelope;
+    def.retail!.rawFields.coefDrag = { value: 256 };
+    def.retail!.rawFields._gpullDrag = { value: 20 };
+    let state = createFlightState({ position: { x: 0, y: 1000, z: 0 }, airspeed: 230 });
+    for (let tick = 0; tick < 120; tick++) {
+      state = stepFlight(
+        state,
+        NEUTRAL_CONTROLS,
+        {
+          ...flat,
+          damage: { speedScale: 0.982142857, gScale: 0.95, dragScale: 1.1, gPullDragScale: 1.1 },
+        },
+        def,
+      ).state;
+      expect(Number.isFinite(state.velocity.z)).toBe(true);
+      expect(state.status).toBe('airborne');
+    }
+  }
+});
+
 test('both PT backends turn full stick into bounded G instead of an unrestricted pitch rate', () => {
   for (const nativeEnvelope of [false, true]) {
     const def = recoveredAircraft();

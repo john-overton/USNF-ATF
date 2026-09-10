@@ -167,7 +167,7 @@ export class RetailAircraft {
         vertexColors: true,
         roughness: 0.8,
         side: DoubleSide,
-        ...(part.uvs && texture ? { map: texture } : {}),
+        ...(part.uvs && texture ? { map: texture, alphaTest: 0.5 } : {}),
       });
       material.userData.originalMap = material.map;
       group.add(new Mesh(geometry, material));

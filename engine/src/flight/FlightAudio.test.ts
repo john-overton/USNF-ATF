@@ -4,6 +4,7 @@ import {
   engineAudioEvent,
   flightPcm,
   parseFlightSamples,
+  parseEnvironmentSamples,
   flightAudioLevels,
   type FlightAudioState,
 } from './FlightAudio';
@@ -99,4 +100,23 @@ test('5K PCM resampling preserves duration and exact fade/loop endpoints', () =>
   expect(resampled.length).toBe(Math.round((4 * 48000) / 5512));
   expect(resampled[0]).toBe(0);
   expect(resampled[resampled.length - 1]).toBe(0);
+});
+
+test('environment PCM requires both attributed bounded wind and tire loops', () => {
+  const clip = {
+    source: 'synthetic.5K',
+    sha256: 'a'.repeat(64),
+    sampleRate: 5512,
+    encoding: 'unsigned8-mono',
+    pcm: [128, 1, 255, 128],
+  };
+  const data = { schemaVersion: 1, source: 'retail-pcm', clips: { wind: [clip], rolling: [clip] } };
+  expect(parseEnvironmentSamples(data).rolling.source).toBe(clip.source);
+  expect(() => parseEnvironmentSamples({ ...data, clips: { wind: [clip] } })).toThrow();
+  expect(() =>
+    parseEnvironmentSamples({
+      ...data,
+      clips: { ...data.clips, wind: [{ ...clip, pcm: [128, -1] }] },
+    }),
+  ).toThrow();
 });

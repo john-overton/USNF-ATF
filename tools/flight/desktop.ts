@@ -9,7 +9,12 @@ export interface DesktopOptions {
   app?: string;
   terrain: string;
   aircraft?: string;
+  /** Local aircraft manifests for mixed-type combat; isolated copy, never bundled. */
+  aircraftDirectory?: string;
   audio?: string;
+  music?: string;
+  combatAudio?: string;
+  environmentAudio?: string;
   flightProfile?: string;
   cockpit?: string;
   loadout?: string;
@@ -35,6 +40,8 @@ export async function openDesktop(options: DesktopOptions) {
   await cp(path.resolve(options.terrain), path.join(profile, 'data/terrains/ukraine'), {
     recursive: true,
   });
+  if (options.aircraftDirectory)
+    await cp(path.resolve(options.aircraftDirectory), path.join(profile, 'data/aircraft'), { recursive: true });
   if (options.aircraft) {
     await mkdir(path.join(profile, 'data/aircraft'), { recursive: true });
     await cp(path.resolve(options.aircraft), path.join(profile, `data/aircraft/${id}.json`));
@@ -42,6 +49,18 @@ export async function openDesktop(options: DesktopOptions) {
   if (options.audio) {
     await mkdir(path.join(profile, 'data/audio'), { recursive: true });
     await cp(path.resolve(options.audio), path.join(profile, `data/audio/${id}.json`));
+  }
+  if (options.combatAudio) {
+    await mkdir(path.join(profile, 'data/audio'), { recursive: true });
+    await cp(path.resolve(options.combatAudio), path.join(profile, 'data/audio/combat.json'));
+  }
+  if (options.environmentAudio) {
+    await mkdir(path.join(profile, 'data/audio'), { recursive: true });
+    await cp(path.resolve(options.environmentAudio), path.join(profile, 'data/audio/environment.json'));
+  }
+  if (options.music) {
+    await mkdir(path.join(profile, 'data/audio'), { recursive: true });
+    await cp(path.resolve(options.music), path.join(profile, 'data/audio/flight-music.json'));
   }
   if (options.menu) {
     await cp(path.resolve(options.menu), path.join(profile, 'data/menu'), { recursive: true });

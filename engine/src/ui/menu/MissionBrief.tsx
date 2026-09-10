@@ -53,6 +53,15 @@ export function MissionBrief({
               command: 'main-menu',
               label: 'Main menu',
             },
+            {
+              type: 'action',
+              x: 47,
+              y: 443,
+              width: 85,
+              height: 26,
+              command: 'end-flight',
+              label: 'Debrief',
+            },
           ],
         }}
         {...(assets ? { assets } : {})}
@@ -81,7 +90,7 @@ export function MissionBrief({
               <h3>Mission orders</h3>
               <p>
                 {mission.mode === 'quick-fight'
-                  ? `${mission.opponents.length} opposing aircraft ${mission.opponents.length === 1 ? 'flies a fixed course' : 'fly fixed courses'}. Weapons cause no damage in this mock mission.`
+                  ? `Engage ${mission.opponents.length} opposing aircraft with guns. C cycles visual targets; Shift+Tab arms the gun and Tab fires. Opponents use original pursuit tactics and can shoot you down.`
                   : 'Practice takeoff, navigation and landing. No combat objectives are assigned.'}
               </p>
               <p>

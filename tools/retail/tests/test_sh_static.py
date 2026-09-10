@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from _paths import REPO, TOOLS_RETAIL  # noqa: F401
 from retail.sh import SHError
-from retail.sh_static import project, export, split_polygon, f14_surfaces, fixed_wing_surfaces
+from retail.sh_static import project, export, split_polygon, f14_surfaces, fixed_wing_surfaces, texture_rgba
 
 
 def image(code):
@@ -32,6 +32,27 @@ def polygon(indices):
 
 
 TRIANGLE = [(0, 0, 0), (10, 0, 0), (0, 10, 0)]
+
+
+class CutoutTest(unittest.TestCase):
+    def test_only_masked_index_255_is_transparent_not_white_rgb(self):
+        palette = [(255, 255, 255)] * 256
+        self.assertEqual(texture_rgba([175, 255], palette, True), [255, 255, 255, 255, 255, 255, 255, 0])
+        self.assertEqual(texture_rgba([175, 255], palette, False)[3::4], [255, 255])
+
+    def test_narrow_root_wall_is_not_a_flap(self):
+        face = {'vertices': [(6, 3, -4), (5, -20, -7), (7, -19, -5)],
+                'uvs': None, 'part': 'body', 'color': 12}
+        rig = fixed_wing_surfaces({'polygons': [face], 'parts': {}}, 'A4')
+        self.assertTrue(all(not p['part'].startswith('flap') for p in rig['polygons']))
+
+    def test_x31_inboard_trailing_surface_moves_with_elevon(self):
+        face = {'vertices': [(8, -10, -5), (18, -10, -5), (18, -17, -5), (8, -17, -5)],
+                'uvs': None, 'part': 'body', 'color': 12}
+        rig = fixed_wing_surfaces({'polygons': [face], 'parts': {}}, 'F31')
+        moving = [p for p in rig['polygons'] if p['part'].startswith('elevon')]
+        self.assertTrue(moving)
+        self.assertTrue(all(v[1] <= -14 for p in moving for v in p['vertices']))
 
 
 class StaticShapeTest(unittest.TestCase):

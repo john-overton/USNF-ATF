@@ -9,7 +9,7 @@ establish visual acceptance of the menu.
 A non-commercial fan remake of Jane's US Navy Fighters '97 (and, later, ATF Gold), built with TypeScript, Three.js, React, and Electron. The goal is retail aircraft and missions over real-elevation terrain, using assets imported from your own copy.
 
 **Current status (2026-09-10):** the app now opens on a **main menu** rather than
-straight into the viewer. From it you can set up a mocked quick fight, take a free
+straight into the viewer. From it you can set up a guns-only quick fight, take a free
 flight, or enter the terrain explorer, choosing an aircraft and its loadout on the
 way. Escape opens a two-page mission briefing and pauses the current flight;
 Resume or Escape continues it, and Main menu ends it, without a page reload.
@@ -18,11 +18,43 @@ The main menu is laid out at the geometry recovered from the original's own
 from your own disc ([menu porting](Docs/menu-porting.md)). The loadout screen shows
 an aircraft's real hardpoints, stores and gross weight, though stores do not affect
 flight yet and a station offers only its own default because the compatibility mask
-is still undecoded. The quick fight is a **mock**: opponents fly fixed profiles,
-nothing acquires, nothing shoots and no round does damage. Every existing
-deep-link URL still works, so the acceptance tools are unaffected.
+is still undecoded. Quick fight now has visual target acquisition, original pursuit
+tactics, guns, swept hits, airframe damage, destruction and a combat debrief.
+Press C to cycle targets, Shift+Tab to arm, and Tab to fire. Escape pauses;
+the briefing's Debrief button ends the flight. Aircraft HP and gun damage use local
+imports where present, with explicitly labelled original fallback values otherwise.
+The retail AI VM, radar, missiles and per-system damage remain future work.
+Quick setup includes airborne/runway starts, altitude, range and encounter orientation.
+Runway starts can stage enemies until a configurable safe-climb grace period ends.
+Damage darkens airframes and adds smoke/fire; gun kills and ground crashes break
+the loaded geometry into debris with procedural explosions and imported retail
+hit/explosion/crash sounds (synthesized fallback without the local import).
+Terrain tools start collapsed in quick fights.
+In-flight situation music uses locally imported XMI notes; N toggles music, M mutes
+all audio, and flight controls expose music volume. Recovered MUS scripts now choose
+and sequence tracks; MIDI volume, expression, pan and bend are preserved. Instruments
+and host situation dispatch remain approximate. Original actuator, stall, hit/fuel
+speech, wind/tire and bullet-terrain sounds use verified gameplay hooks. The
+[audio library recovery](Docs/formats/audio.md)
+exports all identified standalone audio from both discs, including unused speech;
+49 movie soundtracks are also recovered, with seven ATF movies blocked by truncated media.
+[music notes](Docs/formats/music.md) distinguish recovered scripts from runtime parity.
+Exterior cockpit texture cutouts and flap placement have been revised on all three
+aircraft; re-run the aircraft porter to update previously installed models.
+See [guns-only evidence and limitations](Docs/baselines/phase-6.md).
 
-Underneath that, the desktop app is a terrain explorer with a free camera, streamed elevation chunks, floating origin, blended terrain LOD transitions, stitched panel edges, water, optional satellite paint, compact seasonal color maps, classified shoreline ribbons, a simulated atmosphere with a theater clock, sun and moon lighting, wind, aircraft and cloud shadows and volumetric clouds, and performance diagnostics. The Python pipeline fetches Copernicus DEM and water masks and generates the Ukraine development theater. Phase 1 code fixes and macOS packaging are verified; Packaged coast/detail runs measure about 60 fps at 1440p on this Mac; [native GPU memory profiling](Docs/gpu-trace-notes.md) is documented separately. Linux acceptance is deferred for now. Practice flight now supports selectable locally imported F-14, A-4E and X-31 aircraft with throttle presets, engine/gear/hook controls, retail engine sounds, moving aircraft control surfaces, a flight HUD, bracket-selected waypoints, a zoomable regional terrain map and F2/F3 chase views over the generated theater. The retail PT-envelope flight model is the default for imported aircraft, with preserved assisted and recovered-envelope models selectable for comparison; missing profiles fall back to assisted flight. For imported USNF profiles, both experimental modes now include recovered G command limits and speed-dependent thrust/drag with fuel/load corrections; the remaining motion solver is original. Wind is the only environment input the flight model reads; time of day, shadows and clouds do not affect flight. Retail cockpit frames and imported practice guns now support F1 cockpit, Shift-arrow look/orbit, safety and individual ballistic rounds. Targets/damage, missions and the in-app retail importer remain planned. Python retail research tools remain available; SH model export is partial.
+The desktop app also has a terrain explorer with streamed elevation, floating origin,
+blended LOD, water, imagery and seasonal color maps, shorelines, sky, wind and clouds.
+Historical packaged Mac terrain measurements are about 60 fps at 1440p;
+[GPU profiling](Docs/gpu-trace-notes.md) and phase baselines describe their scope.
+Current development and guns-only checks run on Linux; full cross-platform acceptance
+remains open. Practice flight supports the imported F-14, A-4E and X-31, cockpit
+frames and mirrors, moving surfaces, engine audio, navigation and chase cameras.
+Retail PT-envelope flight remains the imported-aircraft default; preserved assisted
+flight is selectable and supplies the fallback without an imported profile.
+Recovered-native-envelope remains opt-in. None is complete native game parity.
+Missions, campaigns and the in-app retail importer remain planned; developer Python
+porters supply the current local assets. SH texture dispatch is still partial.
 
 Start with [progress and review findings](Docs/progress.md), the [build plan](Docs/build-plan.md) (phase order and exit criteria), and the [design brief](Docs/usnf-atf-plan.md). Contributor and agent instructions are in [AGENTS.md](AGENTS.md). The [full US Navy Fighters manual](Docs/reference/JANES_US_NAVY_FIGHTERS_djvu.txt) is available locally; [reference details](Docs/reference/README.md) record its source and checksum.
 
@@ -111,6 +143,7 @@ exteriors and the separate experimental per-aircraft flight-data mode. [F-14 set
 - Hold **W/S** for incremental throttle; the setting stays when released.
 - **T** toggles engine, **G** gear, **H** hook, **F** flaps and **M** sound mute.
 - **B** toggles speed brakes and wheel braking on the ground.
+  Apply it when parked: tire grip resists sideways wind slip, but unbraked wheels can roll.
 - Cockpit view is the default; **F1** returns to the enlarged imported cockpit with a HUD fitted to its glass.
   F-14/A-4E mirrors show live rear views. **Shift + arrows**
   look around or orbit externally; **Shift + /** centers the view.

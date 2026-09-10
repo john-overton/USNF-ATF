@@ -119,6 +119,34 @@ export function GunStatus({ flight }: { flight: FlightDiagnostics }) {
         ? `${gun.safe ? 'SAFE' : 'ARMED'} · ${gun.name} · ${gun.remaining} RDS`
         : 'GUN UNAVAILABLE · import aircraft gun'}
       <small style={{ display: 'block' }}>Shift+Tab safety · Tab fire</small>
+      {flight.combat && (
+        <>
+          <small style={{ display: 'block' }}>
+            Damage {Math.round(flight.combat.damagePercent)}% · Hits {flight.combat.hits} · Kills{' '}
+            {flight.combat.kills}
+          </small>
+          <small style={{ display: 'block' }}>
+            {flight.combat.target
+              ? `Target ${flight.combat.target.id} · ${flight.combat.target.aircraft.toUpperCase()} · ${(flight.combat.target.rangeM / 1000).toFixed(2)} km · ${Math.round(flight.combat.target.damagePercent)}% damage`
+              : 'No visual contact'}{' '}
+            · C next target
+          </small>
+          {flight.combat.dataSource !== 'retail' && (
+            <small style={{ display: 'block' }}>Original fallback combat values in use</small>
+          )}
+          {['victory', 'defeat'].includes(flight.combat.outcome) && (
+            <strong style={{ display: 'block' }}>
+              {flight.combat.outcome.toUpperCase()} · Escape for debrief
+            </strong>
+          )}
+          {flight.combat.departureProtected && flight.combat.outcome === 'active' && (
+            <strong style={{ display: 'block' }}>
+              DEPARTURE CLEAR · Climb above 100 m AGL ·{' '}
+              {Math.ceil(flight.combat.departureSecondsRemaining)}s to enemy entry
+            </strong>
+          )}
+        </>
+      )}
     </div>
   );
 }

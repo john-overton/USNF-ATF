@@ -22,6 +22,8 @@ class GunExportTests(unittest.TestCase):
                     self.assertEqual(result['type'], kind)
                     self.assertEqual(result['capacity'], capacity)
                     self.assertEqual(result['tracerColor'], color)
+                    self.assertEqual(len(result['damage']), 5)
+                    self.assertTrue(all(isinstance(n, int) and n >= 0 for n in result['damage']))
                     self.assertGreater(len(result['clip']['pcm']), 2)
                     self.assertEqual(result['source']['rawProjectile']['actualRoundsPerGame'], 2)
                     override = export(pt, Path(tmp) / 'override.json', 'green')

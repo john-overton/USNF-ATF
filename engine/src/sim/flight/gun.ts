@@ -1,6 +1,9 @@
-import type { RetailGun } from '../../data/retail-gun';
+import type { GunDefinition } from '../../data/retail-gun';
 import type { FlightState, Vec3, Quaternion } from './index';
 export interface GunRound {
+  previousPosition: Vec3;
+  /** Fraction of this step before emission; used for moving-target sweeps. */
+  emittedAt: number;
   position: Vec3;
   velocity: Vec3;
   age: number;
@@ -14,7 +17,7 @@ export interface GunState {
 }
 export const GUN_LIFETIME = 5;
 export const MAX_GUN_ROUNDS = 1000;
-export function createGunState(gun?: RetailGun): GunState {
+export function createGunState(gun?: GunDefinition): GunState {
   return { rounds: [], remaining: gun?.capacity ?? 0, fired: 0, cooldown: 0 };
 }
 function rotate(q: Quaternion, v: Vec3): Vec3 {
@@ -47,7 +50,7 @@ export function gunLaunch(aircraft: FlightState, mount: readonly number[], muzzl
 /** Fixed-step actual rounds. Aircraft world velocity is added once at the muzzle. */
 export function stepGun(
   state: GunState,
-  gun: RetailGun | undefined,
+  gun: GunDefinition | undefined,
   aircraft: FlightState,
   trigger: boolean,
   safe: boolean,
@@ -55,6 +58,8 @@ export function stepGun(
 ): void {
   if (!Number.isFinite(dt) || dt <= 0 || dt > 0.1) return;
   for (const round of state.rounds) {
+    round.previousPosition = { ...round.position };
+    round.emittedAt = 0;
     round.position.x += round.velocity.x * dt;
     round.position.y += round.velocity.y * dt - 0.5 * 9.80665 * dt * dt;
     round.position.z += round.velocity.z * dt;
@@ -77,6 +82,12 @@ export function stepGun(
     state.remaining--;
     if (state.rounds.length < MAX_GUN_ROUNDS)
       state.rounds.push({
+        previousPosition: {
+          x: launch.position.x + aircraft.velocity.x * at,
+          y: launch.position.y + aircraft.velocity.y * at,
+          z: launch.position.z + aircraft.velocity.z * at,
+        },
+        emittedAt: at / dt,
         position: {
           x: launch.position.x + aircraft.velocity.x * at + velocity.x * age,
           y:

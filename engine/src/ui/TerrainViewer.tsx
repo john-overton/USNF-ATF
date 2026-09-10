@@ -35,7 +35,7 @@ export function TerrainViewer({
   const [request, setRequest] = useState({ root, path, generation: 0 });
   const [stats, setStats] = useState<TerrainDiagnostics>();
   const [error, setError] = useState('');
-  const [panelMinimized, setPanelMinimized] = useState(false);
+  const [panelMinimized, setPanelMinimized] = useState(mission.mode === 'quick-fight');
   const [rootPath, setRootPath] = useState('');
   const canvas = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<ReturnType<typeof startTerrainViewer> | null>(null);
@@ -132,13 +132,17 @@ export function TerrainViewer({
         className={`terrain-panel${flightMode && panelMinimized ? ' terrain-panel-minimized' : ''}`}
       >
         <div className="terrain-panel-heading">
-          <h1>{flightMode ? 'Practice flight' : 'Terrain explorer'}</h1>
+          <h1>
+            {mission.mode === 'quick-fight'
+              ? 'Quick mission tools'
+              : flightMode
+                ? 'Practice flight'
+                : 'Terrain explorer'}
+          </h1>
           {flightMode && (
             <button
               type="button"
-              aria-label={
-                panelMinimized ? 'Restore practice flight panel' : 'Minimize practice flight panel'
-              }
+              aria-label={`${panelMinimized ? 'Restore' : 'Minimize'} ${mission.mode === 'quick-fight' ? 'quick mission tools' : 'practice flight panel'}`}
               aria-expanded={!panelMinimized}
               aria-controls="flight-helper-content"
               onClick={() => {
@@ -304,6 +308,28 @@ export function TerrainViewer({
           )}
           {stats?.flight && (
             <section aria-label="Flight instruments">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={stats.flight.music.enabled}
+                  onChange={(event) => viewerRef.current?.setMusicEnabled(event.target.checked)}
+                />
+                In-flight music · {stats.flight.music.situation}
+              </label>
+              <label>
+                Music volume (N toggles music, M mutes all)
+                <input
+                  type="range"
+                  aria-label="Music volume"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={stats.flight.music.volume}
+                  onChange={(event) =>
+                    viewerRef.current?.setMusicVolume(Number(event.target.value))
+                  }
+                />
+              </label>
               <strong>
                 {stats.flight.status}
                 {stats.flight.stalled ? ' · STALL' : ''}

@@ -1,6 +1,7 @@
 /** SI adapter around recovered clean-player helpers. Motion, fractional devices,
  * fuel/payload weight handling and separated flow remain remake integration. */
 import type { RetailFlightProfile } from '../../data/retail-flight';
+import type { DamageEffects } from '../combat/damage';
 import { nativeEnvelopeSpeedLimits } from './native-envelope';
 import { nativeGLimits, nativeLowSpeedGLimits } from './native-g-limits';
 import { nativeDragForceF8, nativeDragPercent } from './native-drag';
@@ -87,6 +88,7 @@ export function recoveredLongitudinalForces(
     gear: number;
     flap: number;
     airbrake: number;
+    damage?: DamageEffects;
   },
 ) {
   const coef = retailRawNumber(profile, 'coefDrag');
@@ -110,11 +112,9 @@ export function recoveredLongitudinalForces(
   const drag =
     (nativeDragForceF8({
       ...common,
-      adjustedCoefDrag: loadedCoefficient(
-        profile,
-        coef,
-        'loadedDrag',
-        loadingPercent(profile, input.massKg),
+      adjustedCoefDrag: Math.trunc(
+        (input.damage?.dragScale ?? 1) *
+          loadedCoefficient(profile, coef, 'loadedDrag', loadingPercent(profile, input.massKg)),
       ),
       throttleF8,
       onGround: input.onGround,
@@ -122,11 +122,14 @@ export function recoveredLongitudinalForces(
       militaryThrust: military,
       afterburnerThrust: burner,
       loadFactorF8: Math.trunc(input.loadFactor * 256),
-      gPullDrag: loadedCoefficient(
-        profile,
-        gPull,
-        'loadedGpullDrag',
-        loadingPercent(profile, input.massKg),
+      gPullDrag: Math.trunc(
+        (input.damage?.gPullDragScale ?? 1) *
+          loadedCoefficient(
+            profile,
+            gPull,
+            'loadedGpullDrag',
+            loadingPercent(profile, input.massKg),
+          ),
       ),
       weightLb: Math.trunc(input.massKg / 0.45359237),
       // Keep the existing separate lateral damping and wheel-contact model.

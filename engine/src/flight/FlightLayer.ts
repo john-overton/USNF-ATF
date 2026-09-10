@@ -1,4 +1,9 @@
 import { gunSight, type GunSightTarget } from './gun-sight';
+import { AircraftDamage } from './AircraftDamage';
+import { AircraftBreakup } from './AircraftBreakup';
+import { CombatAudio } from './CombatAudio';
+import { FlightMusic } from './FlightMusic';
+import { damagePercent } from '../sim/combat/damage';
 import { configureAircraftHook } from './AircraftHook';
 import { AIRCRAFT, validateAircraftProfile, type AircraftId } from './aircraft-catalog';
 import {
@@ -35,6 +40,10 @@ import {
 } from '../sim/flight/assisted-flight';
 import { GroundSampler, type PracticeStrip } from './GroundSampler';
 import { OpponentLayer } from './OpponentLayer';
+import { CombatWorld, type CombatDefinition } from '../sim/combat/world';
+import { damageEffects } from '../sim/combat/damage';
+import { loadCombatDefinition } from './combat-data';
+import { CombatEffects } from './CombatEffects';
 import { preparePractice } from './practice';
 import { FlightInput, type PilotControls } from './FlightInput';
 import {
@@ -118,22 +127,17 @@ export interface FlightDiagnostics {
   systems: ReturnType<typeof createAircraftSystems>;
   audio: ReturnType<FlightAudio['diagnostics']>;
   animation: Record<string, number>;
-  /** The mocked quick fight's opponents. Empty in every other mode. */
+  /** Combat opponents, including their damage and ammunition state. */
   entities: ReturnType<OpponentLayer['diagnostics']>;
+  combat: ReturnType<CombatWorld['snapshot']>;
+  destruction: ReturnType<AircraftBreakup['diagnostics']>;
+  combatAudio: ReturnType<CombatAudio['diagnostics']>;
+  music: ReturnType<FlightMusic['diagnostics']>;
 }
 declare global {
   interface Window {
     __flightDiagnostics?: () => FlightDiagnostics;
   }
-}
-
-/**
- * North-referenced heading from an attitude, in radians, on the sim's own
- * convention: identity forward is -Z, and a bearing points along (-sin, cos).
- */
-function headingOf(q: { x: number; y: number; z: number; w: number }): number {
-  const forward = new Vector3(0, 0, -1).applyQuaternion(new Quaternion(q.x, q.y, q.z, q.w));
-  return Math.atan2(-forward.x, forward.z);
 }
 
 /** Wind is reported the way it is named: the bearing it blows *from*. */
@@ -182,6 +186,10 @@ export class FlightLayer {
   /** The theater clock and wind field; the terrain viewer owns and advances it. */
   environmentModel: Environment | undefined;
   private readonly snapshot = (): FlightDiagnostics => this.diagnostics();
+  private combat: CombatWorld;
+  private readonly combatEffects: CombatEffects;
+  private readonly breakup: AircraftBreakup;
+  private readonly damageSkin: AircraftDamage;
 
   static async create(
     scene: Scene,
@@ -195,12 +203,18 @@ export class FlightLayer {
     let model: RetailAircraft | undefined;
     let audio: FlightAudio | undefined;
     let gun: FlightGun | undefined;
+    let music: FlightMusic | undefined;
+    let combatAudio: CombatAudio | undefined;
+    let opponents: OpponentLayer | undefined;
     try {
       const strip = await preparePractice(ground);
       const id = mission.aircraft;
       model = await RetailAircraft.load(platform, id);
       audio = await FlightAudio.create(platform, id);
-      gun = await FlightGun.load(platform, id);
+      const combatDefinitions = new Map<AircraftId, CombatDefinition>();
+      for (const aircraft of new Set([id, ...mission.opponents.map((o) => o.aircraft)]))
+        combatDefinitions.set(aircraft, await loadCombatDefinition(platform, aircraft));
+      gun = FlightGun.combat(combatDefinitions.get(id)!.gun, undefined, true);
       let profile: RetailFlightProfile | undefined;
       if (await platform.fs.exists('appData', `aircraft/${id}-flight.json`)) {
         const text = await platform.fs.readText('appData', `aircraft/${id}-flight.json`);
@@ -208,17 +222,22 @@ export class FlightLayer {
         profile = parseRetailFlightProfile(JSON.parse(text));
         validateAircraftProfile(id, profile);
       }
-      const opponents = mission.opponents.length
+      opponents = mission.opponents.length
         ? await OpponentLayer.create(scene, platform, mission)
         : undefined;
+      music = await FlightMusic.load(platform);
+      combatAudio = await CombatAudio.load(platform);
       return new FlightLayer(
         scene,
         ground,
         strip,
         audio,
         gun,
+        music,
+        combatAudio,
         id,
         mission,
+        combatDefinitions,
         opponents,
         model,
         profile,
@@ -227,6 +246,9 @@ export class FlightLayer {
       model?.dispose();
       audio?.dispose();
       gun?.dispose();
+      music?.dispose();
+      combatAudio?.dispose();
+      opponents?.dispose();
       ground.dispose();
       throw error;
     }
@@ -243,8 +265,11 @@ export class FlightLayer {
     readonly strip: PracticeStrip,
     private readonly audio: FlightAudio,
     private readonly gun: FlightGun,
+    private readonly music: FlightMusic,
+    private readonly combatAudio: CombatAudio,
     readonly aircraftId: AircraftId,
-    mission: MissionParams,
+    private readonly mission: MissionParams,
+    private readonly combatDefinitions: ReadonlyMap<AircraftId, CombatDefinition>,
     private readonly opponents?: OpponentLayer,
     private readonly model?: RetailAircraft,
     private readonly profile?: RetailFlightProfile,
@@ -284,10 +309,10 @@ export class FlightLayer {
     this.state = this.initialState();
     this.previous = this.state;
     // Spawns are deterministic from the mission seed and where the player started.
-    this.opponents?.spawn(mission, {
-      position: { ...this.state.position },
-      headingRad: headingOf(this.state.attitude),
-    });
+    this.combat = new CombatWorld(mission, this.state, combatDefinitions, this.gun.state);
+    this.combatEffects = new CombatEffects(scene);
+    this.breakup = new AircraftBreakup(scene);
+    this.opponents?.bind(this.combat);
     if (this.approach || this.airborneStart) this.input.throttle = 0.2;
     this.systems = createAircraftSystems(this.input.throttle);
     this.telemetry = (this.useRetail ? sampleTelemetry : sampleAssistedTelemetry)(
@@ -376,6 +401,7 @@ export class FlightLayer {
     });
     // Cloud shadows are the same material patch the terrain uses, so the aircraft
     // and the deck darken with the ground under the same cloud.
+    this.damageSkin = new AircraftDamage(this.aircraft);
     const shadowed = new Set<MeshStandardMaterial>();
     for (const group of [this.aircraft, this.deck])
       group.traverse((object) => {
@@ -392,7 +418,14 @@ export class FlightLayer {
   private initialState(): FlightState {
     if (this.airborneStart)
       return createFlightState({
-        position: { x: this.strip.x, y: 3000, z: this.strip.z },
+        position: {
+          x: this.strip.x,
+          y:
+            this.mission.mode === 'quick-fight'
+              ? this.strip.elevation + this.mission.encounter.altitudeM
+              : 3000,
+          z: this.strip.z,
+        },
         airspeed: 150,
       });
     if (this.approach)
@@ -480,6 +513,7 @@ export class FlightLayer {
     this.clock.reset();
     this.gun.reset();
     this.gunTarget = undefined;
+    this.resetCombat();
     this.input.gunSafe = true;
     this.alpha = 0;
     this.waiting = false;
@@ -502,11 +536,28 @@ export class FlightLayer {
       this.definition.massKg = this.profile.emptyMassKg + this.fuel.fuelKg + this.payloadMassKg;
     }
   }
+  private resetCombat(): void {
+    this.breakup.reset();
+    this.combatEffects.reset();
+    this.combatAudio.reset();
+    this.music.reset();
+    this.combat = new CombatWorld(this.mission, this.state, this.combatDefinitions, this.gun.state);
+    this.opponents?.bind(this.combat);
+    delete this.environment.damage;
+  }
   setPaused(value: boolean): void {
     this.paused = value;
     this.input.setPaused(value);
     this.audio.setPaused(value);
     this.gun.setPaused(value);
+    this.combatAudio.setPaused(value);
+    this.music.setPaused(value);
+  }
+  setMusicEnabled(value: boolean): void {
+    this.music.setEnabled(value);
+  }
+  setMusicVolume(value: number): void {
+    this.music.setVolume(value);
   }
 
   advance(seconds: number): void {
@@ -521,6 +572,7 @@ export class FlightLayer {
       this.input.reset();
       this.gun.reset();
       this.gunTarget = undefined;
+      this.resetCombat();
       this.systems = createAircraftSystems(this.approach || this.airborneStart ? 0.2 : 0);
       this.takeoffs = 0;
       this.landings = 0;
@@ -539,6 +591,15 @@ export class FlightLayer {
     const p = this.state.position,
       v = this.state.velocity;
     this.ground.prefetch(p.x, p.z, v.x, v.z);
+    for (const e of this.combat.entities.slice(1)) {
+      if (!e.damage.destroyed)
+        this.ground.prefetch(
+          e.state.position.x,
+          e.state.position.z,
+          e.state.velocity.x,
+          e.state.velocity.z,
+        );
+    }
     this.waiting =
       !this.ground.sample(p.x, p.z) || !this.ground.sample(p.x + v.x * 0.25, p.z + v.z * 0.25);
     if (this.waiting || this.ground.error) {
@@ -560,7 +621,10 @@ export class FlightLayer {
       if (!AIRCRAFT[this.aircraftId].hook) this.input.hookDown = false;
       this.systems = stepAircraftSystems(this.systems, this.input, dt);
       // Inside the player's own fixed step, so extra aircraft cannot change the rate.
-      this.opponents?.advance(dt);
+      if (this.input.targetRequested) {
+        this.combat.cycleTarget();
+        this.input.targetRequested = false;
+      }
       if (this.useRetail && this.profile)
         this.systems.thrustMultiplier =
           1 +
@@ -601,7 +665,28 @@ export class FlightLayer {
         this.systems.effectiveThrottle = 0;
         this.systems.thrustMultiplier = 1;
       }
-      this.gun.step(this.state, this.input.gunTrigger, this.input.gunSafe, dt);
+      const damaged = this.combat.player.damage.accumulated > 0;
+      const effects = damageEffects(this.combat.player.damage);
+      if (damaged) this.environment.damage = effects;
+      else delete this.environment.damage;
+      // Preserve the comparison source exactly. Only damaged assisted aircraft
+      // get a derived definition with reduced authority and increased drag.
+      const definition =
+        damaged && !this.useRetail
+          ? {
+              ...this.definition,
+              controls: {
+                ...this.definition.controls,
+                pitchRateRadS: this.definition.controls.pitchRateRadS * effects.gScale,
+                rollRateRadS: this.definition.controls.rollRateRadS * effects.gScale,
+                yawRateRadS: this.definition.controls.yawRateRadS * effects.gScale,
+              },
+              aero: {
+                ...this.definition.aero,
+                drag: this.definition.aero.drag.map((row) => row.map((n) => n * effects.dragScale)),
+              },
+            }
+          : this.definition;
       const next = (this.useRetail ? stepFlight : stepAssistedFlight)(
         this.state,
         {
@@ -614,7 +699,7 @@ export class FlightLayer {
           airbrake: this.systems.airbrakeFraction,
         },
         this.environment,
-        this.definition,
+        definition,
         dt,
       );
       if (
@@ -631,8 +716,59 @@ export class FlightLayer {
       }
       this.state = next.state;
       this.telemetry = next.telemetry;
+      const hours = this.environmentModel?.settings.timeOfDayHours ?? 12;
+      const weather = this.environmentModel?.settings.weather;
+      const wasDestroyed = this.combat.player.damage.destroyed;
+      this.combat.step(
+        this.state,
+        this.input.gunTrigger,
+        this.input.gunSafe,
+        dt,
+        (x, z) => this.ground.sample(x, z),
+        weather === 'storm' || weather === 'overcast'
+          ? 'clouds'
+          : hours < 6 || hours > 20
+            ? 'night'
+            : hours < 8 || hours > 18
+              ? 'twilight'
+              : 'day',
+      );
+      this.state = this.combat.player.state;
+      const target = this.combat.target;
+      const tracking = this.combat.player.contacts.some(
+        (c) => c.id === target?.id && c.level === 'track',
+      );
+      this.setGunTarget(target && tracking ? target.state : undefined);
+      if (this.combat.player.damage.destroyed) {
+        if (!wasDestroyed) this.input.cameraMode = 'world-up';
+        this.input.engineRunning = false;
+        this.input.gunSafe = true;
+        this.telemetry.reason = 'Aircraft destroyed';
+      }
+      this.combatAudio.updateGameplay({
+        step: this.combat.steps,
+        status: this.state.status,
+        destroyed: this.combat.player.damage.destroyed,
+        stalled: this.telemetry.stalled,
+        fuelKg: this.fuel.fuelKg,
+        gearDown: this.input.gearDown,
+        flapsDown: this.input.flapsDown,
+        hookDown: this.input.hookDown,
+        damage: this.combat.player.damage.accumulated,
+      });
     });
     this.gun.audioUpdate(this.audio.diagnostics().muted);
+    this.combatAudio.update(this.combat.events, this.state.position);
+    this.music.update({
+      steps: this.combat.steps,
+      outcome: this.combat.outcome,
+      damagePercent: damagePercent(this.combat.player.damage),
+      contacts: this.combat.player.contacts.length,
+      underFire: this.combat.events.some(
+        (e) => e.type === 'hit' && e.targetId === 0 && this.combat.steps - e.step < 240,
+      ),
+      grounded: this.state.status === 'grounded',
+    });
     this.alpha = result.alpha;
     if (result.clamped) this.clampedFrames++;
     this.audio.update(
@@ -645,6 +781,13 @@ export class FlightLayer {
         gear: this.systems.gearFraction,
         hook: this.systems.hookFraction,
         status: this.state.status,
+        groundSpeed: Math.hypot(this.state.velocity.x, this.state.velocity.z),
+        retailActuators:
+          this.combatAudio.hasCue('gearDown') &&
+          this.combatAudio.hasCue('gearUp') &&
+          this.combatAudio.hasCue('flapsDown') &&
+          this.combatAudio.hasCue('flapsUp'),
+        retailTouchdown: this.combatAudio.hasCue('touchdown'),
       },
       seconds,
     );
@@ -674,7 +817,7 @@ export class FlightLayer {
   /** Rear mirrors see the airframe; restore primary cockpit visibility even on render errors. */
   withAircraftVisible(render: () => void): void {
     const visible = this.aircraft.visible;
-    this.aircraft.visible = true;
+    this.aircraft.visible = !this.combat.player.damage.destroyed;
     try {
       render();
     } finally {
@@ -684,7 +827,8 @@ export class FlightLayer {
   render(origin: { x: number; z: number }): void {
     const pose = this.pose();
     this.opponents?.render(origin);
-    this.aircraft.visible = this.input.cameraMode !== 'cockpit';
+    this.aircraft.visible =
+      this.input.cameraMode !== 'cockpit' && !this.combat.player.damage.destroyed;
     this.gun.render(origin);
     this.aircraft.position.set(
       pose.position.x - origin.x,
@@ -692,6 +836,7 @@ export class FlightLayer {
       pose.position.z - origin.z,
     );
     this.aircraft.quaternion.copy(pose.attitude);
+    this.damageSkin.update(damagePercent(this.combat.player.damage));
     for (const gear of this.gearParts) {
       gear.rotation.z =
         ((Math.sign(gear.position.x) || 1) * ((1 - this.systems.gearFraction) * Math.PI)) / 2;
@@ -722,6 +867,13 @@ export class FlightLayer {
       burner.scale.y = Math.max(0.01, this.systems.afterburnerFraction);
     }
     this.deck.position.set(this.strip.x - origin.x, this.strip.elevation, this.strip.z - origin.z);
+    this.breakup.render(
+      this.combat,
+      origin,
+      (id) => (id === 0 ? this.aircraft : this.opponents?.source(id)),
+      (x, z) => this.ground.sample(x, z),
+    );
+    this.combatEffects.render(this.combat, origin, this.breakup.burningPieces(this.combat.steps));
   }
   private wingSweep(): number {
     if (this.aircraftId !== 'f14') return 0;
@@ -834,6 +986,10 @@ export class FlightLayer {
       systems: { ...this.systems },
       audio: this.audio.diagnostics(),
       entities: this.opponents?.diagnostics() ?? [],
+      combat: this.combat.snapshot(),
+      destruction: this.breakup.diagnostics(),
+      combatAudio: this.combatAudio.diagnostics(),
+      music: this.music.diagnostics(),
       animation: {
         gear: this.systems.gearFraction,
         hook: this.systems.hookFraction,
@@ -859,6 +1015,11 @@ export class FlightLayer {
     this.gun.dispose();
     this.model?.dispose();
     this.opponents?.dispose();
+    this.combatEffects.dispose();
+    this.breakup.dispose();
+    this.combatAudio.dispose();
+    this.music.dispose();
+    this.damageSkin.dispose();
     this.ground.dispose();
     const materials = new Set<MeshStandardMaterial>();
     for (const group of [this.aircraft, this.deck]) {

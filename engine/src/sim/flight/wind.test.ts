@@ -16,6 +16,55 @@ const land: FlightEnvironment = {
 const controls: FlightControls = { pitch: 0.05, roll: 0.1, yaw: 0, throttle: 0.7, brake: false };
 const DT = 1 / 120;
 
+test('ground tires hold crosswind at rest, with brakes on or off', () => {
+  for (const brake of [false, true]) {
+    let state = createFlightState({
+      position: { x: 0, y: PLACEHOLDER_AIRCRAFT.gearHeightM, z: 0 },
+      airspeed: 0,
+    });
+    state.status = 'grounded';
+    for (let tick = 0; tick < 60 * 120; tick++) {
+      state = stepFlight(
+        state,
+        { pitch: 0, roll: 0, yaw: 0, throttle: 0, brake, gearDown: true },
+        { ...land, wind: { x: 15 + 3 * Math.sin(tick * DT), y: 0, z: 0 } },
+        PLACEHOLDER_AIRCRAFT,
+        DT,
+      ).state;
+    }
+    expect(state.status).toBe('grounded');
+    expect(Math.hypot(state.position.x, state.position.z)).toBeLessThan(0.001);
+  }
+});
+
+test('ground grip allows powered rolling and does not reverse a stopping aircraft', () => {
+  let state = createFlightState({
+    position: { x: 0, y: PLACEHOLDER_AIRCRAFT.gearHeightM, z: 0 },
+    airspeed: 0,
+  });
+  state.status = 'grounded';
+  for (let tick = 0; tick < 120; tick++)
+    state = stepFlight(
+      state,
+      { ...controls, pitch: 0, roll: 0, throttle: 1, gearDown: true },
+      land,
+      PLACEHOLDER_AIRCRAFT,
+      DT,
+    ).state;
+  expect(state.velocity.z).toBeLessThan(-1);
+  for (let tick = 0; tick < 10 * 120; tick++) {
+    state = stepFlight(
+      state,
+      { ...controls, pitch: 0, roll: 0, throttle: 0, brake: true, gearDown: true },
+      land,
+      PLACEHOLDER_AIRCRAFT,
+      DT,
+    ).state;
+    expect(state.velocity.z).toBeLessThanOrEqual(1e-9);
+  }
+  expect(Math.hypot(state.velocity.x, state.velocity.z)).toBeLessThan(1e-9);
+});
+
 function fly(step: typeof stepFlight, environment: (seconds: number) => FlightEnvironment) {
   let state = createFlightState({ position: { x: 0, y: 1500, z: 0 }, airspeed: 150 });
   for (let i = 0; i < 1200; i++)

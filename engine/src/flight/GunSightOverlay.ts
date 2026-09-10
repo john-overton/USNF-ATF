@@ -22,7 +22,7 @@ export function gunReticleEnabled(flight: FlightDiagnostics): boolean {
 }
 /** Camera must already have this frame's pose/matrices; input point is absolute world SI. */
 export function projectGunSight(
-  sight: GunSightSolution,
+  sight: Pick<GunSightSolution, 'point'>,
   camera: PerspectiveCamera,
   origin: { x: number; z: number },
   width: number,
@@ -49,6 +49,9 @@ export class GunSightOverlay {
   private svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   private cue = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   private arc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  private targetSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  private targetBox = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  private targetLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   constructor(parent: HTMLElement) {
     this.svg.dataset.gunSightOverlay = 'true';
     this.svg.setAttribute(
@@ -80,6 +83,27 @@ export class GunSightOverlay {
     this.cue.append(ring, dot, ticks, this.arc);
     this.svg.append(this.cue);
     parent.append(this.svg);
+    this.targetSvg.dataset.combatTarget = 'true';
+    Object.assign(this.targetSvg.style, {
+      position: 'absolute',
+      inset: '0',
+      width: '100%',
+      height: '100%',
+      pointerEvents: 'none',
+      color: '#66ff66',
+      display: 'none',
+    });
+    const box = document.createElementNS(this.svg.namespaceURI, 'path');
+    box.setAttribute('d', 'M-12 -20h-8v8 M12 -20h8v8 M-20 12v8h8 M20 12v8h-8');
+    box.setAttribute('stroke', 'currentColor');
+    box.setAttribute('fill', 'none');
+    this.targetLabel.setAttribute('y', '35');
+    this.targetLabel.setAttribute('text-anchor', 'middle');
+    this.targetLabel.setAttribute('fill', 'currentColor');
+    this.targetLabel.setAttribute('font-size', '13');
+    this.targetBox.append(box, this.targetLabel);
+    this.targetSvg.append(this.targetBox);
+    parent.append(this.targetSvg);
   }
   update(
     flight: FlightDiagnostics | undefined,
@@ -89,6 +113,17 @@ export class GunSightOverlay {
     height: number,
   ): void {
     this.svg.style.display = 'none';
+    this.targetSvg.style.display = 'none';
+    const target = flight?.combat?.target;
+    if (flight && target && flight.cameraMode === 'cockpit' && !flight.combat.destroyed) {
+      const projected = projectGunSight({ point: target.position }, camera, origin, width, height);
+      if (projected?.visible) {
+        this.targetSvg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        this.targetBox.setAttribute('transform', `translate(${projected.x} ${projected.y})`);
+        this.targetLabel.textContent = `${target.id} · ${(target.rangeM / 1000).toFixed(2)} km`;
+        this.targetSvg.style.display = 'block';
+      }
+    }
     if (!flight || !gunReticleEnabled(flight) || !flight.gunSight) return;
     const point = projectGunSight(flight.gunSight, camera, origin, width, height);
     if (!point?.visible) return;
@@ -116,5 +151,6 @@ export class GunSightOverlay {
   }
   dispose(): void {
     this.svg.remove();
+    this.targetSvg.remove();
   }
 }

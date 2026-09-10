@@ -167,7 +167,56 @@ test('a fully specified mission survives the URL round trip', () => {
       { aircraft: 'a4e', skill: 3 },
       { aircraft: 'a4e', skill: 3 },
     ],
+    encounter: {
+      distanceM: 12000,
+      orientation: 'crossing',
+      altitudeOffsetM: -500,
+      altitudeM: 4500,
+      departureGraceSeconds: 45,
+    },
     seed: 7,
   };
   expect(roundTrip(mission)).toEqual(mission);
+});
+
+test('quick missions default airborne while explicit runway and legacy practice starts survive', () => {
+  expect(parse('?mode=quick-fight').start).toBe('airborne');
+  expect(parse('?mode=flight').start).toBe('runway');
+  for (const start of ['runway', 'approach', 'airborne'] as const) {
+    const mission = parse(`?mode=quick-fight&flightStart=${start}`);
+    expect(mission.start).toBe(start);
+    expect(roundTrip(mission)).toEqual(mission);
+  }
+});
+
+test('encounter parameters clamp malformed deep links and validate authored mission values', () => {
+  const bounded = parse(
+    '?distance=1e10&orientation=typo&altitudeOffset=-9000&altitude=bad&departureGrace=900',
+  );
+  expect(bounded.encounter).toEqual({
+    distanceM: 40000,
+    orientation: 'head-on',
+    altitudeOffsetM: -3000,
+    altitudeM: 3000,
+    departureGraceSeconds: 120,
+  });
+  expect(parse('?distance=-1&altitude=-1&departureGrace=-1').encounter).toMatchObject({
+    distanceM: 2000,
+    altitudeM: 500,
+    departureGraceSeconds: 0,
+  });
+  for (const [key, value] of [
+    ['distanceM', NaN],
+    ['altitudeM', 0],
+    ['altitudeOffsetM', Infinity],
+    ['departureGraceSeconds', -1],
+    ['orientation', 'bad'],
+  ] as const) {
+    expect(
+      validateMission({
+        ...DEFAULT_MISSION,
+        encounter: { ...DEFAULT_MISSION.encounter, [key]: value },
+      }).length,
+    ).toBe(1);
+  }
 });

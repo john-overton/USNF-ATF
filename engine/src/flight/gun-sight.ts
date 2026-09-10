@@ -1,5 +1,5 @@
 import { Quaternion, Vector3 } from 'three';
-import type { RetailGun } from '../data/retail-gun';
+import type { GunDefinition } from '../data/retail-gun';
 import type { FlightState, Vec3 } from '../sim/flight';
 import { GUN_LIFETIME, gunLaunch } from '../sim/flight/gun';
 
@@ -26,7 +26,7 @@ const vector = (v: Vec3) => new Vector3(v.x, v.y, v.z);
  */
 export function gunSight(
   aircraft: FlightState,
-  gun: RetailGun | undefined,
+  gun: GunDefinition | undefined,
   sample: (x: number, z: number) => { height: number } | undefined,
   target?: GunSightTarget,
 ): GunSightSolution {

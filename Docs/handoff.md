@@ -1,6 +1,133 @@
 # Development handoff — 2026-09-10
 
-## Commit handoff: Omarchy menu revision
+## Commit checkpoint: combat, aircraft fixes, missions and audio
+
+The user authorized committing and pushing the accumulated work on `main`.
+Pre-commit verification against the current tree based on `f2d4c44`:415 Bun tests
+pass/3 existing imported-mount skips;50 targeted Python tests pass; all16 flight
+harness cases pass. Fresh renderer `index-3aYg_lZp.js` passes the live audio-cue,
+music and destruction/menu/combat/ground-crash scripts. No unrelated changes or
+retail asset outputs are included; preserved assisted flight remains unchanged.
+Earlier “no commit/push requested” statements below describe their original passes.
+The commit/push result is reported separately after Git confirms it.
+
+## Latest: autonomous audio continuation
+
+Installed retail gear/flap/hook actuator, airborne stall, player-hit/fuel-empty
+speech, touchdown, wind/tire loops and land/water bullet-impact audio. Actual
+simulation events drive cues; timing/mixing are explicitly authored. Radar,
+missile, wingman, ejection and subsystem-specific clips remain unbound rather than
+playing unsupported chatter. See [mapping/evidence](formats/audio.md).
+
+Recovered 49 CB8 soundtracks from freshly read available media: USNF22, ATF27.
+Two complete movies are silent. All355 USNF VDO segments map to105 already-recovered
+external speech assets. Seven ATF CB8 files remain unavailable in truncated
+ATF_10.LIB; older extracted copies were not substituted. Original/sample hashes,
+source ranges, raw PCM and WAV previews stay in ignored audio-library outputs.
+
+Music now executes recovered MUS sequence choices/jumps/stops using a41-track
+library and applies MIDI volume/expression/pan/bend events. Native ChooseScore
+host priorities are documented, but the five-situation gameplay adapter/RNG and
+oscillator timbres remain authored. No game-owned instrument bank established;
+better timbres need an explicitly selected compatible synth/bank. ATF native score
+opcode parity and two missing track references remain separate open work.
+
+Current source checks:415 Bun pass/3 existing imported-mount skips; Python audio9,
+music14, video3, containers5 pass. Fresh Linux live cue/environment/fuel speech and
+music-output checks pass; see [phase6](baselines/phase-6.md) for combat follow-up and
+exact scope. Assisted flight unchanged; nothing committed/pushed or retail-bundled.
+Next reproducible work: obtain complete ATF_10.LIB for the seven missing videos;
+choose a legally supplied MIDI synth/bank; trace remaining native host state enums
+before porting carrier/ejection/sensor music triggers. No new authority presumed.
+
+## Latest: retail audio recovery and engine music
+
+Recovered all identified standalone audio from both available discs into ignored
+`extracted/audio-library/{usnf97,atf-gold}/`: original bytes, SHA-256/provenance
+catalogs and WAV previews. USNF: 809 waveform entries, 104 XMI entries (52 unique
+files), nine music selector plugins; ATF: 1,037 waveforms, 102 XMI, nine selectors.
+Ancillary DirectX SBK banks are preserved separately by catalog provenance, not
+claimed to be the game's instrument bank. ATF_10.LIB is truncated; bounded salvage
+recovers all 56 intact audio entries, but seven video entries are unavailable.
+Video-embedded audio remains undecoded. See [audio recovery](formats/audio.md).
+
+Installed `audio/combat.json` now replaces synthetic hit/air-explosion/crash/water
+effects with retail PCM. Native PT/JT/effect-table associations confirm air
+destruction and bullet-hit groups; water-crash assignment/mixing remain authored.
+Native raw rates recovered: 5512/8010/11025 Hz (.5K/.8K/.11K); RIFF headers override
+extensions in library conversion. All unused speech/environmental clips are
+recovered, not yet connected to every gameplay event.
+
+`FlightMusic` provides gesture-unlocked situation music, N toggle, volume, M mute,
+pause/resume/reset and bounded synthesis. XMI notes are original; instrument
+rendering/controllers remain approximate. Nine MUS scripts are now decoded into
+prefixes, chances, choices, jumps and stops. Runtime currently uses representatives
+from their groups, not the full native dispatcher. Earlier AIR34 victory/AIR35
+defeat assignments were authored and are superseded. Windows MIDI Mapper output,
+not a confirmed game-owned sample bank, supplied the original instrument sound.
+See [music findings](formats/music.md). Fresh Linux destruction/music checks pass.
+
+## Latest: destruction and configurable quick missions
+
+Added per-aircraft damage darkening/smoke/fire, six authored geometric fracture
+zones preserving imported triangles/UVs, deterministic tumbling debris (20s bound),
+layered explosions and water/ground cues. Retail sound now supersedes the initial synth pass.
+Gun kills and ground crashes switch the player to chase view. Effects/audio clear
+on reset and freeze/stop on pause. Native subsystem damage and breakup are not recovered.
+
+Quick missions default airborne and expose start height, runway start, enemy range,
+orientation, altitude offset and departure grace (default30s continuously above
+100m AGL). Enemies are staged, then placed relative to the player at release; set
+grace0 for immediate combat. Enemy altitude is raised to terrain+200m where needed.
+Terrain tools start collapsed. Bare legacy practice starts remain unchanged.
+
+Real Electron tests passed imported F14/A4 gun destruction and an actual gear-up
+ground impact, including fragment geometry, played sounds, chase view, pause and
+reset. Music and audio-recovery follow-ups are recorded above.
+
+## Follow-up: reported combat freeze and ground-wind slip
+
+An imported F14 taking damage reproduced `Native signed 16-bit integer required`:
+the new damage adapter supplied a fractional forward-speed bound to native thrust.
+Integer truncation fixes that boundary without weakening native helper validation.
+The earlier fallback-only desktop combat test could not exercise this path.
+
+Ground tire support now resists this tick's wind force even at zero velocity and
+has separate lateral grip. All three local aircraft hold a 15 m/s crosswind without
+brakes and hold head/tailwinds with brakes. B applies wheel brakes; unbraked wheels
+can still roll lengthwise. The preserved assisted source is unchanged. Detailed
+checks and the separate experimental A4 envelope limitation are in phase 6 evidence.
+
+## Latest: guns-only combat and aircraft rendering corrections
+
+User requested damage models, cockpit transparency and flap placement fixes on all
+three aircraft, followed by a full guns-only combat state. Implemented in the working
+tree based on `f2d4c44`; no commit/push is part of this request.
+
+`sim/combat/world.ts` owns player/opponent poses, teams, guns, health, visual contacts,
+targets, events and outcome inside the existing 120 Hz clock. Original bounded pursuit
+replaces the straight-course mock. Retail AI scripts remain unbound. Player rounds
+and opponent rounds now hit, damage and destroy; imported loadout HP and JT gun damage
+are consumed, with labelled original defaults for absent/legacy data. Damage affects
+authority/drag; opponents also lose speed. Sparks, smoke and destruction flashes are
+authored visuals. C cycles targets; Shift+Tab arms; Tab fires; Escape pauses, and the
+new Debrief button reports hits, kills, damage and outcome. Reset/teleport rebuild
+combat state, including opponents, while preserving the established flight controls.
+
+Exterior 4c/6c cockpit/frame/pilot textures now preserve palette-index-255 cutouts
+using alpha testing. This is not whole-canopy translucency. The F1 cockpit PNG masks
+were already present and remain intact. A4 wing-root wall contamination is excluded;
+F14 flap cuts follow the tapered aft quarter to the tip break; X31 elevons include
+the inboard trailing edge. These are authored geometry fits, not native animation.
+All three aircraft have been re-ported into local app data; previous installed
+aircraft/audio/cockpit data is backed up in `extracted/aircraft-before-combat-VMgiRT/`.
+
+Verification, reproducible commands, failures and remaining limitations are in
+[phase 6 evidence](baselines/phase-6.md). The historical snapshots below saying
+combat is unwired are superseded. Next: review this first playable guns-only slice,
+then bind the retail AI host and extend sensor/weapon import as separately scoped work.
+
+## Historical commit handoff: Omarchy menu revision
 
 The user approved committing and pushing this menu pass. Current development is
 on Linux/Omarchy, not the historical Mac environment below. Changes include green

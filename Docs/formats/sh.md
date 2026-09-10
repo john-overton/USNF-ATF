@@ -1,5 +1,27 @@
 # SH: shape research and neutral F-14 projection
 
+## 2026-09-10: exterior cockpit cutouts and authored surface placement
+
+Inspected local F14/A4/F31 atlas artwork and polygon mappings show palette index
+255 as the cutout background on textured subtypes 0x4c/0x6c (canopy frames and
+pilot/seat billboards). `sh_static.py` now groups these separately and exports alpha
+zero for that index; `RetailAircraft` uses alphaTest 0.5 with normal opaque depth
+writes. Other textured subtypes remain opaque: 0xee/0xed also reference index 255,
+but have distinct fallback-color semantics that are still unresolved. Never key RGB
+white globally; other palette entries can be intentionally opaque white. This is
+an observed material interpretation, not recovered native renderer parity.
+
+The authored F14 flap hinge now follows the aft quarter of the tapered wing to the
+tip break, instead of a constant-width strip ending early. The A4 wing eligibility
+test excludes narrow root sidewalls while preserving outboard aileron panels. X31
+elevons now cover the inboard trailing edge as well as outboard tabs. Source neutral
+geometry and UV area are conserved; none of these hinge changes recovers native
+animation. Thick-wing hinge closure and other texture-dispatch details remain
+approximate. Current imported PNG cockpit masks were already transparent; they
+are separate from these exterior material corrections.
+
+Reproduction and screenshots: [phase 6 baseline](../baselines/phase-6.md).
+
 Reviewed 2026-09-08 against `31f733e` and locally extracted media. Implementation:
 [`tools/retail/retail/sh.py`](../../tools/retail/retail/sh.py). This describes the
 current decoder and its limits, not a complete format specification.

@@ -33,7 +33,7 @@ test('the same seed spawns the same aircraft in the same places, and a different
   }
 });
 
-test('opponents spawn ahead of the player, spread across its track and never underground', () => {
+test('opponents spawn ahead of the player, spread across its track and above the minimum altitude', () => {
   const entities = spawnEntities(mission(3), player);
   expect(entities).toHaveLength(2);
   expect(entities.map((entity) => entity.aircraft)).toEqual(['a4e', 'x31']);
@@ -56,6 +56,42 @@ test('opponents spawn ahead of the player, spread across its track and never und
       entities[0]!.position.z - entities[1]!.position.z,
     ),
   ).toBeGreaterThan(1);
+});
+
+test('range, relative altitude and encounter orientations use the player bearing', () => {
+  for (const headingRad of [0, 0.6, Math.PI]) {
+    const reference = { ...player, headingRad };
+    for (const orientation of ['head-on', 'tail-chase', 'behind', 'crossing'] as const) {
+      const configured = {
+        ...mission(1, 1),
+        encounter: {
+          ...DEFAULT_MISSION.encounter,
+          orientation,
+          distanceM: 18000,
+          altitudeOffsetM: 1500,
+        },
+      };
+      const [entity] = spawnEntities(configured, reference) as [WorldEntity];
+      const dx = entity.position.x - player.position.x;
+      const dz = entity.position.z - player.position.z;
+      expect(Math.hypot(dx, dz)).toBeCloseTo(18000, 7);
+      expect(entity.position.y).toBe(5500);
+      const ahead = -Math.sin(headingRad) * dx + Math.cos(headingRad) * dz;
+      expect(ahead).toBeCloseTo(
+        orientation === 'behind' ? -18000 : orientation === 'crossing' ? 0 : 18000,
+        7,
+      );
+      const facing = Math.cos(entity.profile.headingRad - headingRad);
+      expect(facing).toBeCloseTo(
+        orientation === 'head-on' ? -1 : orientation === 'crossing' ? 0 : 1,
+        10,
+      );
+      if (orientation === 'crossing') {
+        // Enemy starts on our right and points directly toward our initial location.
+        expect(entity.velocity.x * dx + entity.velocity.z * dz).toBeLessThan(0);
+      }
+    }
+  }
 });
 
 test('a fixed step moves an entity by exactly its speed, and counts the step', () => {

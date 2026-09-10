@@ -57,6 +57,27 @@ export interface OpponentSlot {
   skill: AiSkill;
 }
 
+export const ENCOUNTER_ORIENTATIONS = ['head-on', 'tail-chase', 'behind', 'crossing'] as const;
+export type EncounterOrientation = (typeof ENCOUNTER_ORIENTATIONS)[number];
+export interface EncounterParams {
+  /** Initial horizontal separation of the opposing formation, metres. */
+  distanceM: number;
+  orientation: EncounterOrientation;
+  /** Opponent height relative to the player's initial altitude, metres. */
+  altitudeOffsetM: number;
+  /** Player airborne-start height above the terrain, metres. */
+  altitudeM: number;
+  /** Runway starts: continuous safe airborne time before opponents enter, seconds. Zero disables staging. */
+  departureGraceSeconds: number;
+}
+export const DEFAULT_ENCOUNTER: EncounterParams = {
+  distanceM: 6000,
+  orientation: 'head-on',
+  altitudeOffsetM: 0,
+  altitudeM: 3000,
+  departureGraceSeconds: 30,
+};
+
 export interface MissionParams {
   mode: GameMode;
   theater: string;
@@ -75,6 +96,7 @@ export interface MissionParams {
   contrast?: number;
   /** Empty except in a quick fight. */
   opponents: OpponentSlot[];
+  encounter: EncounterParams;
   /** Deterministic RNG for AI and spawns. */
   seed: number;
 }
@@ -98,6 +120,7 @@ export const DEFAULT_MISSION: MissionParams = {
   environment: {},
   camera: {},
   opponents: [],
+  encounter: { ...DEFAULT_ENCOUNTER },
   seed: DEFAULT_SEED,
 };
 
@@ -138,6 +161,7 @@ export function parseMissionQuery(search: string): MissionParams {
   const contrast = parseContrastQuery(search);
   const flightModel = params.get('flightModel');
   const start = params.get('flightStart');
+  const orientation = params.get('orientation') as EncounterOrientation;
   const opponents = Math.round(clamp(number('opponents', 0), 0, MAX_OPPONENTS));
   const opponent: OpponentSlot = {
     aircraft: aircraftId(params.get('opponentAircraft')),
@@ -160,7 +184,16 @@ export function parseMissionQuery(search: string): MissionParams {
         : flightModel === 'recovered-envelope'
           ? 'recovered-envelope'
           : 'retail-envelope',
-    start: start === 'approach' ? 'approach' : start === 'airborne' ? 'airborne' : 'runway',
+    start:
+      start === 'approach'
+        ? 'approach'
+        : start === 'airborne'
+          ? 'airborne'
+          : start === 'runway'
+            ? 'runway'
+            : mode === 'quick-fight'
+              ? 'airborne'
+              : 'runway',
     loadout: {
       stations: {},
       internalFuelFraction: clamp(number('flightFuel', 1), 0, 1),
@@ -171,6 +204,19 @@ export function parseMissionQuery(search: string): MissionParams {
     ...(paint === null ? {} : { paint }),
     ...(contrast === undefined ? {} : { contrast }),
     opponents: Array.from({ length: opponents }, () => ({ ...opponent })),
+    encounter: {
+      distanceM: clamp(number('distance', DEFAULT_ENCOUNTER.distanceM), 2000, 40000),
+      orientation: ENCOUNTER_ORIENTATIONS.includes(orientation)
+        ? orientation
+        : DEFAULT_ENCOUNTER.orientation,
+      altitudeOffsetM: clamp(number('altitudeOffset', 0), -3000, 3000),
+      altitudeM: clamp(number('altitude', DEFAULT_ENCOUNTER.altitudeM), 500, 8000),
+      departureGraceSeconds: clamp(
+        number('departureGrace', DEFAULT_ENCOUNTER.departureGraceSeconds),
+        0,
+        120,
+      ),
+    },
     seed: Math.round(clamp(number('seed', DEFAULT_SEED), 0, 0x7fffffff)),
   };
 }
@@ -195,7 +241,16 @@ export function missionQuery(mission: MissionParams): URLSearchParams {
   set('manifest', mission.manifestPath, DEFAULT_MANIFEST_PATH);
   set('aircraft', mission.aircraft, 'f14');
   set('flightModel', mission.flightModel, 'retail-envelope');
-  set('flightStart', mission.start, 'runway');
+  set('flightStart', mission.start, mission.mode === 'quick-fight' ? 'airborne' : 'runway');
+  set('distance', mission.encounter.distanceM, DEFAULT_ENCOUNTER.distanceM);
+  set('orientation', mission.encounter.orientation, DEFAULT_ENCOUNTER.orientation);
+  set('altitudeOffset', mission.encounter.altitudeOffsetM, DEFAULT_ENCOUNTER.altitudeOffsetM);
+  set('altitude', mission.encounter.altitudeM, DEFAULT_ENCOUNTER.altitudeM);
+  set(
+    'departureGrace',
+    mission.encounter.departureGraceSeconds,
+    DEFAULT_ENCOUNTER.departureGraceSeconds,
+  );
   set('flightFuel', mission.loadout.internalFuelFraction, 1);
   set('flightPayload', mission.loadout.payloadMassKg, 0);
   const environment = mission.environment;
@@ -245,6 +300,29 @@ export function validateMission(mission: MissionParams): string[] {
     problems.push('Opponents are only flown in a quick fight.');
   if (mission.opponents.length > MAX_OPPONENTS)
     problems.push(`At most ${MAX_OPPONENTS} opponents can be flown.`);
+  const encounter = mission.encounter;
+  if (
+    !Number.isFinite(encounter.departureGraceSeconds) ||
+    encounter.departureGraceSeconds < 0 ||
+    encounter.departureGraceSeconds > 120
+  )
+    problems.push('Departure grace must be between 0 and 120 seconds.');
+  if (
+    !Number.isFinite(encounter.distanceM) ||
+    encounter.distanceM < 2000 ||
+    encounter.distanceM > 40000
+  )
+    problems.push('Opponent distance must be between 2 and 40 km.');
+  if (!ENCOUNTER_ORIENTATIONS.includes(encounter.orientation))
+    problems.push('Select a supported encounter orientation.');
+  if (!Number.isFinite(encounter.altitudeOffsetM) || Math.abs(encounter.altitudeOffsetM) > 3000)
+    problems.push('Opponent altitude offset must be between −3000 and 3000 m.');
+  if (
+    !Number.isFinite(encounter.altitudeM) ||
+    encounter.altitudeM < 500 ||
+    encounter.altitudeM > 8000
+  )
+    problems.push('Airborne start altitude must be between 500 and 8000 m above terrain.');
   for (const slot of mission.opponents)
     if (!Object.hasOwn(AIRCRAFT, slot.aircraft))
       problems.push(`Unknown opponent aircraft “${slot.aircraft}”.`);
