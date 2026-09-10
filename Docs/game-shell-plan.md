@@ -506,8 +506,19 @@ Each step ends green on `bun run check` and is committed separately.
 1. **`MissionParams` + parser/serializer, with tests.** No UI change. Thread it
    through `startTerrainViewer` and `FlightLayer.create`, deleting the seven
    scattered query reads. Gate: all 13 smoke scripts pass unchanged.
+   **Landed 2026-09-10** in `engine/src/sim/mission/params.ts`. `initialCamera`
+   now takes parsed overrides rather than a query string; `isProbeQuery` keeps
+   the probe deep link. Gate met apart from three failures that reproduce
+   identically at the parent commit; see the progress entry.
 2. **Screen state machine and `Shell.tsx`.** Menu is a placeholder list; deep
    links still win. Gate: smoke scripts pass; `menu-smoke.ts` added.
+   **Landed 2026-09-10** in `engine/src/ui/menu/navigation.ts`,
+   `engine/src/ui/Shell.tsx` and `engine/src/ui/menu/PlaceholderMenu.tsx`. The
+   deep-link rule is sharper than the plan assumed: any query at all wins, and
+   the menu appears only on a launch with an empty query, because the explorer
+   cases of `teleport-smoke.ts` pass no `mode`. `desktop.ts` gained a
+   `bareLaunch` option so one script can test that, leaving the others
+   untouched.
 3. **`tools/retail/retail/mnu.py` + `Docs/formats/mnu.md` + formats index
    correction (`LAY` is not UI).** Pure research, no engine change.
 4. **Menu components and layouts**, original chrome only, no retail bundle.

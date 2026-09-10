@@ -148,3 +148,57 @@ th {
     0 0 3px #000;
   pointer-events: none;
 }
+
+/* Placeholder menu chrome. The recovered retail layouts and artwork replace this in
+   steps 4 and 5 of the game shell plan; the structure and test hooks stay. */
+.menu-placeholder {
+  height: 100%;
+  overflow: auto;
+  padding: 48px 56px;
+  max-width: 720px;
+}
+.menu-placeholder h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 24px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.menu-items {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+.menu-items li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.menu-items button {
+  min-width: 240px;
+  text-align: left;
+  padding: 6px 10px;
+  font: inherit;
+  color: inherit;
+  background: #131922;
+  border: 1px solid #2b3644;
+  cursor: pointer;
+}
+.menu-items button:hover:not(:disabled) {
+  background: #1b2531;
+}
+.menu-items button:disabled {
+  color: #5a6472;
+  cursor: default;
+}
+.menu-items small {
+  color: #8b97a6;
+}
+.menu-summary {
+  color: #8b97a6;
+}
+.menu-problems {
+  color: #e2a05a;
+  padding-left: 18px;
+}

@@ -1,13 +1,13 @@
 import type { CockpitMirrorLayout } from '../terrain/mirrors';
 import { CockpitOverlay, GunStatus } from '../flight/CockpitOverlay';
 import { AIRCRAFT } from '../flight/aircraft-catalog';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPlatform } from '../platform';
 import { FlightNavigationOverlay } from '../flight/FlightNavigationOverlay';
 import type { FsRoot } from '../platform/Platform';
 import { startTerrainViewer, type TerrainDiagnostics } from '../terrain/viewer';
 import { ExplorerNavigationOverlay } from './ExplorerNavigationOverlay';
-import { DEFAULT_MISSION, parseMissionQuery, type MissionParams } from '../sim/mission/params';
+import type { MissionParams } from '../sim/mission/params';
 import type { MapWaypoint } from '../terrain/navigation-map';
 import {
   CLOUD_QUALITIES,
@@ -18,20 +18,15 @@ import {
   type WindPresetId,
 } from '../sim/environment';
 
-export function TerrainViewer({ search }: { search: string }) {
-  // One parse, in one place. A bad parameter must still reach the panel's error text
-  // rather than blanking the app, so the failure is carried instead of thrown.
-  const parsed = useMemo((): { mission: MissionParams; parseError: string } => {
-    try {
-      return { mission: parseMissionQuery(search), parseError: '' };
-    } catch (err) {
-      return {
-        mission: DEFAULT_MISSION,
-        parseError: err instanceof Error ? err.message : String(err),
-      };
-    }
-  }, [search]);
-  const { mission, parseError } = parsed;
+/** The WebGL host for both the explorer and a flight; the shell decides which. */
+export function TerrainViewer({
+  mission,
+  parseError = '',
+}: {
+  mission: MissionParams;
+  /** A query the shell could not read; shown here because this is where errors live. */
+  parseError?: string;
+}) {
   const flightMode = mission.mode !== 'explorer';
   const [root, setRoot] = useState<FsRoot>(mission.root);
   const [path, setPath] = useState(mission.manifestPath);
@@ -565,7 +560,7 @@ export function TerrainViewer({ search }: { search: string }) {
               Airborne practice
             </a>
             {' · '}
-            <a href="?">Terrain explorer</a>
+            <a href="?mode=explore">Terrain explorer</a>
             {' · '}
             <a href="?view=probe">Renderer diagnostic</a>
           </p>

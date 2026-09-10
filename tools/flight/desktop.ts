@@ -16,6 +16,11 @@ export interface DesktopOptions {
   interactiveTest?: boolean;
   out: string;
   query?: Record<string, string>;
+  /**
+   * Launch with no query at all, which is what a person double-clicking the app gets.
+   * Every other script keeps the deep-link defaults below, unchanged.
+   */
+  bareLaunch?: boolean;
   initialization?: string;
 }
 
@@ -205,9 +210,9 @@ export async function openDesktop(options: DesktopOptions) {
     }, 'initial document ready');
     const url = new URL(page.url);
     for (const [key, value] of Object.entries({
-      view: 'terrain',
-      root: 'appData',
-      manifest: 'terrains/ukraine/manifest.json',
+      ...(options.bareLaunch
+        ? {}
+        : { view: 'terrain', root: 'appData', manifest: 'terrains/ukraine/manifest.json' }),
       ...options.query,
     }))
       url.searchParams.set(key, value);

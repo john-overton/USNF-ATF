@@ -92,10 +92,13 @@ default. Screenshots and the full report remain in the ignored output directory.
 
 `--flight-profile extracted/flight/f14-flight.json` copies the attributed local
 flight profile into an isolated test session. Generic `smoke.ts` additionally
-requires `--flight-model retail-envelope` to select it; the default remains the
-preserved assisted backend. `ground-smoke.ts` loads the profile but starts with
-the default, then exercises the real model selector both ways and verifies the
-backend mass/source changes. Its default profile path is the one above.
+requires `--flight-model retail-envelope` to select it, and passes `assisted`
+unless told otherwise. The product default became the retail PT envelope in
+c6069fe, so an installed profile is used whenever the URL does not ask for
+`assisted`; `ground-smoke.ts` and `aircraft-smoke.ts` still assert the older
+assisted default and fail because of it (see the 2026-09-10 progress entry).
+`ground-smoke.ts` loads the profile, then exercises the real model selector both
+ways and verifies the backend mass/source changes. Its default profile path is the one above.
 
 ```sh
 bun tools/flight/aero-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --out extracted/model-switcher-aero
@@ -180,3 +183,17 @@ aircraft fitted modes, airborne continuity, F-14 G bounds and renderer errors.
 Reports/screenshots stay in `extracted/flight-envelope-audit/desktop-*`. The
 headless high-altitude performance audit is documented in
 [retail flight acceptance](../harness/retail-flight.md).
+
+## Main menu and screen transitions
+
+```sh
+bun tools/flight/menu-smoke.ts --binary build/mac/mac-arm64/USNF-ATF.app/Contents/MacOS/USNF-ATF --build-commit <built-commit> --out extracted/menu-smoke
+```
+
+This is the only script that launches with no query at all, which is what a person
+double-clicking the app gets: it asserts the main menu appears, that the enabled items
+are exactly the three modes this build delivers, and that a disabled item goes nowhere.
+It then reaches the terrain explorer, presses Esc back to the menu, and flies an A-4E
+from Free Flight, checking after each transition that a marker set on `window` survives
+— proof the shell changed screens in place rather than reloading the page. Every other
+script keeps deep-linking through the query string, unchanged.

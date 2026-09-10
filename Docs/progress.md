@@ -14,7 +14,102 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite, a shared sky highlight rolloff and terrain shading contrast | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
 | 4: flight model | Retail PT-envelope default with preserved assisted comparison/fallback and opt-in recovered-native-envelope backend; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, Default F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers, camera-projected gun pipper using nearer terrain or a 1,000 m base range, thick lower closing-range arc (hidden at/above 1 km) and target-input plumbing; cockpit-only HUD and armed-only reticle; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| Game shell | Steps 1–2 of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, and a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload | Menu is a structural placeholder; the recovered retail layouts, artwork, sounds, loadout screen and quick fight are steps 3–7. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
 | 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request. Phase 6/7 groundwork brought forward 2026-09-09: retail AI script parser and VM interpreter, `.SEE` detection model, damage/hit-point model with the recovered performance penalties, swept gun-round hit geometry, and a reusable MFD bezel extracted for a future target page. 2026-09-10: game shell planned end to end in [game-shell-plan.md](game-shell-plan.md), and the aircraft port now exports `.PT` hardpoints and the `.JT`/`.GAS`/`.SEE`/`.ECM` stores they name into a validated engine contract | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned. The new AI and combat modules are pure, unit-tested and verified against all 17 retail AI programs, but NONE of it is wired into the flight loop: no multi-aircraft world, no acquisition, no damage applied from rounds. Nine AI action semantics remain open; parser success is not flown-tactics parity. The loadout data is exported, validated and installable but drives nothing: no loadout screen, stores do not feed mass, and the hardpoint `flags` compatibility mask and `maxWeight` unit are still undecoded |
+
+## 2026-09-10: a session is one object, and the app has a main menu
+
+Steps 1 and 2 of [game-shell-plan.md](game-shell-plan.md), committed separately.
+Nothing about the simulation changed: the 120 Hz clock still runs inside the
+viewer's own `requestAnimationFrame` chain, React still receives only a throttled
+diagnostics snapshot, and the floating origin is untouched.
+
+**Step 1, `MissionParams`.** `engine/src/sim/mission/params.ts` is now the single
+description of a session — mode, theater, aircraft, flight model, start, loadout,
+environment, camera, opponents and seed — with `DEFAULT_MISSION`,
+`parseMissionQuery`, `missionQuery` and `validateMission`. It is pure: no DOM, no
+platform, no three.js. The URL is demoted from the place session state lives to
+one serializer of it, which is what makes a loadout screen possible at all, since
+a loadout is not something a player can type into a URL.
+
+The seven scattered `window.location.search` reads are gone. `main.tsx` reads the
+search string once; `startTerrainViewer` and `FlightLayer.create` take the object;
+`initialCamera` takes the parsed camera overrides instead of a query string. The
+old split between tolerant and strict parsing is preserved deliberately: `mode`,
+`root`, `manifest`, `flightStart`, `flightModel`, `flightFuel` and `flightPayload`
+fall back to a default, while `aircraft`, the environment set, `contrast` and the
+camera pose still throw, and the failure is carried into the viewer panel's
+existing error text rather than blanking the app.
+
+**Step 2, the screen state machine.** `engine/src/ui/menu/navigation.ts` holds the
+`Screen` union, `initialScreen`, `nextScreen`, `nextMission` and `applyMenuAction`,
+all pure. `engine/src/ui/Shell.tsx` owns `{screen, mission}` and mounts either the
+renderer probe, the terrain viewer, or a menu. Leaving a mode is a state
+transition, not `location.assign`, so no reload is involved. No dependency was
+added; there is still no router.
+
+The rule that keeps every machine-facing entry point alive: **a query string
+wins.** The menu appears only when the app is launched with nothing in the URL at
+all. Every existing Electron script deep-links with at least `view`, `root` and
+`manifest`, so all of them land exactly where they did, including the explorer
+cases of `teleport-smoke.ts`, which pass no `mode` at all.
+
+The menu itself is a **structural placeholder**, and is called that in the code.
+It renders the whole retail `CHOOSEAC.DLG` item list with everything we cannot
+deliver visibly disabled and labelled with why, plus Free Flight and Terrain
+Explorer below it. The recovered retail layout, artwork, fonts and sounds are
+steps 3–5 of the plan; the loadout screen is step 6; the quick fight is step 7.
+Choosing "Create Quick Mission" today reaches the same flight with one nominal
+opponent recorded in `MissionParams.opponents` and **no opponent flown** — the
+mock is not built yet.
+
+Verification, on this Mac, against the packaged and unpackaged builds of the
+committed source:
+
+- `bun run check` clean at both commits: 334 tests then 346, typecheck, lint,
+  format. Twenty-two new tests: ten for the parameter object (legacy-key parsing,
+  round trip, clamping, the strict failures, every validation message), eight for
+  the transitions, four for the menu markup through `renderToStaticMarkup`.
+- All thirteen existing Electron smoke scripts were run against a build of each
+  commit — sixteen runs, since `smoke.ts` has three scenarios and
+  `cockpit-gun-smoke.ts` three usable cases — plus the new `menu-smoke.ts`.
+- `menu-smoke.ts` is the only script that launches with no query, which required
+  a `bareLaunch` option in `desktop.ts` that leaves every other script's defaults
+  untouched. It verifies the main menu appears, that the enabled items are exactly
+  the three modes this build delivers, that a disabled item goes nowhere, and that
+  reaching the explorer, pressing Esc back, and flying an A-4E from Free Flight
+  all preserve a marker set on `window` — proof no page reload occurred.
+
+**Three failures, all reproduced identically on the parent commit 092d0d6**, which
+was built and run for the comparison. They are pre-existing defects, not
+regressions, and the scripts were left unchanged rather than edited to pass:
+
+1. `ground-smoke.ts:41` and `aircraft-smoke.ts:24` both assert that the assisted
+   model is the default flight model. That stopped being true in c6069fe on
+   2026-09-09, which made the retail PT envelope the default whenever a profile is
+   installed and the URL does not ask for `assisted`. Reproduce with
+   `bun tools/flight/ground-smoke.ts --binary <packaged>`: "Existing assisted model
+   is not the default". The stale claim in `tools/flight/README.md` is corrected
+   here; the assertions themselves are left for a decision about which behaviour is
+   wanted.
+2. `smoke.ts --scenario approach` lands but does not brake below the 5 m/s
+   threshold inside the 60 s budget: `landings: 1`, `status: "grounded"`, final
+   airspeed 7.07 m/s. Same result at 092d0d6 with the same flags.
+
+One further script, `envelope-smoke.ts`, passed against the step 1 build and could
+not be completed against the step 2 build: its second Electron session fails in
+Electron's own sandbox bootstrap ("Cannot destructure property 'preloadScripts' of
+'binding.startupData'"), before any of our renderer code runs. The same failure hit
+`flaps-neutral-smoke.ts`, `aero-smoke.ts` and `surface-smoke.ts` once each and all
+three passed on retry, and the 092d0d6 build also fails to complete
+`envelope-smoke.ts` in the machine's current state. A development `bun run
+dev:electron` instance was running from the same Electron binary throughout. This
+is recorded as an environment problem, not as evidence about the change; its first
+case (F-14 retail envelope) did verify airborne at 4.63 peak g.
+
+Next: step 3 of the plan, `tools/retail/retail/mnu.py` plus `Docs/formats/mnu.md`
+and the formats index correction that `.LAY` is sky and sea layers rather than UI.
+That step is pure research and touches no engine code.
 
 ## 2026-09-10: game shell plan, and hardpoints and stores in the aircraft port
 
