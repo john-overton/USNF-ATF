@@ -5,6 +5,10 @@ import {
   MusicSituationState,
   parseFlightMusic,
   musicChannelState,
+  musicNoteDuration,
+  musicLimitations,
+  type MusicChannelEvent,
+  type MusicTrack,
   type FlightMusicInput,
 } from './FlightMusic';
 import { muteControl } from './mute';
@@ -341,4 +345,64 @@ test('channel volume/expression, stereo pan and bend are preserved independently
   expect(musicChannelState(events, 1, 0)).toEqual({ gain: 1, pan: 0, bend: 0 });
   expect(musicChannelState(events, 1, 2)).toEqual({ gain: 64 / 127, pan: -1, bend: -2 });
   expect(musicChannelState(events, 0, 2)).toEqual({ gain: 100 / 127, pan: 0, bend: 0 });
+});
+
+const cc = (
+  controller: number,
+  value: number,
+  timeSeconds = 0,
+  channel = 0,
+): MusicChannelEvent => ({ timeSeconds, channel, kind: 'controller', controller, value });
+
+test('RPN0 sensitivity preserves order, null/NRPN exclusion, channel isolation and active bends', () => {
+  const bend: MusicChannelEvent = { timeSeconds: 0, channel: 0, kind: 'pitch-bend', value: 0 };
+  const events = [bend, cc(6, 12), cc(101, 0), cc(100, 0), cc(6, 12, 1), cc(38, 50, 2)];
+  expect(musicChannelState(events, 0, 0).bend).toBe(-2); // Data entry before selection stays ignored.
+  expect(musicChannelState(events, 0, 1).bend).toBe(-12);
+  expect(musicChannelState(events, 0, 2).bend).toBe(-12.5);
+  expect(musicChannelState(events, 1, 2).bend).toBe(0);
+  for (const deselect of [[cc(101, 127, 3), cc(100, 127, 3)], [cc(99, 0, 3)], [cc(98, 0, 3)]])
+    expect(musicChannelState([...events, ...deselect, cc(6, 1, 3)], 0, 3).bend).toBe(-12.5);
+  expect(musicChannelState([...events, cc(121, 0, 3)], 0, 3).bend).toBe(0);
+});
+
+test('sustain, all notes off, reset and all sound off obey phrase bounds and channel isolation', () => {
+  const track: MusicTrack = { ...parseFlightMusic(manifest()).tracks.cruise, durationSeconds: 10 };
+  const note = { ...track.notes[0]!, timeSeconds: 1, durationSeconds: 2 };
+  const duration = (...events: MusicChannelEvent[]) =>
+    musicNoteDuration(note, { ...track, channelEvents: events });
+  expect(duration()).toBe(2);
+  expect(duration(cc(64, 127), cc(64, 0, 5))).toBe(4);
+  expect(duration(cc(64, 127))).toBe(9);
+  expect(duration(cc(64, 127, 4))).toBe(2); // Pedal after release cannot resurrect a note.
+  expect(duration(cc(64, 127, 0, 1))).toBe(2);
+  expect(duration(cc(64, 127), cc(121, 0, 4))).toBe(3);
+  expect(duration(cc(64, 127), cc(120, 0, 2))).toBe(1);
+  expect(duration(cc(123, 0, 2))).toBe(1);
+  expect(duration(cc(64, 127), cc(123, 0, 2), cc(64, 0, 4))).toBe(3);
+  expect(duration(cc(120, 0, 0))).toBe(2); // Earlier silence doesn't suppress a later note.
+});
+
+test('pressure and unsupported controls remain explicit instead of invented oscillator effects', () => {
+  const data = manifest();
+  const events: MusicChannelEvent[] = [
+    cc(114, 55),
+    { timeSeconds: 0, channel: 0, kind: 'channel-pressure', value: 3 },
+    { timeSeconds: 0, channel: 0, kind: 'poly-pressure', value: 7, note: 60 },
+  ];
+  Object.assign(data.tracks.cruise!, {
+    channelEvents: events,
+    limitations: ['external branches unavailable'],
+  });
+  const track = parseFlightMusic(data).tracks.cruise;
+  expect(track.channelEvents).toEqual(events);
+  expect(musicLimitations(track)).toContain('CC114 preserved, not rendered by oscillator');
+  expect(musicLimitations(track)).toContain(
+    'channel-pressure preserved, not rendered by oscillator',
+  );
+  expect(musicLimitations(track)).toContain('external branches unavailable');
+  events[2]!.value = 128;
+  expect(() => parseFlightMusic(data)).toThrow();
+  Object.assign(data.tracks.cruise!, { channelEvents: [{ ...cc(7, 100), kind: ['controller'] }] });
+  expect(() => parseFlightMusic(data)).toThrow();
 });

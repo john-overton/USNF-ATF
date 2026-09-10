@@ -18,31 +18,46 @@ export interface MusicTrack {
   durationSeconds: number;
   notes: MusicNote[];
   channelEvents?: MusicChannelEvent[];
+  limitations?: string[];
 }
 export interface MusicChannelEvent {
   timeSeconds: number;
   channel: number;
-  kind: 'controller' | 'pitch-bend';
+  kind: 'controller' | 'pitch-bend' | 'channel-pressure' | 'poly-pressure';
   controller?: number;
+  note?: number;
   value: number;
 }
-/** GM defaults; bend sensitivity remains two semitones (RPN is not implemented). */
+/** Generic MIDI policy: RPN initially null, sensitivity two semitones, no native driver claim. */
 function musicChannelTimeline(events: readonly MusicChannelEvent[], channel: number) {
   let volume = 100 / 127,
     expression = 1,
     pan = 0,
-    bend = 0;
+    bend = 0,
+    rawBend = 0,
+    semitones = 2,
+    cents = 0,
+    rpnMsb = 127,
+    rpnLsb = 127;
   const timeline = [{ timeSeconds: 0, gain: volume, pan, bend }];
   for (const event of events) {
     if (event.channel !== channel) continue;
-    if (event.kind === 'pitch-bend') bend = ((event.value - 8192) / 8192) * 2;
+    if (event.kind === 'pitch-bend') rawBend = (event.value - 8192) / 8192;
+    else if (event.kind !== 'controller') continue;
     else if (event.controller === 7) volume = event.value / 127;
     else if (event.controller === 11) expression = event.value / 127;
     else if (event.controller === 10) pan = (event.value - 64) / (event.value < 64 ? 64 : 63);
+    else if (event.controller === 101) rpnMsb = event.value;
+    else if (event.controller === 100) rpnLsb = event.value;
+    else if (event.controller === 99 || event.controller === 98) rpnMsb = rpnLsb = 127;
+    else if (event.controller === 6 && rpnMsb === 0 && rpnLsb === 0) semitones = event.value;
+    else if (event.controller === 38 && rpnMsb === 0 && rpnLsb === 0) cents = event.value;
     else if (event.controller === 121) {
       expression = 1;
-      bend = 0;
+      rawBend = 0;
+      rpnMsb = rpnLsb = 127;
     } else continue;
+    bend = rawBend * (semitones + cents / 100);
     const state = { timeSeconds: event.timeSeconds, gain: volume * expression, pan, bend };
     if (timeline[timeline.length - 1]!.timeSeconds === event.timeSeconds)
       timeline[timeline.length - 1] = state;
@@ -65,6 +80,40 @@ export function musicChannelState(
   return { gain, pan, bend };
 }
 const automation = new WeakMap<MusicTrack, ReturnType<typeof musicChannelTimeline>[]>();
+/** Pedal/key release policy, bounded by the imported phrase. No invented release tail. */
+export function musicNoteDuration(note: MusicNote, track: MusicTrack): number {
+  let pedal = false;
+  let release = note.timeSeconds + note.durationSeconds;
+  for (const event of track.channelEvents ?? []) {
+    if (event.channel !== note.channel || event.kind !== 'controller') continue;
+    if (event.timeSeconds > release && !pedal) break;
+    if (event.controller === 64) pedal = event.value >= 64;
+    else if (event.controller === 121) pedal = false;
+    else if (event.timeSeconds >= note.timeSeconds) {
+      if (event.controller === 120) return Math.max(0, event.timeSeconds - note.timeSeconds);
+      if (event.controller === 123) release = Math.min(release, event.timeSeconds);
+    }
+    if (event.timeSeconds >= release && !pedal)
+      return Math.max(0, event.timeSeconds - note.timeSeconds);
+  }
+  return Math.max(0, (pedal ? track.durationSeconds : release) - note.timeSeconds);
+}
+const supportedControllers = new Set([6, 7, 10, 11, 38, 64, 98, 99, 100, 101, 120, 121, 123]);
+const limitationCache = new WeakMap<MusicTrack, string[]>();
+export function musicLimitations(track: MusicTrack): string[] {
+  const cached = limitationCache.get(track);
+  if (cached) return cached;
+  const limitations = new Set(track.limitations);
+  for (const event of track.channelEvents ?? []) {
+    if (event.kind === 'controller' && !supportedControllers.has(event.controller!))
+      limitations.add(`CC${event.controller} preserved, not rendered by oscillator`);
+    else if (event.kind === 'channel-pressure' || event.kind === 'poly-pressure')
+      limitations.add(`${event.kind} preserved, not rendered by oscillator`);
+  }
+  const result = [...limitations];
+  limitationCache.set(track, result);
+  return result;
+}
 export interface FlightMusicManifest {
   version: 1;
   source: 'retail-xmi';
@@ -134,6 +183,15 @@ export function parseFlightMusic(value: unknown): FlightMusicManifest {
       durationSeconds: duration,
       notes,
     };
+    if (track.limitations !== undefined) {
+      if (
+        !Array.isArray(track.limitations) ||
+        track.limitations.length > 128 ||
+        track.limitations.some((v) => typeof v !== 'string' || v.length > 300)
+      )
+        throw new Error('Invalid music limitations');
+      parsed.limitations = track.limitations as string[];
+    }
     if (track.channelEvents !== undefined) {
       if (
         !Array.isArray(track.channelEvents) ||
@@ -143,16 +201,20 @@ export function parseFlightMusic(value: unknown): FlightMusicManifest {
       parsed.channelEvents = track.channelEvents
         .map((value: unknown): MusicChannelEvent => {
           const event = object(value);
-          if (event.kind !== 'controller' && event.kind !== 'pitch-bend')
+          if (
+            typeof event.kind !== 'string' ||
+            !['controller', 'pitch-bend', 'channel-pressure', 'poly-pressure'].includes(event.kind)
+          )
             throw new Error('Invalid MIDI event kind');
           const result: MusicChannelEvent = {
             timeSeconds: number(event.timeSeconds, 0, duration),
             channel: number(event.channel, 0, 15, true),
-            kind: event.kind,
-            value: number(event.value, 0, event.kind === 'controller' ? 127 : 16383, true),
+            kind: event.kind as MusicChannelEvent['kind'],
+            value: number(event.value, 0, event.kind === 'pitch-bend' ? 16383 : 127, true),
           };
           if (event.kind === 'controller')
             result.controller = number(event.controller, 0, 127, true);
+          if (event.kind === 'poly-pressure') result.note = number(event.note, 0, 127, true);
           return result;
         })
         .sort((a, b) => a.timeSeconds - b.timeSeconds);
@@ -442,6 +504,9 @@ export class FlightMusic {
   }
   private play(note: MusicNote, when: number): void {
     const context = this.context!;
+    const track = this.selectedTrack ?? this.tracks[this.state.situation];
+    const release = musicNoteDuration(note, track);
+    if (release <= 0) return;
     try {
       const source = context.createOscillator();
       const gain = context.createGain();
@@ -455,9 +520,7 @@ export class FlightMusic {
         percussion ? 100 + note.note * 3 : 440 * 2 ** ((note.note - 69) / 12),
         when,
       );
-      const duration = percussion
-        ? Math.min(0.18, note.durationSeconds)
-        : Math.min(12, note.durationSeconds);
+      const duration = percussion ? Math.min(0.18, release) : release;
       if (percussion) source.frequency.exponentialRampToValueAtTime(40, when + duration);
       const amplitude = (note.velocity / 127) * 0.22;
       gain.gain.setValueAtTime(0, when);
@@ -465,7 +528,6 @@ export class FlightMusic {
       gain.gain.linearRampToValueAtTime(amplitude * 0.65, when + duration * 0.7);
       gain.gain.linearRampToValueAtTime(0, when + duration);
       const voice: Voice = { source, gain };
-      const track = this.selectedTrack ?? this.tracks[this.state.situation];
       if (track.channelEvents?.length) {
         const expression = context.createGain(),
           pan = context.createStereoPanner();
@@ -580,7 +642,11 @@ export class FlightMusic {
       contextState: this.context?.state ?? 'locked',
       source: this.source,
       rendering: 'authored GM-style oscillator approximation',
-      midiControls: 'CC7 volume, CC10 pan, CC11 expression, CC121 reset; pitch bend ±2 semitones',
+      midiControls:
+        'volume/pan/expression; RPN0 bend sensitivity; sustain/all-notes-off/all-sound-off/reset',
+      midiPolicy:
+        'RPN initially null; two-semitone default; only RPN0 supported; NRPN ignored; phrase-bounded sustain; authored envelopes',
+      limitations: musicLimitations(this.selectedTrack ?? this.tracks[this.state.situation]),
       error: this.error,
     };
   }

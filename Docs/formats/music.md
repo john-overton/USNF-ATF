@@ -1,5 +1,37 @@
 # Music recovery — 2026-09-10
 
+## Gap follow-up (supersedes earlier controller limitations below)
+
+Runtime supports RPN0 sensitivity (CC101/100, CC6/38), sustain64, sound-off120,
+notes-off123 and reset121. RPN starts null/default two semitones; parameter messages
+before selection stay ignored. Other RPN/NRPN remain unsupported. Seven USNF tracks
+set12 semitones: AIR05/13/14/20/27/47/61. All observed sustain values are off;
+sustain-on correctness uses authored fixtures, not a claimed retail improvement.
+Pressure is retained and flagged unrendered. Controller meanings:
+[MIDI Association table](https://midi.org/midi-1-0-control-change-messages).
+
+Finite FOR116/NEXT117 loops expand under instruction/nesting/duration/note bounds;
+count1 means one total pass, NEXT<64 breaks, infinite count0 rejects explicitly.
+All seven local loop pairs use count1. Independently cross-checked against the
+[ScummVM XMIDI parser](https://github.com/scummvm/scummvm/blob/master/audio/midiparser_xmidi.cpp).
+Same-time controller order is preserved, but flattened engine note ordering versus
+controllers remains approximate. Original XMI hashes stay intact.
+
+`retail.music_midi` exports standard MIDI and optionally auditions a selected
+compatible SF2 with external FluidSynth. Programs/controllers/bends/pressure retain
+source order; explicit releases stay ordered, while duration expirations precede
+same-tick events. XMIDI CC110–119 host/patch instructions are omitted/reported, not
+mapped to GM banks. TIMB/external RBRN/sysex/device initialization remain limitations.
+Source/MIDI/bank/WAV hashes and synth version accompany output. CLI flags follow the
+[FluidSynth manual](https://github.com/FluidSynth/fluidsynth/blob/master/doc/fluidsynth.1).
+
+No FluidSynth or selected compatible SF2 is available here; readiness reports exact
+blockers. No bank downloaded; ancillary SBK is not silently selected. **Offline
+audition is not an engine SoundFont backend or original instrument fidelity.**
+Runtime remains authored oscillators. Re-export locally with `retail.music` to add
+pressure/limitations and finite-loop expansion to old manifests. Commands and
+acceptance: [gap baseline](../baselines/audio-gaps.md).
+
 ## Latest runtime follow-up
 
 `FlightMusic` now runs bounded recovered USNF MUS bytecodes via `NativeScore`:

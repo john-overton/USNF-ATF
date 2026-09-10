@@ -1,5 +1,28 @@
 # Development handoff — 2026-09-10
 
+## Latest: remaining audio gaps follow-up
+
+Checkpoint **`cd0176ba4765630beb511a287ef9514c2936681f`** is committed/pushed on
+`main`; its415 Bun/50 Python/16 harness and three live results are preserved in
+[audio gap baseline](baselines/audio-gaps.md). Earlier “nothing committed/pushed”
+statements below are historical. No manual compaction API was available; this
+checkpoint and explicit four-gap scope are preserved here.
+
+Added strict media/replacement audit; recovered48 seconds of intact S35_S packets
+as separate **partial**, hashed output. All seven ATF movies remain incomplete or
+absent. RPN0 bend range, sustain/releases, bounded finite loops and pressure
+preservation improved. Offline MIDI/user-bank FluidSynth audition reports missing
+dependencies without native-instrument claims. Capability diagnostics distinguish
+missing imports, absent gameplay and unmapped triggers; no fake hooks added.
+
+Follow-up:419 Bun pass/3 existing skips,62 targeted Python pass,16 harness cases,
+fresh build and four serial live checks pass. Exact commands, corrections and
+remaining MIDI/media/instrument/gameplay scope: [audio gap baseline](baselines/audio-gaps.md).
+Next external inputs: complete owned ATF_10.LIB and a selected compatible instrument
+source. Unsupported MIDI controls/host branches and radar/wingman/subsystem/
+ejection/carrier/movie systems remain open. Follow-up commit/push result is reported
+after Git confirms it; all retail/generated outputs remain ignored.
+
 ## Commit checkpoint: combat, aircraft fixes, missions and audio
 
 The user authorized committing and pushing the accumulated work on `main`.

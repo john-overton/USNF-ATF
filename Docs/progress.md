@@ -7,6 +7,25 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-10
 
+**Audio gap follow-up:** checkpoint `cd0176ba4765630beb511a287ef9514c2936681f`
+is committed/pushed on main. Strict media audit recovered a separately labeled48s
+partial S35_S soundtrack, not seven complete movies. RPN0 pitch range, sustain,
+finite loops and pressure preservation improved; offline MIDI/user-bank audition
+and explicit capability diagnostics added.419 Bun pass/3 skips,62 targeted Python,
+16 harness; fresh build and four serial live checks pass. Exact evidence and four
+remaining boundaries: [audio gap baseline](baselines/audio-gaps.md).
+
+## 2026-09-10: Audio gap recovery and safe fallbacks
+
+No missing bytes or native instrument behavior invented. Replacement validation
+requires exact sentinel/prefix compatibility; partial PCM is checked against fresh
+archive ranges. Twelve-semitone retail bends no longer use fixed two-semitone range.
+Infinite loops fail explicitly; pressure/other unrendered controls are visible.
+Offline FluidSynth audition is blocked here by missing synth/selected SF2, not
+presented as an engine timbre upgrade. No new gameplay solely to trigger speech.
+Next: supplied complete media/compatible instruments, separately implemented
+gameplay and native-host evidence. Earlier snapshots below remain historical.
+
 **Commit checkpoint:** user authorized commit/push of the accumulated combat,
 aircraft, mission and audio work. Final verification:415 Bun pass/3 existing skips,
 50 targeted Python pass,16 harness cases pass, fresh build and serial live cue,

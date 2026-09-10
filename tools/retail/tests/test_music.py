@@ -48,13 +48,29 @@ class MusicTests(unittest.TestCase):
         self.assertEqual(plain['notes'], aligned['notes'])
 
     def test_tempo_is_fixed_and_ignored_controls_reported(self):
-        events = (b'\xff\x51\x03\x01\x02\x03\xb0\x74\x00'
+        events = (b'\xff\x51\x03\x01\x02\x03\xb0\x74\x01'
                   b'\x78\x90\x3c\x7f\x78\xb0\x75\x7f' + EOT)
         notes, duration, report = decode_events(events)
         self.assertEqual(notes[0]['timeSeconds'], 1)
         self.assertEqual(duration, 2)
         self.assertEqual(report['controllers'], {116: 1, 117: 1})
         self.assertEqual(report['ignoredEvents'], {'meta-51': 1})
+
+    def test_finite_loops_pressure_and_rejected_unbounded_control_flow(self):
+        body = b'\x90\x3c\x7f\x01\x0c\xd0\x03\xa0\x3c\x04'
+        for count in (1, 2, 3):
+            notes, _, report = decode_events(bytes([0xb0, 116, count]) + body + b'\xb0\x75\x7f' + EOT)
+            self.assertEqual(len(notes), count)
+            self.assertEqual([n['timeSeconds'] for n in notes], [i / 10 for i in range(count)])
+            self.assertEqual(report['channelEvents'][0]['kind'], 'channel-pressure')
+            self.assertEqual(report['channelEvents'][1]['note'], 60)
+        notes, _, _ = decode_events(b'\xb0\x74\x03' + body + b'\xb0\x75\x00' + EOT)
+        self.assertEqual(len(notes), 1)  # NEXT <64 breaks rather than repeats.
+        for events in (b'\xb0\x74\x00' + body + b'\xb0\x75\x7f' + EOT,
+                       b'\xb0\x75\x7f' + EOT, b'\xb0\x74\x01' + EOT,
+                       b'\xb0\x74\x02' * 5 + EOT):
+            with self.assertRaises(ValueError):
+                decode_events(events)
 
     def test_explicit_and_zero_velocity_note_off(self):
         for off in (b'\x80\x3c\x00', b'\x90\x3c\x00\x01'):

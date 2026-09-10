@@ -38,6 +38,10 @@ speech, wind/tire and bullet-terrain sounds use verified gameplay hooks. The
 [audio library recovery](Docs/formats/audio.md)
 exports all identified standalone audio from both discs, including unused speech;
 49 movie soundtracks are also recovered, with seven ATF movies blocked by truncated media.
+An additional48s S35_S soundtrack prefix is recovered separately as incomplete.
+MIDI bend sensitivity, sustain/releases and bounded finite XMIDI loops are supported;
+unsupported controls are diagnosed. Offline user-bank MIDI audition is optional,
+not an engine instrument-fidelity upgrade; see [remaining audio gaps](Docs/baselines/audio-gaps.md).
 [music notes](Docs/formats/music.md) distinguish recovered scripts from runtime parity.
 Exterior cockpit texture cutouts and flap placement have been revised on all three
 aircraft; re-run the aircraft porter to update previously installed models.

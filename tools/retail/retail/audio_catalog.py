@@ -97,6 +97,10 @@ def salvage_entries(path: Path, unavailable: list):
             end = offsets[index + 1] if index + 1 < count else size
             if begin > size or end > size:
                 unavailable.append({'archive': path.name, 'entryIndex': index, 'name': name,
+                                    'begin': begin, 'end': end, 'expectedBytes': end - begin,
+                                    'availableBytes': max(0, min(size, end) - begin),
+                                    'missingBytes': end - max(begin, min(size, end)),
+                                    'availability': 'partial' if begin < size else 'absent',
                                     'error': 'entry extends beyond available media bytes'})
                 continue
             def read(begin=begin, end=end, flag=flag):

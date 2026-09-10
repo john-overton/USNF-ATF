@@ -1,5 +1,28 @@
 # USNF97 flight audio
 
+## Gap follow-up: partial movie packets and capability diagnostics
+
+`retail.media_audit` reports exact unavailable ranges, source/directory hashes and
+terminal size. Replacement acceptance requires matching all available source bytes,
+exact sentinel/file length, strict parsing and audio decoding of newly available
+CB8 entries. Compatibility is not authenticity or full movie/index validation.
+
+Optional `--partial-out` demuxes only complete packets from an independently audited
+partial entry. Fresh S35_S.CB8 yields144 MRFA packets/1,058,400 unsigned PCM8 bytes,
+48 seconds;1,259 incomplete trailing bytes discarded. PCM/WAV/hash agree with fresh
+archive slices. Prefix and output hashes/ranges stay in ignored partial-audio.json.
+Even a boundary-aligned prefix remains `complete:false`, separate from complete
+soundtracks. Seven movies still incomplete/absent: S35_S and X29/X31 D/M/S.
+Source ATF_10.LIB remains91,145,639 bytes short; no alternative complete local copy
+found. Existing49 complete soundtracks and two silent movies are unchanged.
+
+Combat diagnostics now expose `unavailableCueImports` separately from immutable
+`capabilityGaps`: absent radar/RWR/missile, wingman, subsystem/JETDAM, ejection/
+OUTFUEL and carrier/sensor host systems; unmapped BINGO/BUMP triggers; movie playback
+not integrated; original MIDI device/bank unidentified. No new fake triggers or
+fallback speech added. ATF media status is explicitly a development audit, not
+assumed for every user's installation. [Verification/commands](../baselines/audio-gaps.md).
+
 ## Follow-up: gameplay cues and movie audio (2026-09-10)
 
 This section supersedes the earlier “unused speech/events” and “video audio unknown”

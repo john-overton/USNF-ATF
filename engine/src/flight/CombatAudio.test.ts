@@ -10,8 +10,19 @@ import {
 import { muteControl } from './mute';
 import type { CombatEvent } from '../sim/combat/world';
 import { GAMEPLAY_CUES, type GameplayCueInput } from './gameplay-cues';
+import { AUDIO_GAPS } from './audio-capabilities';
 
 const origin = { x: 0, y: 0, z: 0 };
+test('capability gaps are diagnostic only and absent imports are distinct from missing gameplay', () => {
+  const { audio } = fixture();
+  const diagnostics = audio.diagnostics();
+  expect(diagnostics.unavailableCueImports).toEqual([...GAMEPLAY_CUES]);
+  expect(diagnostics.capabilityGaps).toBe(AUDIO_GAPS);
+  expect(AUDIO_GAPS.find((gap) => gap.id === 'bingo')?.status).toBe('unmapped-native-trigger');
+  expect(AUDIO_GAPS.find((gap) => gap.id === 'ejection')?.status).toBe('blocked-missing-gameplay');
+  expect(diagnostics.played).toBe(0);
+  expect(Object.isFrozen(AUDIO_GAPS)).toBe(true);
+});
 const event = (
   id: number,
   type: CombatEvent['type'] = 'hit',

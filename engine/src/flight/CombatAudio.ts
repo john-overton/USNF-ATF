@@ -1,4 +1,5 @@
 import type { CombatEvent } from '../sim/combat/world';
+import { AUDIO_GAPS } from './audio-capabilities';
 import type { Vec3 } from '../sim/flight';
 import { isEditingTarget, muteControl } from './mute';
 import type { Platform } from '../platform/Platform';
@@ -308,6 +309,8 @@ export class CombatAudio {
       cueCounts: { ...this.cueCounts },
       watermark: this.watermark,
       source: this.samples ? 'retail-pcm' : 'original-synthesized',
+      unavailableCueImports: GAMEPLAY_CUES.filter((cue) => !this.samples?.[cue]?.length),
+      capabilityGaps: AUDIO_GAPS,
       samples: this.samples
         ? Object.fromEntries(
             Object.entries(this.samples).map(([kind, clips]) => [

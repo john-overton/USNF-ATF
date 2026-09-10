@@ -3,10 +3,10 @@
 Protocol cross-check: https://github.com/scummvm/scummvm/blob/master/audio/midiparser_xmidi.cpp
 (read 2026-09-10): additive delays, VLQ durations, fixed 120 ticks/sec regardless
 of tempo metadata; zero-duration notes occupy one tick. This is an independent
-implementation of those format rules, not copied source. One linear EVNT pass is
-exported. Controller and pitch-bend events are preserved; the engine renders a
-documented subset. Branch/loop behavior, TIMB bank selection, sustain and native
-instrument synthesis are not reproduced. Channel 9 remains percussion.
+implementation of those format rules, not copied source. Finite FOR/NEXT loops
+are bounded and expanded; infinite loops are rejected. Controllers, pressure and
+pitch bend are preserved; the engine renders a documented subset. External RBRN
+branches, TIMB bank selection and native instruments are not reproduced.
 
 The five AIR selections below are authored situational assignments, NOT recovered
 USNF dispatch semantics. Exported notes are retail-derived and must stay local.
@@ -101,7 +101,9 @@ def event_chunks(data: bytes) -> list[bytes]:
     return tracks
 
 
-def decode_events(data: bytes) -> tuple[list[dict], float, dict]:
+def decode_events(data: bytes, *, include_midi=False) -> tuple[list[dict], float, dict]:
+    if len(data) > MAX_BYTES:
+        raise ValueError('EVNT size outside supported range')
     cursor = 0
     tick = 0
     notes: list[dict] = []
@@ -111,6 +113,14 @@ def decode_events(data: bytes) -> tuple[list[dict], float, dict]:
     ignored: Counter[str] = Counter()
     channel_events = []
     ended = False
+    loops = []
+    instructions = 0
+    midi_events = []
+    explicit_releases = set()
+
+    def record(message, note=None):
+        if include_midi:
+            midi_events.append((tick, bytes(message), note))
 
     def take(count: int) -> bytes:
         nonlocal cursor
@@ -138,9 +148,14 @@ def decode_events(data: bytes) -> tuple[list[dict], float, dict]:
     def stop_note(channel: int, pitch: int):
         for index in active.pop((channel, pitch), []):
             note = notes[index]
+            if tick < round((note['timeSeconds'] + note['durationSeconds']) * 120):
+                explicit_releases.add(id(note))
             note['durationSeconds'] = max(0, min(note['durationSeconds'], tick / 120 - note['timeSeconds']))
 
     while cursor < len(data):
+        instructions += 1
+        if instructions > 100000:
+            raise ValueError('XMI instruction budget exceeded')
         while cursor < len(data) and data[cursor] < 128:
             tick += take(1)[0]
             if tick > MAX_TICKS:
@@ -159,25 +174,53 @@ def decode_events(data: bytes) -> tuple[list[dict], float, dict]:
                 notes.append({'timeSeconds': tick / 120, 'durationSeconds': duration / 120,
                               'note': pitch, 'velocity': velocity, 'channel': channel,
                               'program': programs[channel]})
+                record([status, pitch, velocity], notes[-1])
             else:
+                record([0x80 | channel, pitch, 0])
                 stop_note(channel, pitch)
         elif command == 8:
-            pitch, _ = midi(2)
+            pitch, velocity = midi(2)
+            record([status, pitch, velocity])
             stop_note(channel, pitch)
         elif command == 12:
             programs[channel] = midi(1)[0]
+            record([status, programs[channel]])
         elif command == 11:
             controller, value = midi(2)
             controls[controller] += 1
+            if controller == 116:
+                if value == 0:
+                    raise ValueError('unsupported infinite XMIDI FOR loop; no finite phrase invented')
+                if len(loops) >= 4:
+                    raise ValueError('XMIDI FOR nesting exceeds four')
+                loops.append([cursor, value])
+                continue
+            if controller == 117:
+                if not loops:
+                    raise ValueError('XMIDI NEXT without FOR')
+                loops[-1][1] -= 1
+                if value < 64 or loops[-1][1] == 0:
+                    loops.pop()
+                else:
+                    cursor = loops[-1][0]
+                continue
+            record([status, controller, value])
             channel_events.append({'timeSeconds': tick / 120, 'channel': channel,
                 'kind': 'controller', 'controller': controller, 'value': value})
         elif command == 14:
             low, high = midi(2)
+            record([status, low, high])
             channel_events.append({'timeSeconds': tick / 120, 'channel': channel,
                 'kind': 'pitch-bend', 'value': low + high * 128})
         elif command in (10, 13):
-            midi(1 if command == 13 else 2)
-            ignored[hex(status & 0xf0)] += 1
+            values = midi(1 if command == 13 else 2)
+            record(bytes([status]) + values)
+            event = {'timeSeconds': tick / 120, 'channel': channel,
+                     'kind': 'channel-pressure' if command == 13 else 'poly-pressure',
+                     'value': values[-1]}
+            if command == 10:
+                event['note'] = values[0]
+            channel_events.append(event)
         elif status == 255:
             kind = midi(1)[0]
             payload = take(vlq())
@@ -199,13 +242,19 @@ def decode_events(data: bytes) -> tuple[list[dict], float, dict]:
             raise ValueError(f'unsupported EVNT status {status:#x}')
     if not ended:
         raise ValueError('EVNT missing end-of-track')
+    if loops:
+        raise ValueError('XMIDI FOR without NEXT')
     notes = [note for note in notes if note['durationSeconds'] > 0]
     if len(channel_events) > 20000:
         raise ValueError('XMI channel event budget exceeded')
-    # The linear phrase ends at EOT or at the last scheduled release, whichever is later.
+    # Phrase ends at EOT or the last scheduled release, whichever is later.
     duration = max(tick / 120, max((n['timeSeconds'] + n['durationSeconds'] for n in notes), default=0))
-    return notes, duration, {'controllers': dict(controls), 'ignoredEvents': dict(ignored),
-                            'channelEvents': channel_events}
+    report = {'controllers': dict(controls), 'ignoredEvents': dict(ignored),
+              'channelEvents': channel_events}
+    if include_midi:
+        report['midiEvents'] = midi_events
+        report['explicitReleases'] = explicit_releases
+    return notes, duration, report
 
 
 def decode(data: bytes, name: str) -> tuple[dict, dict]:
@@ -216,8 +265,12 @@ def decode(data: bytes, name: str) -> tuple[dict, dict]:
     if not notes or duration <= 0:
         raise ValueError('XMI has no playable notes')
     channel_events = report.pop('channelEvents')
+    limitations = ['TIMB/XMIDI patch banks and external RBRN host branches are not reproduced']
+    limitations.extend(f'{kind}: {count} events not rendered' for kind, count in report['ignoredEvents'].items())
+    limitations.append('Generic MIDI RPN starts null; original driver initialization is not established')
     return {'name': name, 'sourceSha256': hashlib.sha256(data).hexdigest(),
-            'durationSeconds': duration, 'notes': notes, 'channelEvents': channel_events}, report
+            'durationSeconds': duration, 'notes': notes, 'channelEvents': channel_events,
+            'limitations': limitations}, report
 
 
 def export(directory: Path, output: Path) -> dict:

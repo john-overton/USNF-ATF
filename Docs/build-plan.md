@@ -1,5 +1,11 @@
 # Build Plan
 
+**2026-09-10 audio gap follow-up:** added strict media/replacement audit and partial
+S35_S audio recovery, RPN0/sustain/releases, finite XMIDI loops, offline user-bank
+audition and explicit capability diagnostics. Missing complete ATF media, original
+instrument identity, unsupported MIDI controls/host branches and absent gameplay
+remain boundaries, not phase completion. [Evidence and scope](baselines/audio-gaps.md).
+
 Companion to `usnf-atf-plan.md` (the brief). The brief says what and why. This document says in what order, what "done" means for each phase, and which decisions are already made. When the two disagree, this one wins for sequencing.
 
 **2026-09-10 user priority:** damage, cockpit cutouts/flap placement, and a complete

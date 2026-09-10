@@ -34,6 +34,21 @@ class VideoAudioTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode_cb8(movie()[:88])
 
+    def test_partial_mode_recovers_only_complete_packets_never_claims_complete_movie(self):
+        complete = movie()
+        prefix = complete[:-24]  # No index/footer; retained audio packet intact.
+        pcm, info = decode_cb8(prefix, partial=True)
+        self.assertEqual(len(pcm), 7350)
+        self.assertEqual(info['status'], 'partial-embedded-audio')
+        self.assertFalse(info['complete'])
+        self.assertEqual(info['discardedTailBytes'], 0)
+        chunk = complete[88:-24]
+        pcm, info = decode_cb8(prefix + chunk[:100], partial=True)
+        self.assertEqual(len(pcm), 7350)  # Never pads the next partial packet.
+        self.assertEqual(info['discardedTailBytes'], 100)
+        with self.assertRaises(ValueError): decode_cb8(prefix)
+        with self.assertRaises(ValueError): decode_cb8(prefix + b'BAD!'+bytes(20), partial=True)
+
 
 if __name__ == '__main__':
     unittest.main()

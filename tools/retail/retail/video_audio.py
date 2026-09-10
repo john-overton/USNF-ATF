@@ -18,7 +18,12 @@ from .audio_catalog import salvage_entries, save_blob
 from .disc import iter_sources
 
 
-def decode_cb8(data: bytes) -> tuple[bytes, dict]:
+def decode_cb8(data: bytes, *, partial=False) -> tuple[bytes, dict]:
+    """Strict by default. Partial mode is ONLY for independently proven missing ranges.
+
+    Stops before an incomplete chunk, never pads it. Even a boundary-aligned prefix
+    remains partial; missing movie/index/footer data are not declared valid.
+    """
     if len(data) < 64 or len(data) > 256 * 1024 * 1024 or data[:4] != b'DRBC':
         raise ValueError('invalid DRBC header/size')
     flags, fps10, rate, version = struct.unpack_from('<IHHI', data, 4)
@@ -30,27 +35,37 @@ def decode_cb8(data: bytes) -> tuple[bytes, dict]:
     counts = Counter()
     while cursor < len(data):
         if cursor + 24 > len(data):
+            if partial:
+                break
             raise ValueError('truncated CB8 chunk header')
         tag, size = struct.unpack_from('<4sI', data, cursor)
-        if tag not in (b'VooM', b'MRFI', b'MRFA') or size < 24 or size > len(data) - cursor:
-            raise ValueError('unsupported or truncated CB8 chunk')
-        counts[tag.decode('ascii')] += 1
+        if tag not in (b'VooM', b'MRFI', b'MRFA') or size < 24:
+            raise ValueError('unsupported CB8 chunk')
         if tag == b'MRFA':
             if flags != 1 or struct.unpack_from('<4I', data, cursor + 8) != (128, 0, 8, 1):
                 raise ValueError('unsupported CB8 audio format')
             if size != 7374:
                 raise ValueError('unsupported CB8 audio block size')
+        if size > len(data) - cursor:
+            if partial:
+                break
+            raise ValueError('truncated CB8 chunk')
+        counts[tag.decode('ascii')] += 1
+        if tag == b'MRFA':
             chunks.append({'sourceOffset': cursor + 24, 'bytes': size - 24,
                            'sampleOffset': len(samples)})
             samples.extend(data[cursor + 24:cursor + size])
         cursor += size
     if flags == 1 and not samples:
         raise ValueError('CB8 advertises audio but contains no audio chunks')
-    if counts['VooM'] != 1 or counts['MRFI'] < 1:
+    if (counts['VooM'] > 1 if partial else counts['VooM'] != 1) or counts['MRFI'] < 1:
         raise ValueError('CB8 lacks expected movie/video chunks')
     return bytes(samples), {'sampleRate': rate, 'encoding': 'unsigned8-mono',
         'durationSeconds': len(samples) / rate, 'chunks': dict(counts), 'audioRanges': chunks,
-        'status': 'embedded-audio' if samples else 'no-embedded-audio'}
+        'status': ('partial-embedded-audio' if samples else 'partial-no-audio-recovered') if partial else
+                  ('embedded-audio' if samples else 'no-embedded-audio'),
+        **({'complete': False, 'parsedPrefixBytes': cursor, 'discardedTailBytes': len(data) - cursor}
+           if partial else {})}
 
 
 def export(media: Path, output: Path):
