@@ -10,6 +10,7 @@ import { parseRetailFlightProfile } from '../../engine/src/data/retail-flight';
 import { parseFlightSamples } from '../../engine/src/flight/FlightAudio';
 import { parseRetailCockpit } from '../../engine/src/flight/RetailCockpit';
 import { parseRetailGun } from '../../engine/src/data/retail-gun';
+import { defaultLoadout, grossWeightLb, parseRetailLoadout, selectableStations, validateLoadout } from '../../engine/src/data/retail-loadout';
 import { AIRCRAFT_RECIPES } from './aircraft-recipes';
 
 const REPO = realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'));
@@ -22,6 +23,7 @@ export function portCommands(id: AircraftId, sourceRoot: string, out: string, py
     [python, '-m', 'retail.audio', '--pt', source(recipe.pt), '--out', path.join(out, 'audio', `${id}.json`)],
     [python, '-m', 'retail.cockpit', '--aircraft', id, '--source-root', sourceRoot, '--out', path.join(out, 'cockpits', `${id}.json`)],
     [python, '-m', 'retail.gun', '--pt', source(recipe.pt), '--out', path.join(out, `${id}-gun.json`)],
+    [python, '-m', 'retail.loadout', '--pt', source(recipe.pt), '--out', path.join(out, `${id}-loadout.json`)],
   ];
 }
 
@@ -107,9 +109,22 @@ export async function main(args: string[]): Promise<void> {
     const audioFile = path.join(staging, 'audio', `${id}.json`);
     const cockpitFile = path.join(staging, 'cockpits', `${id}.json`);
     const gunFile = path.join(staging, `${id}-gun.json`);
+    const loadoutFile = path.join(staging, `${id}-loadout.json`);
     const cockpit = parseRetailCockpit(await Bun.file(cockpitFile).json(), id);
     const gun = parseRetailGun(await Bun.file(gunFile).json());
     if (gun.aircraftSource !== path.basename(recipe.pt)) throw new Error('Gun aircraft identity mismatch');
+    const loadout = parseRetailLoadout(await Bun.file(loadoutFile).json());
+    if (loadout.aircraftSource !== path.basename(recipe.pt))
+      throw new Error('Loadout aircraft identity mismatch');
+    if (loadout.aircraftSha256 !== gun.aircraftSha256)
+      throw new Error('Loadout and gun disagree about the source PT');
+    if (loadout.missingStores.length > 0)
+      throw new Error(`Loadout references store files that are not present: ${loadout.missingStores.join(', ')}`);
+    // The retail default must itself be flyable, or our arithmetic is wrong.
+    const stockLoadout = defaultLoadout(loadout);
+    const stockProblems = validateLoadout(loadout, stockLoadout);
+    if (stockProblems.length > 0)
+      throw new Error(`Retail default loadout does not validate: ${stockProblems.join(' ')}`);
     const model = summarizeModel(await Bun.file(modelFile).json());
     if (model.name !== AIRCRAFT[id].name) throw new Error('Model identity mismatch');
     const profile = parseRetailFlightProfile(await Bun.file(profileFile).json());
@@ -126,7 +141,16 @@ export async function main(args: string[]): Promise<void> {
       flight: { source: profile.source, name: profile.name, emptyMassKg: profile.emptyMassKg, fuelCapacityKg: profile.fuelCapacityKg, militaryThrustN: profile.militaryThrustN, maximumThrustN: profile.afterburnerThrustN, gRows: profile.envelopes.map(e => e.g), nativeDataPresent: !!profile.native },
       cockpit: { label: cockpit.label, width: cockpit.width, height: cockpit.height },
       gun: { name: gun.name, aircraftSource: gun.aircraftSource, capacity: gun.capacity },
-      outputSha256: { model: await sha256(modelFile), profile: await sha256(profileFile), audio: await sha256(audioFile), cockpit: await sha256(cockpitFile), gun: await sha256(gunFile) },
+      loadout: {
+        stations: loadout.stations.length,
+        selectableStations: selectableStations(loadout).length,
+        stores: Object.keys(loadout.stores).length,
+        internalFuelLb: loadout.internalFuelLb,
+        stockGrossWeightLb: Math.round(grossWeightLb(loadout, stockLoadout)),
+        maxTakeoffWeightLb: loadout.maxTakeoffWeightLb,
+        unresolved: loadout.unresolved,
+      },
+      outputSha256: { model: await sha256(modelFile), profile: await sha256(profileFile), audio: await sha256(audioFile), cockpit: await sha256(cockpitFile), gun: await sha256(gunFile), loadout: await sha256(loadoutFile) },
       acceptance: { conversion: 'validated', visual: 'pending', runtime: 'pending', nativeParity: 'not established by this helper' },
       installation: { status: options['--install'] ? 'pending' : 'not requested', dataRoot: options['--install'] ? path.resolve(options['--install']) : null },
     };
@@ -135,7 +159,7 @@ export async function main(args: string[]): Promise<void> {
     published = true;
     if (options['--install']) {
       try {
-        await run([process.execPath, path.join(REPO, 'tools/flight/install-aircraft.ts'), path.join(output, `${id}.json`), path.resolve(options['--install']), path.join(output, 'audio', `${id}.json`), path.join(output, `${id}-flight.json`), '--id', id, '--cockpit', path.join(output, 'cockpits', `${id}.json`), '--gun', path.join(output, `${id}-gun.json`)]);
+        await run([process.execPath, path.join(REPO, 'tools/flight/install-aircraft.ts'), path.join(output, `${id}.json`), path.resolve(options['--install']), path.join(output, 'audio', `${id}.json`), path.join(output, `${id}-flight.json`), '--id', id, '--cockpit', path.join(output, 'cockpits', `${id}.json`), '--gun', path.join(output, `${id}-gun.json`), '--loadout', path.join(output, `${id}-loadout.json`)]);
         report.installation.status = 'installed';
       } catch (error) {
         report.installation.status = 'failed; inspect installer output';

@@ -175,6 +175,35 @@ for turrets), `defaultTypeName` (ptr to a string: `M61.JT`, `AIM9M.JT`,
 hardpoints of a plane are its sensors and gun, so the F-14's 8 "hardpoints"
 are visual, radar, ECM, gun, then four weapon stations.
 
+`python3 -m retail.loadout --pt <PT>` exports the list together with the
+stores it names; `engine/src/data/retail-loadout.ts` is the engine-side
+contract. Measured station counts, local media, 2026-09-10: F14.PT 8 (4
+selectable), A4E.PT 7 (3), F31.PT 9 (3), where "selectable" excludes the
+sensor and ECM slots and the internal cannon. F31.PT station 5 is a real
+pylon (`flags $681`, `maxItems 1`) that names no default store.
+
+Two fields in this block remain **unresolved**, and both bound what a loadout
+screen can honestly offer:
+
+- **`flags` is the per-station compatibility mask.** Observed values on the
+  F-14's weapon stations are `$1f5`, `$605`, `$7f5` and `$485`; the A-4E's are
+  `$1781`, `$1785`, `$1585`. Bit `$0008` marks the sensor/ECM slots and is the
+  one bit we do read. That the rest encode a real rule is corroborated by
+  `ARMPLANE.MNU`, whose own menu carries "Cheat (load anything anywhere)".
+  Until the bits are decoded, nothing may be inferred about which store fits
+  which station. A way in: cluster the roughly 1,200 weapon stations across all
+  153 `.PT` files by flags value and correlate with the store classes their
+  defaults belong to.
+- **`maxWeight` is a byte and is not pounds.** F-14 stations give 40 for a
+  975 lb AIM-54C, 38 for a 250 gal tank (198 lb empty, 1,650 lb of fuel), 30
+  for a 345 lb AIM-120 and 5 for a 190 lb AIM-9M. Roughly monotone in store
+  weight but not proportional; probably a rack or pylon class.
+
+`pos.x/y/z` are raw words whose unit is unverified, so they are exported
+unconverted. `maxItems` is confirmed as the count the station holds: 675 M61
+rounds on the F-14, 400 Mk 12 rounds on the A-4E, 740 on the X-31, matching the
+gun capacities `retail.gun` already recovered independently.
+
 ## Envelopes (`:env`)
 
 One block per integer G load from `envMin` to `envMax`, 44 statements each:

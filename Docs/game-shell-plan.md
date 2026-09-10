@@ -440,25 +440,29 @@ developer toggle is on — any store. The toggle is labelled after the retail on
 wrong, and it is honest about what we know. Decoding the mask is a research task
 in §8, and it is the one thing that would let the screen offer real choices.
 
-New data contract `engine/src/data/retail-loadout.ts`:
+**Landed 2026-09-10.** The data half of this screen is implemented and
+verified: `python3 -m retail.loadout` exports a `.PT`'s stations and stores,
+`engine/src/data/retail-loadout.ts` is the validating contract and the weight
+arithmetic, and the aircraft port helper produces and installs an
+`<id>-loadout.json` alongside the existing bundle files. What remains is the
+screen itself. The shipped contract is:
 
 ```ts
-export interface StoreDefinition {
-  kind: 'weapon' | 'tank' | 'sensor' | 'ecm';
-  name: string; displayName: string;
-  weightLb: number; fuelLb?: number; roundsPerPod?: number;
-  iconPng?: string;                  // base64, CRC-validated
-}
-export interface Station {
-  index: number; flags: number; position: Vec3;
-  maxItems: number; maxWeight: number;
-  defaultStore: string; selectable: boolean;
-}
-export interface Loadout { stations: Record<number, { store: string; count: number }>; fuelLb: number; }
 export function parseRetailLoadout(value: unknown): RetailLoadout;
-export function loadoutWeightLb(loadout: Loadout, stores: ...): number;
-export function loadoutFuelLb(loadout: Loadout, stores: ..., internalFuelLb: number): number;
+export function defaultLoadout(loadout: RetailLoadout): Loadout;
+export function selectableStations(loadout: RetailLoadout): Station[];
+export function allowedStores(l: RetailLoadout, s: Station, unrestricted?: boolean): string[];
+export function storeLabel(store: StoreDefinition): string;
+export function storesWeightLb(l: RetailLoadout, chosen: Loadout): number;
+export function externalFuelLb(l: RetailLoadout, chosen: Loadout): number;
+export function totalFuelLb(l: RetailLoadout, chosen: Loadout): number;
+export function grossWeightLb(l: RetailLoadout, chosen: Loadout): number;
+export function validateLoadout(l, chosen, options?): string[];
+export const poundsToKilograms: (lb: number) => number;
 ```
+
+Store icons are not part of this contract. The `$*.PIC` sprites belong to the
+menu bundle in §4.5, keyed by the same store file names.
 
 ### 5.5 Debrief
 
@@ -510,8 +514,9 @@ Each step ends green on `bun run check` and is committed separately.
    Main menu, aircraft select, debrief. Gate: menu unit tests.
 5. **Retail menu bundle**: `port-menu.ts`, `retail-menu.ts`, `UiAudio`. The app
    must still run identically with no bundle installed.
-6. **Loadout screen** and `retail-loadout.ts`; fuel and stores feed
-   `MissionParams`; weight validation and display-only performance penalty.
+6. **Loadout screen** on the `retail-loadout.ts` contract landed on
+   2026-09-10; fuel and stores feed `MissionParams`; weight validation and
+   display-only performance penalty. Store icons come from the §4.5 bundle.
 7. **`sim/world/entities.ts`** and the mocked quick fight: three aircraft,
    deterministic spawn, fixed profiles, rendered with the floating origin
    preserved. Gate: `quickfight-smoke.ts` and the determinism test.

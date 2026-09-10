@@ -5,7 +5,7 @@ Newest entry first. Update the snapshot and add an entry for meaningful port wor
 keep commands, evidence, uncertainty, and a concrete next step. Baselines live in
 [baselines/](baselines/). The design brief describes the intended product.
 
-## Current snapshot — development 2026-09-09
+## Current snapshot — development 2026-09-10
 
 | Phase | Implemented | Acceptance / remaining work |
 |---|---|---|
@@ -14,7 +14,69 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
 | 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite, a shared sky highlight rolloff and terrain shading contrast | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
 | 4: flight model | Retail PT-envelope default with preserved assisted comparison/fallback and opt-in recovered-native-envelope backend; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, Default F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers, camera-projected gun pipper using nearer terrain or a 1,000 m base range, thick lower closing-range arc (hidden at/above 1 km) and target-input plumbing; cockpit-only HUD and armed-only reticle; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
-| 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request. Phase 6/7 groundwork brought forward 2026-09-09: retail AI script parser and VM interpreter, `.SEE` detection model, damage/hit-point model with the recovered performance penalties, swept gun-round hit geometry, and a reusable MFD bezel extracted for a future target page | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned. The new AI and combat modules are pure, unit-tested and verified against all 17 retail AI programs, but NONE of it is wired into the flight loop: no multi-aircraft world, no acquisition, no damage applied from rounds. Nine AI action semantics remain open; parser success is not flown-tactics parity |
+| 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request. Phase 6/7 groundwork brought forward 2026-09-09: retail AI script parser and VM interpreter, `.SEE` detection model, damage/hit-point model with the recovered performance penalties, swept gun-round hit geometry, and a reusable MFD bezel extracted for a future target page. 2026-09-10: game shell planned end to end in [game-shell-plan.md](game-shell-plan.md), and the aircraft port now exports `.PT` hardpoints and the `.JT`/`.GAS`/`.SEE`/`.ECM` stores they name into a validated engine contract | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned. The new AI and combat modules are pure, unit-tested and verified against all 17 retail AI programs, but NONE of it is wired into the flight loop: no multi-aircraft world, no acquisition, no damage applied from rounds. Nine AI action semantics remain open; parser success is not flown-tactics parity. The loadout data is exported, validated and installable but drives nothing: no loadout screen, stores do not feed mass, and the hardpoint `flags` compatibility mask and `maxWeight` unit are still undecoded |
+
+## 2026-09-10: game shell plan, and hardpoints and stores in the aircraft port
+
+Two things landed. First, [game-shell-plan.md](game-shell-plan.md) scopes the
+screens around the simulation — main menu, an explicit terrain-explorer mode, a
+mocked three-aircraft quick fight, and a pre-mission loadout screen — together
+with the `MissionParams` refactor that makes them possible and the test work each
+needs. It also records two format findings verified against local media: `.MNU`
+and `.DLG` are data-only `PL` images whose `CODE` section is a 38-byte widget
+record array with inline ASCII labels, and `.LAY` is sky/sea layers rather than
+UI. `CHOOSEAC.DLG` decodes to the main menu's exact geometry (header rect
+379, 80, 238, 361; eight buttons at x 31, width 180), which matches the converted
+`CHOOSEAC.png`. The formats index still lists all three as "unknown — UI"; that
+correction is sequenced as step 3 of the plan, alongside a `retail.mnu` decoder.
+
+Second, and brought forward from that plan at the user's request, the aircraft
+port now carries weapons and hardpoints:
+
+- `tools/retail/retail/loadout.py` exports a `.PT`'s `:hards` stations together
+  with the `.JT`, `.GAS`, `.SEE` and `.ECM` stores they name, classifying each by
+  its `structType` byte (7 weapon, 8 tank, 9 ECM, 10 sensor).
+- `engine/src/data/retail-loadout.ts` is the engine-side contract: a validating
+  parser in the style of `retail-gun.ts`, plus the pure weight and fuel
+  arithmetic a loadout screen needs (`defaultLoadout`, `allowedStores`,
+  `storesWeightLb`, `externalFuelLb`, `grossWeightLb`, `validateLoadout`).
+  Retail units are kept as pounds and feet; SI conversion is at the boundary.
+- `tools/flight/port-aircraft.ts` runs the new converter as a sixth step,
+  fails the port if a named store file is missing, if the loadout and gun
+  manifests disagree about the source `.PT`, or if the retail default loadout
+  does not itself validate, and records a `loadout` section in the port report.
+  `tools/flight/install-aircraft.ts` gained `--loadout`, installing
+  `appData/aircraft/<id>-loadout.json`.
+
+Measured on local media, 2026-09-10. F14.PT: 8 stations, 4 selectable, 8 stores,
+15,741 lb internal fuel, stock gross 65,876 lb against a 74,349 lb maximum.
+A4E.PT: 7 / 3 / 7, 4,434 lb, 22,426 against 25,000. F31.PT: 9 / 3 / 8, 9,975 lb,
+29,360 against 40,200. "Selectable" excludes the sensor and ECM slots and the
+internal cannon. Station `maxItems` independently reproduces the gun capacities
+`retail.gun` already recovered: 675 M61 rounds on the F-14, 400 Mk 12 on the
+A-4E, 740 on the X-31.
+
+Verification. `bun run check` clean: 324 tests, typecheck, lint, format. Five new
+Python tests in `tools/retail/tests/test_loadout.py` pass against local media and
+skip without it; full Python discovery is 89 tests, OK. Eleven new synthetic
+TypeScript tests cover parser rejection, station classification, the weight and
+fuel arithmetic and every validation message. All three aircraft ported end to
+end and validated; the bundles were not installed.
+
+Two `.PT` hardpoint fields remain **unresolved**, and both are recorded in
+[formats/pt.md](formats/pt.md) rather than guessed at. `flags` is the
+per-station compatibility mask — the original's own `ARMPLANE.MNU` offers
+"Cheat (load anything anywhere)", so a rule certainly exists — and its bits are
+undecoded, so `allowedStores` offers a station its own default and nothing else
+unless a caller explicitly asks for the unrestricted set. `maxWeight` is a byte
+that is not pounds (40 for a 975 lb AIM-54C, 5 for a 190 lb AIM-9M); it is
+probably a rack or pylon class. Hardpoint positions are raw words of unverified
+unit and are exported unconverted.
+
+Nothing here changes flight. Stores do not yet feed mass, and the `loadedDrag`
+family of penalties is exported for display only. Next: the `MissionParams`
+refactor, step 1 of the game shell plan, because it is what a loadout screen
+needs in order to hand its result to a flight.
 
 ## 2026-09-09: recover the retail AI virtual machine, sensors and damage data
 

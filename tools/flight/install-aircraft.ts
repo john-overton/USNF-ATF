@@ -4,6 +4,7 @@ import { mkdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { parseRetailCockpit } from '../../engine/src/flight/RetailCockpit';
 import { parseRetailGun } from '../../engine/src/data/retail-gun';
+import { parseRetailLoadout } from '../../engine/src/data/retail-loadout';
 import { parseRetailAircraft } from '../../engine/src/flight/RetailAircraft';
 import { parseRetailFlightProfile } from '../../engine/src/data/retail-flight';
 import { parseFlightSamples } from '../../engine/src/flight/FlightAudio';
@@ -13,7 +14,7 @@ const idIndex = args.indexOf('--id');
 const id = aircraftId(idIndex < 0 ? null : (args[idIndex + 1] ?? ''));
 if (idIndex >= 0) args.splice(idIndex, 2);
 const optional: Record<string, string> = {};
-for (const flag of ['--cockpit', '--gun']) {
+for (const flag of ['--cockpit', '--gun', '--loadout']) {
   const index = args.indexOf(flag);
   if (index < 0) continue;
   const value = args[index + 1];
@@ -25,7 +26,7 @@ if (args.some(arg => arg.startsWith('--')) || args.length > 4) throw new Error('
 const [source, dataRoot, audioSource, flightSource] = args;
 if (!source || !dataRoot)
   throw new Error(
-    'Usage: bun tools/flight/install-aircraft.ts extracted/flight/f14.json <app-data-root> [audio.json] [flight-profile.json] [--id f14|a4e|x31] [--cockpit cockpit.json] [--gun gun.json]',
+    'Usage: bun tools/flight/install-aircraft.ts extracted/flight/f14.json <app-data-root> [audio.json] [flight-profile.json] [--id f14|a4e|x31] [--cockpit cockpit.json] [--gun gun.json] [--loadout loadout.json]',
   );
 const files: { folder: string; name: string; text: string }[] = [];
 async function read(source: string, limit: number): Promise<string> {
@@ -57,6 +58,13 @@ if (optional['--gun']) {
   const sourceById = { f14: 'F14.PT', a4e: 'A4E.PT', x31: 'F31.PT' };
   if (gun.aircraftSource !== sourceById[id]) throw new Error('Gun aircraft identity mismatch');
   files.push({ folder: 'aircraft', name: `${id}-gun.json`, text });
+}
+if (optional['--loadout']) {
+  const text = await read(optional['--loadout'], 4_000_000);
+  const loadout = parseRetailLoadout(JSON.parse(text));
+  const sourceById = { f14: 'F14.PT', a4e: 'A4E.PT', x31: 'F31.PT' };
+  if (loadout.aircraftSource !== sourceById[id]) throw new Error('Loadout aircraft identity mismatch');
+  files.push({ folder: 'aircraft', name: `${id}-loadout.json`, text });
 }
 // Validate all supplied inputs before replacing any installed file.
 for (const file of files) {

@@ -9,7 +9,7 @@ conversion completed. Native game-flight parity is a separate milestone.
 ## Repeat an existing port
 
 The helper has reviewed recipes for **f14**, **a4e**, and **x31**. It runs the SH,
-PT, audio, cockpit and internal-gun converters, validates their output with the engine parsers, checks
+PT, audio, cockpit, internal-gun and loadout converters, validates their output with the engine parsers, checks
 profile identity and the selected scale, and writes a unique complete bundle.
 It does not automatically identify or rig an arbitrary new aircraft.
 
@@ -36,6 +36,7 @@ extracted/aircraft-ports/<id>/<timestamp-and-id>/
   audio/<id>.json           # PT-selected PCM and source hashes
   cockpits/<id>.json        # transparent retail frame and mirror masks
   <id>-gun.json             # PT/JT-selected gun, PCM and authored ballistics
+  <id>-loadout.json         # PT hardpoints and the JT/GAS/SEE/ECM stores they name
   port-report.json          # dimensions, moving groups, checks, hashes and limits
 ```
 
@@ -51,7 +52,12 @@ converted bytes inside the checkout's ignored extraction tree.
 
 The report records the source commit/working-tree state, tool versions, executed
 and reproduction commands, source/output hashes, dimensions, moving groups, PT
-mass/thrust/G rows and recipe caveats. Its visual/runtime acceptance starts as
+mass/thrust/G rows and recipe caveats. Its `loadout` section records the station
+and store counts, the gross weight of the retail default loadout against the
+aircraft's maximum take-off weight, and the hardpoint fields that remain
+unresolved. The helper fails the port if a store file a station names is
+missing, if the loadout and gun manifests disagree about the source `.PT`, or if
+the retail default loadout does not itself validate. Its visual/runtime acceptance starts as
 **pending**. Review it and record separate evidence in `Docs/baselines/phase-4.md`;
 do not turn those fields into “passed” just because the converter exited zero.
 
