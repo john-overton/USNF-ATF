@@ -3,7 +3,7 @@ import { getPlatform } from '../platform';
 import type { FsRoot } from '../platform/Platform';
 import type { MapWaypoint } from '../terrain/navigation-map';
 import type { TerrainDiagnostics } from '../terrain/viewer';
-import { wrapHeading } from '../flight/hud';
+import { headingDegreesFromYaw } from '../sim/flight';
 import { TerrainMap, useNavigationMap } from './TerrainMap';
 
 export function ExplorerNavigationOverlay({
@@ -24,7 +24,7 @@ export function ExplorerNavigationOverlay({
   return (
     <TerrainMap
       map={map}
-      aircraft={{ ...stats.camera, headingDegrees: wrapHeading(180 + (stats.yaw * 180) / Math.PI) }}
+      aircraft={{ ...stats.camera, headingDegrees: headingDegreesFromYaw(stats.yaw) }}
       markerLabel="Camera"
       selectedWaypointId={selectedId}
       onFlightFocus={onControlsFocus}

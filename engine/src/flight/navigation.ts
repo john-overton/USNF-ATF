@@ -1,4 +1,4 @@
-import { wrapHeading } from './hud';
+import { bearingDegrees } from '../sim/flight';
 
 export interface Waypoint {
   id: number;
@@ -17,7 +17,7 @@ export function applyWaypointAction(
   if (event.code === 'BracketRight') state.waypointIndex = (state.waypointIndex + 1) % 3;
 }
 
-/** Planar theater grid: east +X, north +Z. Range is horizontal, not slant range. */
+/** Planar theater grid: north +Z, east -X. Range is horizontal, not slant range. */
 export function waypointGuidance(
   position: { x: number; z: number },
   headingDegrees: number,
@@ -28,9 +28,15 @@ export function waypointGuidance(
   const distanceMeters = Math.hypot(dx, dz);
   // A bearing at the destination is undefined; hide the steering cue within 100m.
   const arrived = distanceMeters < 100;
-  const bearingDegrees = wrapHeading((Math.atan2(dx, dz) * 180) / Math.PI);
-  const relativeDegrees = ((bearingDegrees - headingDegrees + 540) % 360) - 180;
-  return { waypoint, distanceNm: distanceMeters / 1852, bearingDegrees, relativeDegrees, arrived };
+  const bearing = bearingDegrees(dx, dz);
+  const relativeDegrees = ((bearing - headingDegrees + 540) % 360) - 180;
+  return {
+    waypoint,
+    distanceNm: distanceMeters / 1852,
+    bearingDegrees: bearing,
+    relativeDegrees,
+    arrived,
+  };
 }
 
 export type WaypointGuidance = ReturnType<typeof waypointGuidance>;

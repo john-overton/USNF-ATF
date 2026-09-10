@@ -26,16 +26,20 @@ export interface NavigationMapData extends MapGrid {
   name: string;
 }
 
-/** Pixel centres, north up; coordinates remain theater metres, never floating-origin local. */
+/**
+ * Pixel centres, north up and east right; coordinates remain theater metres, never
+ * floating-origin local. The world is right-handed with +Z north, so east is -X and
+ * the theater x axis runs right to left across the map.
+ */
 export function mapPixelWorld(grid: MapGrid, x: number, y: number) {
   return {
-    x: ((x + 0.5) / grid.width) * grid.extents.width,
+    x: (1 - (x + 0.5) / grid.width) * grid.extents.width,
     z: (1 - (y + 0.5) / grid.height) * grid.extents.height,
   };
 }
 export function worldToMap(grid: MapGrid, x: number, z: number) {
   return {
-    x: (x / grid.extents.width) * grid.width,
+    x: (1 - x / grid.extents.width) * grid.width,
     y: (1 - z / grid.extents.height) * grid.height,
   };
 }
@@ -220,20 +224,22 @@ export async function buildNavigationMap(
       const chunk = chunks[next++]!;
       const samples = await decodeChunk(await read(chunk.path), chunk);
       signal?.throwIfAborted();
-      const sw = worldToMap(grid, chunk.originX, chunk.originZ);
-      const ne = worldToMap(
+      // Either theater corner can land on either side of the raster, so bound the
+      // scan by the extremes rather than assuming which corner is left or top.
+      const a = worldToMap(grid, chunk.originX, chunk.originZ);
+      const b = worldToMap(
         grid,
         chunk.originX + 255 * chunk.spacing,
         chunk.originZ + 255 * chunk.spacing,
       );
       for (
-        let y = Math.max(0, Math.ceil(ne.y - 0.5));
-        y < Math.min(grid.height, Math.ceil(sw.y - 0.5));
+        let y = Math.max(0, Math.ceil(Math.min(a.y, b.y) - 0.5));
+        y < Math.min(grid.height, Math.ceil(Math.max(a.y, b.y) - 0.5));
         y++
       ) {
         for (
-          let x = Math.max(0, Math.ceil(sw.x - 0.5));
-          x < Math.min(grid.width, Math.ceil(ne.x - 0.5));
+          let x = Math.max(0, Math.ceil(Math.min(a.x, b.x) - 0.5));
+          x < Math.min(grid.width, Math.ceil(Math.max(a.x, b.x) - 0.5));
           x++
         ) {
           const position = mapPixelWorld(grid, x, y);

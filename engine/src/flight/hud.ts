@@ -1,4 +1,9 @@
-import { flightEuler, type FlightState, type FlightTelemetry } from '../sim/flight';
+import {
+  flightEuler,
+  headingDegreesFromYaw,
+  type FlightState,
+  type FlightTelemetry,
+} from '../sim/flight';
 
 // HUD is 75% of its old size; compensate so adjacent five-degree rungs
 // are twice as far apart on screen, not merely inside the SVG viewBox.
@@ -18,8 +23,8 @@ export function windReadoutText(bearingDegrees: number, speedMetersPerSecond: nu
 /** Aircraft-relative instruments, not a projection through either chase camera. */
 export function flightHudReadout(state: FlightState, telemetry: FlightTelemetry) {
   const { pitchRad, yawRad, rollRad } = flightEuler(state.attitude);
-  // World +Z is north. The aircraft points south at identity, and positive yaw turns left.
-  const heading = wrapHeading(180 + yawRad * DEG);
+  // World +Z is north and east is -X, so bearing is 180 - yaw: a right turn counts up.
+  const heading = headingDegreesFromYaw(yawRad);
   const q = state.attitude;
   const v = state.velocity;
   // Rotate ground velocity by the inverse aircraft quaternion into body coordinates.

@@ -444,6 +444,31 @@ export function sampleSky(
   return out;
 }
 
+/**
+ * Display transfer for sky radiance. The table is unbounded -- around a daytime sun the
+ * Mie forward lobe carries roughly 25 degrees of sky past 1.0 -- and nothing downstream
+ * tone maps, so all of that used to clip to one flat white plate with a hard rim. That is
+ * the washout. Compressing per channel above a knee instead keeps a readable gradient out
+ * of the aureole, and keeps the channel ratios that clipping flattens, so the blue comes
+ * back a few degrees off the sun.
+ *
+ * Below the knee it is the identity, so the calibrated clear-sky and night values are
+ * untouched. The sky shader repeats this exactly, and the scene fog is run through it here
+ * as well: the dome and the haze the terrain fades into must agree at the horizon or they
+ * meet in a band. `SKY_HIGHLIGHT_KNEE` is the single number both copies share.
+ */
+export const SKY_HIGHLIGHT_KNEE = 0.45;
+export function skyHighlightRolloff(
+  color: readonly [number, number, number],
+): [number, number, number] {
+  const knee = SKY_HIGHLIGHT_KNEE;
+  const roll = (c: number): number => {
+    if (!(c > knee)) return c;
+    return Math.min(c, knee + (1 - knee) * (1 - Math.exp(-(c - knee) / (1 - knee))));
+  };
+  return [roll(color[0]), roll(color[1]), roll(color[2])];
+}
+
 /** Horizon colour in a given world azimuth, for the single-colour scene fog. */
 export function skyFogColor(table: SkyTable, viewAzimuthRad: number): [number, number, number] {
   return sampleSky(table, 0, viewAzimuthRad - table.sunAzimuthRad);

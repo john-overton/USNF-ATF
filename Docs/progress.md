@@ -12,9 +12,97 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 0: retail toolkit | Containers, images/fonts and data readers; bounded nearest-detail F-14 static export with textures | F-14 is recognizable in packaged flight. General SH interpreter, native animation semantics and unified deliverable remain open |
 | 1: scaffold and shell | Dev lifecycle/asset fixes, platform contract tests, fresh probe, Mac packaging | macOS tested including DMG launch; Linux hardware/build/checks deferred by user |
 | 2: terrain pipeline | Copernicus DEM/WBM fetch, LAEA warp, roughness-selected 30m detail, filtered 100–2700m chunks, quantization, checksums, probe, codec comparison, bounded coastline smoothing, optional RGB atlas, offline coastal color repair, seasonal palette bakes and classified shoreline ribbons | Real Ukraine build and every-chunk probe pass; installed locally. Linux baseline deferred |
-| 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. Linux deferred |
-| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
+| 3: terrain renderer | Streaming, quadtree height/normal/tint morph, complete-coverage source fades, floating origin, free camera, bounded water, shared height/normal edges, eased edge ownership, satellite/seasonal color maps, classified textured shoreline ribbons/banks, conservative coastal coverage masks, analytic water-plane depth, FXAA, worker water triangulation, 24–300 km range with narrower fog and diagnostics; scattering sky table driving the sky dome, sun/moon key light, hemisphere ambient and dynamic fog, aircraft and cloud shadows, and a ray-marched cumulus/cirrus pass behind a quality selector with a depth-aware composite and a shared sky highlight rolloff | Polished packaged coast/detail ~60 fps at 1440p, held at every time of day with clouds at half resolution; cloud cost measured with presentation unlocked (+3.4 ms half, +11.7 ms full). Current 0↔1 fade passes. Prior 1↔2/24km lateral evidence predates polish. Native GPU memory counters captured; physical-DRAM-only traffic is not established. Live counters and fine edges remain open. The theater renders mirrored east to west against its own manifest projection; see the 2026-09-09 compass entry. Linux deferred |
+| 4: flight model | Preserved assisted default plus opt-in retail-envelope and recovered-native-envelope backends; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | 5–10 | Plans and importer contracts only | Combat, missions, in-app retail import and release work not implemented |
+
+## 2026-09-09: compass direction, cloud silhouettes, sun highlight and autopilot
+
+A polish pass over four things the user reported flying the practice mission.
+
+**The compass and the map rotation ran backwards.** The scene is right-handed
+with `+Y` up and `+Z` north, so east is `−X`; `sky.ts`, `solar.ts` and the wind
+readout already assumed that, but the HUD did not. `flightHudReadout` computed
+`180° + yaw`, which counts *down* through a right turn, because a right bank
+drives `yaw` down in both flight backends. Heading is now
+`headingDegreesFromYaw` = `180° − yaw`, shared from `sim/flight` so the HUD, the
+explorer overlay and the autopilot cannot diverge; waypoint bearings use a
+matching `bearingDegrees` with east as `−X`; and `worldToMap`/`mapPixelWorld`
+mirror the raster's x axis so the aircraft marker and the heading-up rotation
+match the ground the aeroplane is actually crossing. Tests updated to the
+corrected convention, plus a new closed-loop check that a right turn raises the
+heading and that the heading agrees with the bearing of the velocity the
+aeroplane actually has, measured straight off the world axes.
+
+*Uncovered while fixing it, and left open:* the theater manifest is
+east-positive in `x` and north-positive in `z` — Ukraine's
+`projection.originX = −280665` puts Crimea at `x ≈ 486 km` of 561 km — and the
+renderer places both unchanged, which a right-handed frame cannot honour. So the
+terrain is drawn mirrored east to west and the map raster inherits it. Everything
+is now self-consistent with what the pilot sees, but the map is a mirror of real
+Ukraine, and it was before this change too; the difference is that the marker
+used to lie about it as well. Recorded with the required fix in
+[environment-plan.md](environment-plan.md). Not attempted here: it has to move
+contact sampling and visuals in the same step.
+
+**The aircraft went fuzzy with cloud behind it.** The cloud march runs at half
+resolution and the composite upsampled it bilinearly, so on the pixels covering
+the aircraft — where the march stopped at the canopy and contributed nothing —
+neighbouring texels that marched past into the deck behind bled a bright fringe
+over the silhouette. The composite now takes scene depth and the marched texel
+size, and where the four surrounding low-resolution texels disagree about depth
+it takes the depth-matched tap instead of the blend. Away from silhouettes every
+tap agrees and the bilinear result is kept, so the clouds themselves are not
+sharpened and cloud genuinely in front of the aircraft still obscures it.
+
+**The daytime sun was a blown-out plate.** Nothing in the pipeline tone maps and
+the scattering table is unbounded radiance: measured at a 48.7° sun, the sky is
+1.34–1.50 within a couple of degrees of the disc and still near 1.0 at 12°, so
+roughly 25° of sky clipped to flat white with a hard rim and the disc itself was
+invisible inside it. `skyHighlightRolloff` compresses per channel above a 0.45
+knee and is the identity below it, so the calibrated clear-sky, horizon and night
+values are untouched; the sky shader carries the same curve with the knee
+interpolated from the model so the two cannot drift, and the scene fog is run
+through it as well or the dome and the haze part company at the horizon. The sun
+and moon discs are added after the transfer — rolled off they would land within a
+hundredth of the sky beside them — and the disc now reaches full brightness at
+the sun's true angular radius, fading over a third of it again rather than over a
+second whole radius. Before and after screenshots at noon: a solid white ball
+with no visible disc, versus a graded aureole, blue sky a few degrees out, and a
+crisp disc.
+
+**Autopilot, as in USNF '97 and ATF.** New pure `sim/flight/autopilot.ts`. `A`
+holds the heading and altitude captured at engagement; `Ctrl-A` keeps the
+altitude hold and steers to the selected waypoint's bearing, falling back to the
+captured heading when no waypoint is selected or the aeroplane is on top of one.
+Each key toggles its own mode off, switching between them keeps the capture, and
+touching any stick axis past 0.15 hands the aeroplane back. It flies through the
+ordinary control deflections, so the flight model, the wind and the ground stay
+in charge and both backends behave the same; the loops ask for a rate and
+normalise by the aircraft's own limit, which keeps the gains physical and lets
+the model's own `responseSeconds` lag do the damping. Bank is capped at 30°,
+climb at 20 m/s. The map overlay pushes the selected waypoint down through
+`setNavigationTarget`, and the HUD shows `AP HDG ALT` or `AP NAV`.
+
+Verification, all on this Mac against this source:
+
+- `bun run check` — typecheck, lint, format and 213 bun tests pass.
+- `bun run probe --fresh` — hardware ANGLE Metal on M3, no software fallback.
+- `bun run harness` — all 16 flight cases pass, including the five wind cases.
+- Electron driven over CDP at `mode=flight`: no shader compilation errors and no
+  exceptions; the only console output is three's `PCFSoftShadowMap` deprecation
+  warning, which predates this work.
+- Autopilot in the running app, from a deliberate upset at 2914 m on 180°:
+  `A` recovered to 178° and 2866 m within 30 s; `Ctrl-A` picked up bearing 348°
+  and turned 178° → 238° → 298° the short way while holding 2920 m; an arrow-key
+  nudge disengaged it to `off` in the same frame the pilot's input appeared.
+- Six closed-loop autopilot tests fly the preserved assisted model for 90–120 s
+  and gate bank, heading, altitude and stall.
+
+Open: the mirrored theater above. The autopilot does not manage throttle, which
+matches both originals but means a level hold at low power will slowly bleed
+speed. Nothing here touches flight forces, so the preserved assisted feel is
+unchanged.
 
 ## 2026-09-09: theater clock, wind, sky, shadows and volumetric clouds
 

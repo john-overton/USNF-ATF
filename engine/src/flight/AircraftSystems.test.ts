@@ -12,6 +12,7 @@ function commands(): AircraftCommands & { resetRequested: boolean } {
     flapsDown: false,
     airbrakeDown: false,
     cameraMode: 'world-up',
+    autopilot: 'off',
     resetRequested: false,
   };
 }

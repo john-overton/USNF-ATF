@@ -362,15 +362,57 @@ void main() {
 }
 `;
 
-/** Bilinear upsample for now; depth-aware upsampling is the follow-up if edges smear. */
+/**
+ * Depth-aware upsample. The march runs at a fraction of the screen, and each of its
+ * texels stopped at whatever the scene depth was under its own centre. A plain bilinear
+ * read blends across that: on the pixels covering the aircraft, where the march was
+ * stopped at the canopy and contributed nothing, it mixes in neighbouring texels that
+ * marched right past the aircraft into the cloud deck behind it. That is the bright
+ * fringe that makes the aircraft look fuzzy whenever cloud renders behind it.
+ *
+ * So where the four surrounding low-resolution texels disagree about depth -- a
+ * silhouette -- take the one whose depth matches this pixel instead of the blend. Away
+ * from silhouettes every tap agrees and the smoother bilinear result is kept, so this
+ * costs nothing in the interior and does not sharpen the clouds themselves. Cloud in
+ * front of the aircraft is unaffected: there the march never reached the aircraft
+ * depth, every tap agrees, and the aircraft is correctly obscured.
+ */
 const COMPOSITE_FRAGMENT = /* glsl */ `
 precision highp float;
 varying vec2 vUv;
 uniform sampler2D tDiffuse;
 uniform sampler2D tClouds;
+uniform sampler2D tDepth;
+uniform vec2 cloudTexel;
+uniform float cloudHasDepth;
+
+/**
+ * Logarithmic depth, so this is a ratio of view distances rather than metres: 0.02 of
+ * the [0,1] range is about a 9% step at any distance. Small enough to catch an aircraft
+ * against a cloud deck, large enough that a lit terrain slope does not trip it.
+ */
+const float DEPTH_EDGE = 0.02;
+
 void main() {
-  vec4 cloud = texture2D(tClouds, vUv);
   vec3 scene = texture2D(tDiffuse, vUv).rgb;
+  vec4 cloud = texture2D(tClouds, vUv);
+  if (cloudHasDepth > 0.5) {
+    float here = texture2D(tDepth, vUv).x;
+    vec2 base = floor(vUv / cloudTexel - 0.5) + 0.5;
+    float nearest = 1e20;
+    float furthest = 0.0;
+    vec4 matched = cloud;
+    for (int i = 0; i < 4; i++) {
+      vec2 tap = (base + vec2(float(i - 2 * (i / 2)), float(i / 2))) * cloudTexel;
+      float delta = abs(texture2D(tDepth, tap).x - here);
+      furthest = max(furthest, delta);
+      if (delta < nearest) {
+        nearest = delta;
+        matched = texture2D(tClouds, tap);
+      }
+    }
+    if (furthest > DEPTH_EDGE) cloud = matched;
+  }
   gl_FragColor = vec4(scene * cloud.a + cloud.rgb, 1.0);
 }
 `;
@@ -428,7 +470,13 @@ export class CloudPass extends Pass {
       depthWrite: false,
     });
     this.compositeMaterial = new ShaderMaterial({
-      uniforms: { tDiffuse: { value: null }, tClouds: { value: null } },
+      uniforms: {
+        tDiffuse: { value: null },
+        tClouds: { value: null },
+        tDepth: { value: null },
+        cloudTexel: { value: new Vector2(1, 1) },
+        cloudHasDepth: { value: 0 },
+      },
       vertexShader: VERTEX,
       fragmentShader: COMPOSITE_FRAGMENT,
       depthTest: false,
@@ -535,8 +583,13 @@ export class CloudPass extends Pass {
     renderer.clear();
     this.quad.render(renderer);
 
-    this.compositeMaterial.uniforms.tDiffuse!.value = readBuffer.texture;
-    this.compositeMaterial.uniforms.tClouds!.value = this.target.texture;
+    const c = this.compositeMaterial.uniforms;
+    c.tDiffuse!.value = readBuffer.texture;
+    c.tClouds!.value = this.target.texture;
+    // The same depth the march clipped against, so the taps compare like with like.
+    c.tDepth!.value = depth ?? null;
+    c.cloudHasDepth!.value = depth ? 1 : 0;
+    (c.cloudTexel!.value as Vector2).set(1 / this.lowWidth, 1 / this.lowHeight);
     this.quad.material = this.compositeMaterial;
     renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
     if (this.clear) renderer.clear();

@@ -101,3 +101,14 @@ test('the march shader reconstructs log depth, clips to it and honours the step 
   expect(MARCH_FRAGMENT).toContain(SHADOW_CHUNK);
   expect(CloudPass.SHADOW_CHUNK).toBe(SHADOW_CHUNK);
 });
+
+test('the composite resolves the marched clouds against scene depth at silhouettes', () => {
+  const pass = new CloudPass(new PerspectiveCamera(60, 1, 5, 400000));
+  const uniforms = (pass as unknown as { compositeMaterial: { uniforms: Record<string, unknown> } })
+    .compositeMaterial.uniforms;
+  // Without the scene depth and the marched texel size the composite can only blend,
+  // which is what smeared cloud over the aircraft whenever cloud rendered behind it.
+  for (const name of ['tDiffuse', 'tClouds', 'tDepth', 'cloudTexel', 'cloudHasDepth'])
+    expect(Object.keys(uniforms)).toContain(name);
+  pass.dispose();
+});

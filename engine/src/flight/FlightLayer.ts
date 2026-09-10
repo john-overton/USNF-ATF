@@ -34,6 +34,13 @@ import {
 import { GroundSampler, type PracticeStrip } from './GroundSampler';
 import { preparePractice } from './practice';
 import { FlightInput, type PilotControls } from './FlightInput';
+import {
+  autopilotCommand,
+  captureHold,
+  type AutopilotHold,
+  type AutopilotMode,
+} from '../sim/flight/autopilot';
+import { bearingDegrees } from '../sim/flight';
 import { flightCamera } from './FlightCamera';
 import { createAircraftSystems, stepAircraftSystems } from './AircraftSystems';
 import { FlightAudio } from './FlightAudio';
@@ -89,6 +96,9 @@ export interface FlightDiagnostics {
   afterburnerThrustN: number;
   flightProfileSha256: string | null;
   cameraMode: string;
+  autopilot: AutopilotMode;
+  /** Bearing the waypoint hold is steering to, or null when it is holding heading. */
+  autopilotBearingDeg: number | null;
   waypointIndex: number;
   cameraUp: { x: number; y: number; z: number };
   engineRunning: boolean;
@@ -146,6 +156,9 @@ export class FlightLayer {
   private waiting = false;
   private disposed = false;
   private teleportRequest = 0;
+  private autopilotHold: AutopilotHold | undefined;
+  private autopilotEngaged: AutopilotMode = 'off';
+  private navigationTarget: { id: number; x: number; z: number } | undefined;
   private airborneArmed = this.approach || this.airborneStart;
   private readonly environment: FlightEnvironment;
   /** The theater clock and wind field; the terrain viewer owns and advances it. */
@@ -362,6 +375,49 @@ export class FlightLayer {
     this.resetFuelFraction = this.fuel.fuelKg / this.fuel.capacityKg;
     this.updateFuelMass();
   }
+  /**
+   * The selected waypoint, in theater metres, for the waypoint autopilot. The map
+   * overlay owns the waypoint list, so it pushes the selection down here rather than
+   * the flight layer reaching up into React state.
+   */
+  setNavigationTarget(point: { id: number; x: number; z: number } | undefined): void {
+    this.navigationTarget =
+      point && [point.x, point.z].every(Number.isFinite) ? { ...point } : undefined;
+  }
+  /** Bearing to the selected waypoint, or undefined when there is nothing to steer to. */
+  private navigationBearing(): number | undefined {
+    const point = this.navigationTarget;
+    if (!point) return undefined;
+    const dx = point.x - this.state.position.x;
+    const dz = point.z - this.state.position.z;
+    // On top of the waypoint the bearing swings wildly; hold heading instead.
+    return Math.hypot(dx, dz) < 500 ? undefined : bearingDegrees(dx, dz);
+  }
+  private autopilotControls(controls: PilotControls): PilotControls {
+    const mode = this.input.autopilot;
+    if (mode === 'off' || this.state.status !== 'airborne') {
+      if (this.state.status !== 'airborne') this.input.autopilot = 'off';
+      this.autopilotEngaged = this.input.autopilot;
+      this.autopilotHold = undefined;
+      return controls;
+    }
+    // Engaging captures the current heading and altitude; switching between the two
+    // modes keeps that capture, so Ctrl-A from a level hold does not step the altitude.
+    if (this.autopilotEngaged === 'off' || !this.autopilotHold)
+      this.autopilotHold = captureHold(this.state);
+    this.autopilotEngaged = mode;
+    return {
+      ...controls,
+      ...autopilotCommand(
+        mode,
+        this.autopilotHold,
+        this.state,
+        this.telemetry,
+        this.definition,
+        this.navigationBearing(),
+      ),
+    };
+  }
   async teleportToWaypoint(point: TeleportWaypoint): Promise<void> {
     const request = ++this.teleportRequest;
     if (this.disposed) throw new Error('Flight has been closed');
@@ -441,7 +497,7 @@ export class FlightLayer {
       if (wind) this.environment.wind = wind;
       else delete this.environment.wind;
       if (this.fuel.fuelKg === 0) this.input.engineRunning = false;
-      this.controls = this.input.sample(dt);
+      this.controls = this.autopilotControls(this.input.sample(dt));
       if (!AIRCRAFT[this.aircraftId].afterburner) this.input.afterburner = false;
       if (!AIRCRAFT[this.aircraftId].hook) this.input.hookDown = false;
       this.systems = stepAircraftSystems(this.systems, this.input, dt);
@@ -664,6 +720,9 @@ export class FlightLayer {
       flightProfileSha256: this.useRetail ? this.profile!.source.sha256 : null,
       modelTriangles: this.model?.triangles ?? 0,
       cameraMode: this.input.cameraMode,
+      autopilot: this.input.autopilot,
+      autopilotBearingDeg:
+        this.input.autopilot === 'waypoint' ? (this.navigationBearing() ?? null) : null,
       waypointIndex: this.input.waypointIndex,
       cameraUp: { ...this.pose().up },
       engineRunning: this.input.engineRunning,

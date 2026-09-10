@@ -4,11 +4,12 @@ import { updateHeldPilotKeys } from './FlightInput';
 
 test('navigation bearings use east/north coordinates and shortest signed heading error', () => {
   const position = { x: 200000, z: 300000 };
+  // +Z is north and east is -X, so a waypoint further along +X lies due west.
   for (const [dx, dz, bearing] of [
     [0, 1852, 0],
-    [1852, 0, 90],
+    [-1852, 0, 90],
     [0, -1852, 180],
-    [-1852, 0, 270],
+    [1852, 0, 270],
   ]) {
     const result = waypointGuidance(position, 350, {
       id: 1,

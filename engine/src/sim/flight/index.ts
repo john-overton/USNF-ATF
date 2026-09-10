@@ -89,6 +89,24 @@ function rotate(q: Quaternion, v: Vec3): Vec3 {
   const r = multiply(multiply(q, { ...v, w: 0 }), conjugate(q));
   return { x: r.x, y: r.y, z: r.z };
 }
+/**
+ * Compass bearing of a yaw angle, degrees clockwise from north.
+ *
+ * The world is right-handed with +Y up and +Z north, so east is -X (see
+ * Docs/environment-plan.md, and the sky and solar models, which already assume
+ * it). A yaw of theta puts the nose along (-sin theta, 0, -cos theta): the north
+ * component is -cos theta and the east component is +sin theta, so the bearing is
+ * 180 - theta, and a right turn increases it.
+ */
+export function headingDegreesFromYaw(yawRad: number): number {
+  const degrees = 180 - (yawRad * 180) / Math.PI;
+  return ((degrees % 360) + 360) % 360;
+}
+/** Compass bearing from one theater position to another, using east = -X. */
+export function bearingDegrees(deltaX: number, deltaZ: number): number {
+  const degrees = (Math.atan2(-deltaX, deltaZ) * 180) / Math.PI;
+  return ((degrees % 360) + 360) % 360;
+}
 /** Three YXZ convention: identity forward -Z, up +Y, right +X; positive yaw turns left. */
 export function attitudeFromEuler(pitchRad: number, yawRad: number, rollRad: number): Quaternion {
   const p = { x: Math.sin(pitchRad / 2), y: 0, z: 0, w: Math.cos(pitchRad / 2) };

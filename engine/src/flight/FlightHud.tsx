@@ -2,6 +2,7 @@ import { useId } from 'react';
 import type { FlightDiagnostics } from './FlightLayer';
 import { flightHudReadout, windReadoutText, wrapHeading, HUD_PITCH_PIXELS_PER_DEGREE } from './hud';
 import type { WaypointGuidance } from './navigation';
+import type { AutopilotMode } from '../sim/flight/autopilot';
 
 /** Original SVG instruments; the retail HUD is an x86 plug-in, not browser artwork. */
 export function FlightHud({
@@ -10,12 +11,14 @@ export function FlightHud({
   airbrakeFraction,
   navigation,
   navigationStatus,
+  autopilot = 'off',
 }: {
   flight: FlightDiagnostics;
   flapFraction?: number;
   airbrakeFraction?: number;
   navigation?: WaypointGuidance | undefined;
   navigationStatus?: string | undefined;
+  autopilot?: AutopilotMode;
 }) {
   const clip = useId();
   const hud = flightHudReadout(flight.state, flight.telemetry);
@@ -229,6 +232,9 @@ export function FlightHud({
         </text>
         <text x="650" y="514" textAnchor="end" fontSize="13">
           {flight.controls.brake && flight.status === 'grounded' ? 'WHEEL BRAKE' : ''}
+        </text>
+        <text data-hud="autopilot" x="110" y="538" fontSize="13">
+          {autopilot === 'level' ? 'AP HDG ALT' : autopilot === 'waypoint' ? 'AP NAV' : ''}
         </text>
         <text data-hud="wind" x="380" y="459" textAnchor="middle" fontSize="13">
           {windReadoutText(flight.windBearingDeg, flight.windSpeed)}

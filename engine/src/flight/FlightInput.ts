@@ -1,6 +1,9 @@
 import { applyWaypointAction } from './navigation';
+import type { AutopilotMode } from '../sim/flight/autopilot';
 
 export type ChaseCameraMode = 'attitude' | 'world-up';
+/** Past this on any axis the pilot has taken the aeroplane back, as in both originals. */
+export const AUTOPILOT_OVERRIDE = 0.15;
 export interface AircraftCommands {
   throttle: number;
   engineRunning: boolean;
@@ -10,11 +13,13 @@ export interface AircraftCommands {
   flapsDown: boolean;
   airbrakeDown: boolean;
   cameraMode: ChaseCameraMode;
+  autopilot: AutopilotMode;
 }
 /** Discrete actions are edge-triggered; browser key repeat must not toggle systems. */
 export function applyPilotAction(
   state: AircraftCommands & { resetRequested: boolean },
-  event: Pick<KeyboardEvent, 'type' | 'code' | 'repeat'>,
+  event: Pick<KeyboardEvent, 'type' | 'code' | 'repeat'> &
+    Partial<Pick<KeyboardEvent, 'ctrlKey' | 'metaKey'>>,
 ): void {
   if (event.type !== 'keydown' || event.repeat) return;
   const preset = /^Digit([1-6])$/.exec(event.code);
@@ -22,6 +27,12 @@ export function applyPilotAction(
     const index = Number(preset[1]);
     state.throttle = Math.min(1, (index - 1) / 4);
     state.afterburner = index === 6;
+  }
+  // A holds straight and level, Ctrl-A flies the selected waypoint; each key toggles
+  // its own mode off, and switching between them does not require disengaging first.
+  if (event.code === 'KeyA') {
+    const wanted: AutopilotMode = event.ctrlKey || event.metaKey ? 'waypoint' : 'level';
+    state.autopilot = state.autopilot === wanted ? 'off' : wanted;
   }
   if (event.code === 'KeyT') state.engineRunning = !state.engineRunning;
   if (event.code === 'KeyG') state.gearDown = !state.gearDown;
@@ -45,6 +56,7 @@ export function deadzone(value: number, zone = 0.12): number {
   return Math.sign(value) * Math.min(1, (Math.abs(value) - zone) / (1 - zone));
 }
 const PILOT_KEYS = new Set([
+  'KeyA',
   'BracketLeft',
   'BracketRight',
   'ArrowUp',
@@ -99,6 +111,7 @@ export class FlightInput {
   flapsDown = false;
   airbrakeDown = false;
   cameraMode: ChaseCameraMode = 'world-up';
+  autopilot: AutopilotMode = 'off';
   resetRequested = false;
   waypointIndex = 0;
   gamepadConnected = false;
@@ -140,34 +153,30 @@ export class FlightInput {
     const trigger = (pad?.buttons[7]?.value ?? 0) - (pad?.buttons[6]?.value ?? 0);
     this.throttle = Math.max(0, Math.min(1, this.throttle + (up + trigger) * dt * 0.4));
     if (up + trigger < 0) this.afterburner = false;
+    const axis = (value: number): number => Math.max(-1, Math.min(1, value));
+    const pitch = axis(
+      Number(this.keys.has('ArrowDown')) -
+        Number(this.keys.has('ArrowUp')) +
+        deadzone(pad?.axes[1] ?? 0),
+    );
+    const roll = axis(
+      Number(this.keys.has('ArrowRight')) -
+        Number(this.keys.has('ArrowLeft')) +
+        deadzone(pad?.axes[0] ?? 0),
+    );
+    const yaw = axis(
+      Number(this.keys.has('KeyE')) - Number(this.keys.has('KeyQ')) + deadzone(pad?.axes[2] ?? 0),
+    );
+    // Touching the stick hands the aeroplane back rather than fighting the hold.
+    if (
+      this.autopilot !== 'off' &&
+      Math.max(Math.abs(pitch), Math.abs(roll), Math.abs(yaw)) > AUTOPILOT_OVERRIDE
+    )
+      this.autopilot = 'off';
     return {
-      pitch: Math.max(
-        -1,
-        Math.min(
-          1,
-          Number(this.keys.has('ArrowDown')) -
-            Number(this.keys.has('ArrowUp')) +
-            deadzone(pad?.axes[1] ?? 0),
-        ),
-      ),
-      roll: Math.max(
-        -1,
-        Math.min(
-          1,
-          Number(this.keys.has('ArrowRight')) -
-            Number(this.keys.has('ArrowLeft')) +
-            deadzone(pad?.axes[0] ?? 0),
-        ),
-      ),
-      yaw: Math.max(
-        -1,
-        Math.min(
-          1,
-          Number(this.keys.has('KeyE')) -
-            Number(this.keys.has('KeyQ')) +
-            deadzone(pad?.axes[2] ?? 0),
-        ),
-      ),
+      pitch,
+      roll,
+      yaw,
       throttle: this.throttle,
       brake: this.airbrakeDown || Boolean(pad?.buttons[1]?.pressed),
     };
@@ -182,6 +191,7 @@ export class FlightInput {
     this.flapsDown = false;
     this.airbrakeDown = false;
     this.cameraMode = 'world-up';
+    this.autopilot = 'off';
     this.resetRequested = false;
     this.keys.clear();
   }

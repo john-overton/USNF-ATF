@@ -63,10 +63,29 @@ Harness cases to add (`tools/harness`):
 
 ## Coordinate conventions (from the source)
 
-- World `+Y` is up, `+Z` is north, `+X` is west. The HUD computes heading as
-  `180° + yaw`, and the aircraft points toward `−Z` (south) at identity.
+- World `+Y` is up, `+Z` is north, `+X` is west. The aircraft points toward `−Z`
+  (south) at identity, so the HUD computes heading as `180° − yaw`
+  (`headingDegreesFromYaw` in `engine/src/sim/flight/index.ts`).
 - Therefore east = `−X`. A compass direction `θ` (degrees clockwise from north)
   maps to the unit vector `(x: −sin θ, y: 0, z: cos θ)`.
+- This is forced, not chosen. The scene is right-handed with `+Y` up, so once
+  `+Z` is north the axis to the pilot's right when facing north is `−X`. A right
+  bank drives `yaw` down (`stepFlight`'s turn term), so only `180° − yaw` counts
+  the compass up through a right turn. Corrected 2026-09-09; the earlier
+  `180° + yaw` ran the HUD tape, the map rotation and the waypoint bearings
+  backwards, and disagreed with the sun this same document places.
+- **Known defect, not fixed here.** The theater manifest's projection is
+  east-positive in `x` and north-positive in `z` (Ukraine's `projection.originX`
+  is `−280665`, which puts Crimea at `x ≈ 486 km` of a 561 km theater), and the
+  renderer places both axes into the scene unchanged. Two axes cannot both be
+  positive-east and positive-north in a right-handed frame, so the theater is
+  drawn mirrored east to west, and the navigation map raster, built from the same
+  chunks, inherits it. Everything downstream is self-consistent — the compass, the
+  map marker, heading-up rotation and the sun all agree with what the pilot flies
+  over — but the terrain is a mirror of the real place. Fixing it means negating
+  theater `x` at every point where it enters the scene (contact sampling, chunk
+  placement, water, waypoints, teleport, the floating origin and the map), and
+  contact must move in exactly the same step as the visuals.
 - The theater manifest projection is LAEA centered at 46.5° N, 31.5° E.
   Sun/moon use that single center; across the 560 km theater the sun direction
   differs by under 5°, which is invisible.

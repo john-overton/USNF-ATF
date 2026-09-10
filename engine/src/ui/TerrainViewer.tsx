@@ -1,5 +1,5 @@
 import { AIRCRAFT } from '../flight/aircraft-catalog';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPlatform } from '../platform';
 import { FlightNavigationOverlay } from '../flight/FlightNavigationOverlay';
 import type { FsRoot } from '../platform/Platform';
@@ -27,6 +27,9 @@ export function TerrainViewer() {
   const [rootPath, setRootPath] = useState('');
   const canvas = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<ReturnType<typeof startTerrainViewer> | null>(null);
+  const navigationTarget = useCallback((waypoint: MapWaypoint | undefined) => {
+    viewerRef.current?.setNavigationTarget(waypoint);
+  }, []);
   const teleport = async (waypoint: MapWaypoint) => {
     if (!viewerRef.current) throw new Error('Terrain viewer is not ready');
     await viewerRef.current.teleportToWaypoint(waypoint);
@@ -79,7 +82,7 @@ export function TerrainViewer() {
         tabIndex={0}
         aria-label={
           flightMode
-            ? 'Practice flight. Arrows pitch and roll, brackets select waypoint.'
+            ? 'Practice flight. Arrows pitch and roll, A holds straight and level, brackets select waypoint.'
             : 'Terrain free camera. WASD move, Q E altitude, drag to look.'
         }
       />
@@ -91,6 +94,7 @@ export function TerrainViewer() {
           manifestPath={request.path}
           onFlightFocus={() => canvas.current?.focus()}
           onTeleport={teleport}
+          onNavigationTarget={navigationTarget}
         />
       )}
       {!flightMode && stats?.name && (
@@ -271,7 +275,7 @@ export function TerrainViewer() {
           {!error && stats?.status === 'loading' && <p>Loading terrain chunks…</p>}
           <p>
             {flightMode
-              ? 'Arrows pitch/roll · Q/E rudder · 1–5 throttle 0/25/50/75/100% · 6 afterburner · W/S fine throttle · T engine · G gear · H hook · F flaps · B speed/wheel brakes · F2 locked chase · F3 horizon-up · [ / ] waypoint · M mute · R reset.'
+              ? 'Arrows pitch/roll · Q/E rudder · 1–5 throttle 0/25/50/75/100% · 6 afterburner · W/S fine throttle · T engine · G gear · H hook · F flaps · B speed/wheel brakes · F2 locked chase · F3 horizon-up · [ / ] waypoint · A autopilot hold · Ctrl-A fly to waypoint · M mute · R reset.'
               : 'WASD move · Q/E altitude · drag to look · arrows turn · Shift accelerates. Click the terrain to focus controls.'}
           </p>
           {flightMode && !stats?.flight && !error && !stats?.error && (

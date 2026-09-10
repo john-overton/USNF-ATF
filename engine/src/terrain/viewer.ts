@@ -157,6 +157,7 @@ export function startTerrainViewer(
   setCloudQuality(quality: CloudQuality): void;
   setTerrainPaint(mode: string): Promise<void>;
   teleportToWaypoint(point: TeleportWaypoint): Promise<void>;
+  setNavigationTarget(point: { id: number; x: number; z: number } | undefined): void;
 } {
   const flightMode = new URLSearchParams(window.location.search).get('mode') === 'flight';
   // Parsed before any GPU resource exists: an invalid parameter must surface
@@ -851,6 +852,9 @@ export function startTerrainViewer(
     async setTerrainPaint(mode: string): Promise<void> {
       if (disposed || !manifest) throw new Error('Terrain viewer is not ready');
       await loadPaint(manifest, mode);
+    },
+    setNavigationTarget(point: { id: number; x: number; z: number } | undefined): void {
+      flight?.setNavigationTarget(point);
     },
     async teleportToWaypoint(point: TeleportWaypoint): Promise<void> {
       const request = ++teleportRequest;

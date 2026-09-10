@@ -1,7 +1,13 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
-import { attitudeFromEuler, createFlightState, sampleTelemetry } from '../sim/flight';
+import {
+  attitudeFromEuler,
+  createFlightState,
+  sampleTelemetry,
+  PLACEHOLDER_AIRCRAFT,
+} from '../sim/flight';
+import { stepFlight } from '../sim/flight/assisted-flight';
 import { windReadoutText, flightHudReadout } from './hud';
 import { FlightHud } from './FlightHud';
 import type { FlightDiagnostics } from './FlightLayer';
@@ -10,10 +16,12 @@ const env = {
   sampleGround: () => ({ height: 0, normal: { x: 0, y: 1, z: 0 }, kind: 'land' as const }),
 };
 test('HUD uses north-referenced heading and correctly converts SI flight instruments', () => {
+  // East is -X in this right-handed world, so a positive yaw swings the nose east and
+  // the bearing counts down from the identity heading of due south.
   for (const [yaw, heading] of [
     [0, 180],
-    [Math.PI / 2, 270],
-    [-Math.PI / 2, 90],
+    [Math.PI / 2, 90],
+    [-Math.PI / 2, 270],
     [Math.PI, 0],
   ] as const) {
     const state = createFlightState({
@@ -30,6 +38,25 @@ test('HUD uses north-referenced heading and correctly converts SI flight instrum
     expect(readout.path.y).toBeCloseTo(0, 8);
     expect(readout.path.visible).toBe(true);
   }
+});
+test('a right turn counts the compass up and agrees with the track actually flown', () => {
+  let state = createFlightState({ position: { x: 0, y: 4000, z: 0 }, airspeed: 220 });
+  const start = flightHudReadout(state, sampleTelemetry(state, env)).heading;
+  for (let i = 0; i < 900; i++)
+    state = stepFlight(
+      state,
+      { pitch: 0.06, roll: 0.4, yaw: 0, throttle: 0.8, brake: false, gearDown: false },
+      env,
+      PLACEHOLDER_AIRCRAFT,
+      1 / 120,
+    ).state;
+  const readout = flightHudReadout(state, sampleTelemetry(state, env));
+  expect(readout.heading).toBeGreaterThan(start);
+  // The independent check: the bearing of the velocity the aeroplane actually has,
+  // measured straight off the world axes with east as -X.
+  const track =
+    ((((Math.atan2(-state.velocity.x, state.velocity.z) * 180) / Math.PI) % 360) + 360) % 360;
+  expect(Math.abs(((track - readout.heading + 540) % 360) - 180)).toBeLessThan(6);
 });
 test('HUD velocity marker follows body-relative path through bank and excludes reverse/slow motion', () => {
   const state = createFlightState({ position: { x: 0, y: 1000, z: 0 }, airspeed: 100 });

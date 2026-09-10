@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { getPlatform } from '../platform';
 import type { FsRoot } from '../platform/Platform';
 import { TerrainMap, useNavigationMap } from '../ui/TerrainMap';
@@ -14,17 +15,24 @@ export function FlightNavigationOverlay({
   manifestPath,
   onFlightFocus,
   onTeleport,
+  onNavigationTarget,
 }: {
   flight: FlightDiagnostics;
   root: FsRoot;
   manifestPath: string;
   onFlightFocus: () => void;
   onTeleport: (waypoint: MapWaypoint) => Promise<void>;
+  onNavigationTarget: (waypoint: MapWaypoint | undefined) => void;
 }) {
   const map = useNavigationMap(getPlatform(), root, manifestPath);
   const heading = flightHudReadout(flight.state, flight.telemetry).heading;
   const selectedId = flight.waypointIndex + 1;
   const waypoint = map.data?.waypoints.find((point) => point.id === selectedId);
+  // The waypoint autopilot steers to whatever is selected here, so the flight layer
+  // is told on every change of selection rather than on engagement alone.
+  useEffect(() => {
+    onNavigationTarget(waypoint);
+  }, [onNavigationTarget, waypoint]);
   return (
     <>
       <FlightHud
@@ -32,6 +40,7 @@ export function FlightNavigationOverlay({
         flapFraction={flight.systems.flapFraction}
         airbrakeFraction={flight.systems.airbrakeFraction}
         navigation={waypoint && waypointGuidance(flight.position, heading, waypoint)}
+        autopilot={flight.autopilot}
         navigationStatus={
           waypoint
             ? undefined

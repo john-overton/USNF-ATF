@@ -1,5 +1,12 @@
 import { expect, test } from 'bun:test';
-import { buildSkyTable, sampleSky, skyElevationForRow } from '../render/sky-model';
+import {
+  buildSkyTable,
+  sampleSky,
+  skyElevationForRow,
+  skyHighlightRolloff,
+  SKY_HIGHLIGHT_KNEE,
+} from '../render/sky-model';
+import { SKY_FRAGMENT } from './sky';
 
 /**
  * The sky shader looks the table up itself, so the uv math in sky.ts's FRAGMENT
@@ -78,4 +85,30 @@ test('the shader azimuth convention puts north at +Z and east at -X', () => {
   );
   const sum = (c: [number, number, number]) => c[0] + c[1] + c[2];
   expect(sum(south)).toBeGreaterThan(sum(north));
+});
+
+test('the sky shader rolls highlights off instead of clipping them to flat white', () => {
+  expect(SKY_FRAGMENT).toContain('vec3 skyRolloff(');
+  expect(SKY_FRAGMENT).toContain('color = skyRolloff(color);');
+  // One knee, interpolated into the shader from the model, so the dome, the fog colour
+  // the terrain fades into, and the CPU helper cannot drift apart.
+  expect(SKY_FRAGMENT).toContain(`const float SKY_KNEE = ${SKY_HIGHLIGHT_KNEE.toFixed(2)};`);
+  // The discs are added after the transfer; rolled off they vanish into the aureole.
+  expect(SKY_FRAGMENT.indexOf('color = skyRolloff(color);')).toBeLessThan(
+    SKY_FRAGMENT.indexOf('color += sunDiscColor'),
+  );
+});
+
+test('the highlight transfer is identity below the knee and compresses without clipping', () => {
+  const low: [number, number, number] = [0.126, 0.22, 0.422];
+  expect(skyHighlightRolloff(low)).toEqual(low);
+  // The daytime aureole spans roughly 1.0 to 1.5; those must stay apart, not both be 1.
+  const near = skyHighlightRolloff([1.5, 1.5, 1.5])[0];
+  const out = skyHighlightRolloff([1.0, 1.0, 1.0])[0];
+  expect(near).toBeLessThan(1);
+  expect(near - out).toBeGreaterThan(0.05);
+  // Ratios survive, so a few degrees off the sun the sky is blue again rather than white.
+  const rolled = skyHighlightRolloff([0.994, 1.058, 1.238]);
+  expect(rolled[2] - rolled[0]).toBeGreaterThan(0.05);
+  expect(skyHighlightRolloff([40, 40, 40])[0]).toBeLessThanOrEqual(1);
 });

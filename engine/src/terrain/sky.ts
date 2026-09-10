@@ -27,7 +27,14 @@ import {
   type Scene,
   type WebGLRenderer,
 } from 'three';
-import { buildSkyTable, skyFogColor, skyTableIsStale, type SkyTable } from '../render/sky-model';
+import {
+  buildSkyTable,
+  skyFogColor,
+  skyHighlightRolloff,
+  skyTableIsStale,
+  SKY_HIGHLIGHT_KNEE,
+  type SkyTable,
+} from '../render/sky-model';
 import type { Environment } from '../sim/environment';
 
 /** Summer local noon at the theater latitude, the look everything is calibrated to. */
@@ -81,7 +88,7 @@ export class SkyLayer {
       depthWrite: false,
       fog: false,
       vertexShader: VERTEX,
-      fragmentShader: FRAGMENT,
+      fragmentShader: SKY_FRAGMENT,
     });
     this.mesh = new Mesh(new SphereGeometry(1, 32, 16), material);
     // Drawn first, unculled and untranslated by the floating origin: only the
@@ -170,7 +177,9 @@ export class SkyLayer {
     const scaled = [0, 1, 2].map((c) => noon[c]! * ratio[c]!);
     const peak = Math.max(scaled[0]!, scaled[1]!, scaled[2]!);
     const day = clamp01(Math.sin(sun.elevationRad) / Math.sin(NOON_ELEVATION_RAD));
-    this.uniforms.sunDiscColor.value.setRGB(t[0], t[1], t[2]).multiplyScalar(12);
+    // The disc is rolled off with the rest of the sky, so this only has to be bright
+    // enough to saturate inside its own radius; 12 also bloomed the shoulder flat.
+    this.uniforms.sunDiscColor.value.setRGB(t[0], t[1], t[2]).multiplyScalar(6);
     const key = sun.elevationRad > 0 && peak > 1e-4 ? sun.direction : moon.direction;
     if (sun.elevationRad > 0 && peak > 1e-4) {
       this.sun.color.setRGB(scaled[0]! / peak, scaled[1]! / peak, scaled[2]! / peak);
@@ -209,7 +218,8 @@ export class SkyLayer {
     this.ambient.groundColor.setRGB(1, 1, 1).lerp(AMBIENT_GROUND, AMBIENT_TINT);
     const forward = camera.getWorldDirection(FORWARD);
     const azimuth = Math.atan2(-forward.x, forward.z);
-    const fog = skyFogColor(this.table, azimuth);
+    // The same transfer the dome applies, so the horizon and the haze do not part company.
+    const fog = skyHighlightRolloff(skyFogColor(this.table, azimuth));
     const blend = clamp01(dt * FOG_SMOOTHING);
     this.fogColor.lerp(this.scratch.setRGB(fog[0], fog[1], fog[2]), blend);
     if (this.scene.fog instanceof Fog) this.scene.fog.color.copy(this.fogColor);
@@ -255,7 +265,8 @@ void main() {
   gl_Position = (projectionMatrix * modelViewMatrix * vec4(position, 1.0)).xyww;
 }`;
 
-const FRAGMENT = `
+/** Exported so the highlight rolloff can be asserted without a GL context. */
+export const SKY_FRAGMENT = `
 precision highp float;
 uniform sampler2D skyTable;
 uniform vec2 tableSize;
@@ -275,6 +286,14 @@ float hash13(vec3 p) {
   p = fract(p * 0.1031);
   p += dot(p, p.yzx + 33.33);
   return fract((p.x + p.y) * p.z);
+}
+
+/** GPU copy of skyHighlightRolloff; see its comment in sky-model.ts for why. The knee
+ * is interpolated from that module so the two cannot drift apart. */
+const float SKY_KNEE = ${SKY_HIGHLIGHT_KNEE.toFixed(2)};
+vec3 skyRolloff(vec3 c) {
+  vec3 over = max(c - SKY_KNEE, 0.0) / (1.0 - SKY_KNEE);
+  return min(c, SKY_KNEE + (1.0 - SKY_KNEE) * (1.0 - exp(-over)));
 }
 
 void main() {
@@ -311,8 +330,13 @@ void main() {
     }
   }
 
+  // The discs go on after the transfer, not through it: rolled off with the aureole they
+  // would land within a hundredth of the sky right beside them and disappear.
+  color = skyRolloff(color);
   float cosSun = dot(dir, sunDirection);
-  color += sunDiscColor * smoothstep(cos(SUN_RADIUS * 2.0), cos(SUN_RADIUS), cosSun);
+  // Full brightness at the sun's true angular radius, fading over a third of it again
+  // rather than over a second whole radius: a crisp limb, not a soft ball.
+  color += sunDiscColor * smoothstep(cos(SUN_RADIUS * 1.35), cos(SUN_RADIUS), cosSun);
   float cosMoon = dot(dir, moonDirection);
   float moonDisc = smoothstep(cos(MOON_RADIUS * 2.2), cos(MOON_RADIUS), cosMoon);
   color += vec3(0.85, 0.88, 1.0) * moonDisc * (0.05 + 0.95 * moonPhase) * night;

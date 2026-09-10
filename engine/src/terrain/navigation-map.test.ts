@@ -10,9 +10,10 @@ import {
 
 const grid = { width: 10, height: 10, extents: { width: 1000, height: 1000 } };
 test('north-up map coordinate round trips use pixel centres, independently of floating origin', () => {
-  expect(worldToMap(grid, 0, 1000)).toEqual({ x: 0, y: 0 });
-  expect(worldToMap(grid, 1000, 0)).toEqual({ x: 10, y: 10 });
-  expect(mapPixelWorld(grid, 0, 0)).toEqual({ x: 50, z: 950 });
+  // The map is north up and east right, and east is -X, so theater x runs right to left.
+  expect(worldToMap(grid, 0, 1000)).toEqual({ x: 10, y: 0 });
+  expect(worldToMap(grid, 1000, 0)).toEqual({ x: 0, y: 10 });
+  expect(mapPixelWorld(grid, 0, 0)).toEqual({ x: 950, z: 950 });
   const point = mapPixelWorld(grid, 3, 8);
   expect(worldToMap(grid, point.x, point.z).x).toBeCloseTo(3.5);
   expect(worldToMap(grid, point.x, point.z).y).toBeCloseTo(8.5);
@@ -96,8 +97,8 @@ test('zoom tracks the aircraft, clamps every edge, and preserves a meaningful NM
     scaleNm: 5,
     scalePercent: 20,
   });
-  expect(navigationViewport(map, { x: -100, z: 100000 }, 4)).toMatchObject({ x: 0, y: 0 });
-  expect(navigationViewport(map, { x: 200000, z: -100 }, 4)).toMatchObject({ x: 384, y: 192 });
+  expect(navigationViewport(map, { x: -100, z: 100000 }, 4)).toMatchObject({ x: 384, y: 0 });
+  expect(navigationViewport(map, { x: 200000, z: -100 }, 4)).toMatchObject({ x: 0, y: 192 });
 });
 
 test('map loading validates bytes and cancellation stops further queued source reads', async () => {
