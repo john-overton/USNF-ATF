@@ -7,6 +7,7 @@ import { AircraftSelect } from './menu/AircraftSelect';
 import { QuickFightSetup } from './menu/QuickFightSetup';
 import { LoadoutScreen } from './menu/LoadoutScreen';
 import { Debrief } from './menu/Debrief';
+import { MissionBrief } from './menu/MissionBrief';
 import { loadMenuAssets, type MenuAssets } from './menu/assets';
 import { defaultLoadout, parseRetailLoadout, type RetailLoadout } from '../data/retail-loadout';
 import { UiAudio } from './menu/UiAudio';
@@ -109,6 +110,7 @@ export function Shell({ search }: { search: string }) {
     };
   }, [state.mission.aircraft]);
   const [unrestricted, setUnrestricted] = useState(false);
+  const [briefingPage, setBriefingPage] = useState(0);
   const audio = useRef<UiAudio>(null);
   // Only while a menu is on screen. A flight has its own AudioContext, and a
   // second one sitting idle behind it is both wasteful and, for the retail audio
@@ -117,7 +119,7 @@ export function Shell({ search }: { search: string }) {
   const menuScreen = MENU_SCREENS.includes(state.screen);
   useEffect(() => {
     if (!menuScreen) return;
-    const service = new UiAudio(assets?.sounds?.sounds ?? {});
+    const service = new UiAudio(assets?.sounds?.sounds ?? {}, assets?.sounds?.music);
     audio.current = service;
     return () => {
       service.dispose();
@@ -125,6 +127,13 @@ export function Shell({ search }: { search: string }) {
     };
   }, [assets, menuScreen]);
   const act = useCallback((action: MenuAction) => {
+    if (action.command === 'back') setBriefingPage(0);
+    if (action.command === 'exit') {
+      void getPlatform()
+        .quit()
+        .catch((error: unknown) => console.error('Unable to exit', error));
+      return;
+    }
     // Read the flight's own snapshot as it is left, so the debrief has numbers.
     const summary = flightSummary(window.__flightDiagnostics?.());
     setState((previous) => {
@@ -137,15 +146,45 @@ export function Shell({ search }: { search: string }) {
     });
   }, []);
   useEffect(() => {
-    // Esc leaves a running session the way the original did, without a reload.
+    // Escape pauses/resumes a flight; repeated keydown must not toggle it twice.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') act({ command: 'back' });
+      if (event.key === 'Escape' && !event.repeat) {
+        event.preventDefault();
+        act({ command: 'back' });
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [act]);
+  useEffect(() => {
+    if (state.screen === 'paused')
+      document.querySelector<HTMLButtonElement>('[data-menu-command="resume"]')?.focus();
+    else if (state.screen === 'flight')
+      document.querySelector<HTMLCanvasElement>('#terrain-canvas')?.focus();
+  }, [state.screen]);
   if (state.screen === 'probe') return <RendererProbe />;
-  if (state.screen === 'explorer' || state.screen === 'flight')
+  if (state.screen === 'flight' || state.screen === 'paused') {
+    const paused = state.screen === 'paused';
+    const summary = flightSummary(window.__flightDiagnostics?.());
+    return (
+      <div className="mission-session">
+        <div className="mission-view" inert={paused} aria-hidden={paused}>
+          <TerrainViewer mission={state.mission} parseError={parsed.parseError} paused={paused} />
+        </div>
+        {paused && (
+          <MissionBrief
+            mission={state.mission}
+            page={briefingPage}
+            onPage={setBriefingPage}
+            {...(summary ? { summary } : {})}
+            {...(assets ? { assets } : {})}
+            onCommand={act}
+          />
+        )}
+      </div>
+    );
+  }
+  if (state.screen === 'explorer')
     return (
       <TerrainViewer key={state.screen} mission={state.mission} parseError={parsed.parseError} />
     );

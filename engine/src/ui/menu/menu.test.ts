@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MainMenu } from './MainMenu';
+import { MissionBrief } from './MissionBrief';
 import { AircraftSelect } from './AircraftSelect';
 import { LoadoutScreen } from './LoadoutScreen';
 import { Debrief, debriefLines } from './Debrief';
@@ -21,6 +22,29 @@ import { DEFAULT_MISSION } from '../../sim/mission/params';
 /** Component tests only: menus take props and return markup, and have no effects. */
 const commands = (markup: string) =>
   [...markup.matchAll(/data-menu-command="([^"]*)"/g)].map((match) => match[1]);
+
+test('paused briefing has resume and menu actions plus a two-page rocker', () => {
+  const render = (page: number) =>
+    renderToStaticMarkup(
+      createElement(MissionBrief, {
+        mission: DEFAULT_MISSION,
+        page,
+        onPage: () => undefined,
+        onCommand: () => undefined,
+      }),
+    );
+  expect(commands(render(0))).toEqual(['resume', 'main-menu', 'brief-page-down', 'brief-page-up']);
+  expect(render(0)).toContain('Mission orders');
+  expect(render(0)).toContain('1 of 2');
+  expect(render(1)).toContain('Flight status');
+  expect(render(1)).toContain('2 of 2');
+  expect(render(0)).toContain(
+    'aria-label="Previous page" data-menu-command="brief-page-down" disabled=""',
+  );
+  expect(render(1)).toContain(
+    'aria-label="Next page" data-menu-command="brief-page-up" disabled=""',
+  );
+});
 
 test('the main menu keeps the whole retail item list, disabled where we cannot deliver', () => {
   const markup = renderToStaticMarkup(
@@ -44,24 +68,28 @@ test('the main menu is laid out at the geometry recovered from CHOOSEAC.DLG', ()
   expect(retail.map((widget) => widget.y)).toEqual([...RETAIL_MAIN_MENU_ROWS]);
   expect(new Set(retail.map((widget) => widget.x))).toEqual(new Set([BUTTON_X]));
   expect(new Set(retail.map((widget) => widget.width))).toEqual(new Set([BUTTON_WIDTH]));
-  // Our two extra rows sit below the retail group, inside our slightly taller panel.
+  // Practice controls sit beside the original panel, within the design frame.
   const ours = layout.widgets.slice(RETAIL_MAIN_MENU_ROWS.length);
-  expect(ours.map((widget) => widget.command)).toEqual(['free-flight', 'terrain-explorer']);
-  for (const widget of ours) expect(widget.y).toBeGreaterThan(RETAIL_MAIN_MENU_ROWS.at(-1)!);
+  expect(ours.map((widget) => widget.command)).toEqual(['free-flight', 'terrain-explorer', 'exit']);
+  for (const widget of ours.filter((widget) => widget.command !== 'exit'))
+    expect(widget.y).toBeGreaterThan(RETAIL_MAIN_MENU_ROWS.at(-1)!);
   expect(layout.rect.width).toBe(RETAIL_MAIN_MENU_RECT.width);
   expect(layout.rect.y + layout.rect.height).toBeLessThanOrEqual(DESIGN_HEIGHT);
   expect(layout.rect.x + layout.rect.width).toBeLessThanOrEqual(DESIGN_WIDTH);
-  for (const widget of layout.widgets)
-    expect(widget.y + (widget.height ?? 0)).toBeLessThanOrEqual(layout.rect.height);
+  for (const widget of layout.widgets) {
+    expect(layout.rect.x + widget.x).toBeGreaterThanOrEqual(0);
+    expect(layout.rect.x + widget.x + widget.width).toBeLessThanOrEqual(DESIGN_WIDTH);
+    expect(layout.rect.y + widget.y + (widget.height ?? 0)).toBeLessThanOrEqual(DESIGN_HEIGHT);
+  }
 });
 
 test('widget positions become percentages of the design box, so CSS does the scaling', () => {
   const markup = renderToStaticMarkup(
     createElement(MainMenu, { mission: DEFAULT_MISSION, onCommand: () => undefined }),
   );
-  // 379/640 and 40/480 — the panel, placed without measuring the window.
+  // 379/640 and 80/480 — the panel, placed without measuring the window.
   expect(markup).toContain('left:59.21875%');
-  expect(markup).toContain('top:8.333333333333332%');
+  expect(markup).toContain('top:16.666666666666664%');
   expect(markup).not.toContain('px');
 });
 
@@ -96,7 +124,7 @@ test('the loadout screen keeps the retail Fly and Select Plane pair and says wha
       onCommand: () => undefined,
     }),
   );
-  expect(commands(markup)).toEqual(['fly', 'select-plane', 'main-menu']);
+  expect(commands(markup)).toEqual(['fly', 'select-plane', 'main-menu', 'unrestricted']);
   // With no ported hardpoints it says so rather than inventing stations.
   expect(markup).toContain('data-loadout="unavailable"');
   expect(markup).toContain('role="alert"');
@@ -161,14 +189,20 @@ test('the quick fight setup says it is a mock, and its rockers describe the sky'
   expect(markup).toContain('3 aircraft in the sky, including you');
   expect(markup).toContain('X-31 EFM');
   expect(markup).toContain(SKILLS[3]);
-  expect(markup).toContain('This is a mock.');
+  expect(markup).toContain('Mock quick fight.');
   expect(commands(markup)).toEqual([
     'continue',
     'back',
-    'opponent-count-down',
-    'opponent-count-up',
+    'player-aircraft-down',
+    'player-aircraft-up',
+    'weather-down',
+    'weather-up',
+    'time-down',
+    'time-up',
     'opponent-aircraft-down',
     'opponent-aircraft-up',
+    'opponent-count-down',
+    'opponent-count-up',
     'opponent-skill-down',
     'opponent-skill-up',
   ]);

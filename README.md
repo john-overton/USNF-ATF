@@ -1,12 +1,19 @@
 # USNF-ATF
 
+**Menu revision, 2026-09-10:** the current Omarchy development pass fixes button
+geometry, typography/contrast and secondary-screen spacing, and adds optional
+original title-theme playback in menus. See [menu revision evidence](Docs/baselines/menu-revision.md)
+for Linux checks and remaining fidelity gaps; earlier Mac acceptance does not
+establish visual acceptance of the menu.
+
 A non-commercial fan remake of Jane's US Navy Fighters '97 (and, later, ATF Gold), built with TypeScript, Three.js, React, and Electron. The goal is retail aircraft and missions over real-elevation terrain, using assets imported from your own copy.
 
 **Current status (2026-09-10):** the app now opens on a **main menu** rather than
 straight into the viewer. From it you can set up a mocked quick fight, take a free
 flight, or enter the terrain explorer, choosing an aircraft and its loadout on the
-way and returning to a debrief afterwards, with no page reload anywhere in that
-path. The menu is laid out at the geometry recovered from the original's own
+way. Escape opens a two-page mission briefing and pauses the current flight;
+Resume or Escape continues it, and Main menu ends it, without a page reload.
+The main menu is laid out at the geometry recovered from the original's own
 `CHOOSEAC.DLG`, and it will use the original's artwork and sounds if you port them
 from your own disc ([menu porting](Docs/menu-porting.md)). The loadout screen shows
 an aircraft's real hardpoints, stores and gross weight, though stores do not affect

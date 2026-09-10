@@ -30,8 +30,20 @@ export class FlightGun {
   private gain?: GainNode;
   private firing = false;
   private disposed = false;
+  private paused = false;
+  setPaused(value: boolean): void {
+    this.paused = value;
+    this.firing = false;
+    const context = this.context;
+    if (!context || context.state === 'closed') return;
+    if (this.gain) {
+      this.gain.gain.cancelScheduledValues(context.currentTime);
+      this.gain.gain.setValueAtTime(0, context.currentTime);
+    }
+    void (value ? context.suspend() : context.resume()).catch(() => undefined);
+  }
   private wake = (): void => {
-    if (!this.disposed)
+    if (!this.disposed && !this.paused)
       void this.context?.resume().catch(() => {
         /* A closed audio context can race scene disposal. */
       });

@@ -103,6 +103,8 @@ export interface RetailMenuSounds {
   version: 1;
   source: { game: 'usnf97' | 'atf-gold' };
   sounds: Partial<Record<UiSound, RetailMenuClip>>;
+  /** Optional original title theme, reused as menu music. */
+  music?: RetailMenuClip;
 }
 
 const bad = (reason: string): never => {
@@ -281,8 +283,9 @@ export function parseRetailMenuSounds(value: unknown): RetailMenuSounds {
   if (!isRecord(manifest.sounds)) bad('sounds');
   const clips: [string, RetailMenuClip][] = Object.entries(manifest.sounds);
   if (clips.length > MAX_SOUNDS) bad('too many sounds');
+  for (const [key] of clips) if (!isOneOf(UI_SOUNDS, key)) bad(`unknown sound ${key}`);
+  if (manifest.music !== undefined) clips.push(['music', manifest.music]);
   for (const [key, clip] of clips) {
-    if (!isOneOf(UI_SOUNDS, key)) bad(`unknown sound ${key}`);
     if (!isRecord(clip)) bad(`sound ${key}`);
     if (!isName(clip.source, MAX_SOURCE_LENGTH) || !isSha256(clip.sha256))
       bad(`sound ${key} identity`);

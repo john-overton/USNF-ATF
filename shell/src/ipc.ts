@@ -1,5 +1,6 @@
 /** IPC channel names shared by main and preload. */
 export const IPC = {
+  quit: 'shell:quit',
   describe: 'shell:describe',
   fsReadBytes: 'fs:readBytes',
   fsReadText: 'fs:readText',

@@ -33,13 +33,14 @@ test('a bare launch shows the menu and every existing deep link still wins', () 
   ).toBe('flight');
 });
 
-test('the main menu offers exactly the three things this build can deliver', () => {
+test('the main menu offers the three playable activities and exit', () => {
   expect(MAIN_MENU_ITEMS.filter((item) => item.enabled).map((item) => item.command)).toEqual([
     'quick-mission',
     'free-flight',
     'terrain-explorer',
+    'exit',
   ]);
-  expect(MAIN_MENU_ITEMS).toHaveLength(10);
+  expect(MAIN_MENU_ITEMS).toHaveLength(11);
   for (const item of MAIN_MENU_ITEMS.filter((i) => !i.enabled)) expect(item.note).toBeTruthy();
 });
 
@@ -52,7 +53,7 @@ test('the enabled main-menu items reach their screens', () => {
   expect(go('main-menu', 'free-flight')).toBe('aircraft-select');
   // A quick fight is set up first; free flight goes straight to the aircraft.
   expect(go('main-menu', 'quick-mission')).toBe('quick-fight');
-  expect(go('quick-fight', 'continue')).toBe('aircraft-select');
+  expect(go('quick-fight', 'continue')).toBe('loadout');
   expect(go('quick-fight', 'back')).toBe('main-menu');
   expect(go('main-menu', 'terrain-explorer')).toBe('explorer');
 });
@@ -66,7 +67,10 @@ test('aircraft select, loadout, flight and debrief follow the LOADORD.DLG shape'
   expect(go('loadout', 'select-plane')).toBe('aircraft-select');
   expect(go('loadout', 'main-menu')).toBe('main-menu');
   expect(go('flight', 'end-flight')).toBe('debrief');
-  expect(go('flight', 'back')).toBe('debrief');
+  expect(go('flight', 'back')).toBe('paused');
+  expect(go('paused', 'resume')).toBe('flight');
+  expect(go('paused', 'back')).toBe('flight');
+  expect(go('paused', 'main-menu')).toBe('main-menu');
   expect(go('debrief', 'main-menu')).toBe('main-menu');
   expect(go('explorer', 'back')).toBe('main-menu');
   expect(go('probe', 'back')).toBe('probe');
@@ -76,6 +80,19 @@ test('a mission that does not add up keeps the player on the screen that can fix
   const broken: MissionParams = { ...DEFAULT_MISSION, theater: 'nevada' };
   expect(go('loadout', 'fly', broken)).toBe('loadout');
   expect(go('loadout', 'fly')).toBe('flight');
+});
+
+test('pause and resume preserve the exact mission object and its loadout', () => {
+  const state: ShellState = {
+    screen: 'flight',
+    mission: { ...DEFAULT_MISSION, mode: 'free-flight' },
+  };
+  const paused = applyMenuAction(state, { command: 'back' });
+  expect(paused.screen).toBe('paused');
+  expect(paused.mission).toBe(state.mission);
+  const resumed = applyMenuAction(paused, { command: 'resume' });
+  expect(resumed.screen).toBe('flight');
+  expect(resumed.mission).toBe(state.mission);
 });
 
 test('commands change the mission as well as the screen', () => {

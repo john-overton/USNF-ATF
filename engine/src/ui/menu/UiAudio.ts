@@ -35,17 +35,34 @@ export class UiAudio {
   private disposed = false;
   private unsubscribeMute?: () => void;
   private lastPlayed: UiSound | undefined;
+  private music?: UiClip;
+  private musicSource?: AudioBufferSourceNode;
 
   private gesture = (event: Event): void => {
     if (!event.isTrusted || this.disposed) return;
     if (event.type === 'keydown') {
       const key = event as KeyboardEvent;
+      // The shared flight shortcut excludes buttons. In menus, focused buttons
+      // are navigation, so M should still control the music after a click or Tab.
+      if (
+        key.code === 'KeyM' &&
+        !key.repeat &&
+        !key.ctrlKey &&
+        !key.metaKey &&
+        !key.altKey &&
+        key.target instanceof HTMLElement &&
+        key.target.closest('button')
+      ) {
+        key.preventDefault();
+        muteControl.toggle();
+      }
       if (key.repeat || isEditingTarget(key.target)) return;
     }
     this.unlock();
   };
 
-  constructor(clips: UiClips = {}) {
+  constructor(clips: UiClips = {}, music?: UiClip) {
+    if (usable(music)) this.music = music;
     for (const name of UI_SOUNDS) {
       const clip = clips[name];
       if (usable(clip)) this.clips[name] = clip;
@@ -57,6 +74,9 @@ export class UiAudio {
       if (this.context && this.master)
         this.master.gain.setTargetAtTime(muted ? 0 : 0.45, this.context.currentTime, 0.04);
     });
+    // Desktop permits playback on launch; browsers can leave the context suspended
+    // until the gesture listener resumes it. Never create this during a flight.
+    if (this.music) this.unlock();
   }
 
   private unlock(): void {
@@ -83,6 +103,23 @@ export class UiAudio {
       const buffer = context.createBuffer(1, pcm.length, context.sampleRate);
       buffer.getChannelData(0).set(pcm);
       this.buffers[name] = buffer;
+    }
+    if (this.music) {
+      const pcm = resampleFlightPcm(
+        flightPcm(this.music, false),
+        this.music.sampleRate,
+        context.sampleRate,
+      );
+      const buffer = context.createBuffer(1, pcm.length, context.sampleRate);
+      buffer.getChannelData(0).set(pcm);
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      const gain = context.createGain();
+      gain.gain.value = 0.55;
+      source.connect(gain).connect(master);
+      source.start();
+      this.musicSource = source;
     }
   }
 
@@ -111,12 +148,18 @@ export class UiAudio {
     contextState: AudioContextState | 'locked';
     loaded: UiSound[];
     lastPlayed: UiSound | undefined;
+    music: 'missing' | 'playing' | 'suspended';
   } {
     return {
       muted: muteControl.muted,
       contextState: this.context?.state ?? 'locked',
       loaded: UI_SOUNDS.filter((name) => name in this.clips),
       lastPlayed: this.lastPlayed,
+      music: !this.musicSource
+        ? 'missing'
+        : this.context?.state === 'running'
+          ? 'playing'
+          : 'suspended',
     };
   }
 
@@ -126,6 +169,8 @@ export class UiAudio {
     window.removeEventListener('pointerdown', this.gesture);
     window.removeEventListener('keydown', this.gesture);
     this.unsubscribeMute?.();
+    this.musicSource?.stop();
+    this.musicSource?.disconnect();
     this.master?.disconnect();
     if (this.context && this.context.state !== 'closed')
       void this.context.close().catch(() => undefined);

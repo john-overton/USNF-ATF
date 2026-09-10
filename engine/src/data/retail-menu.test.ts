@@ -111,6 +111,14 @@ test('accepts the exporter shape and hands it back untouched', () => {
   expect(parseRetailMenuSounds(clips)).toBe(clips);
 });
 
+test('optional title music uses the same bounded PCM validation as effects', () => {
+  const manifest = sounds();
+  manifest.music = { ...manifest.sounds.click!, pcm: [128, 130, 126, 128] };
+  expect(parseRetailMenuSounds(manifest).music).toBe(manifest.music);
+  manifest.music.pcm = [128, 256];
+  expect(() => parseRetailMenuSounds(manifest)).toThrow('sound music samples');
+});
+
 test('rejects every bundle the exporter should never produce', () => {
   const rejects: [string, (b: RetailMenuBundle) => void][] = [
     ['wrong version', (b) => ((b as { version: number }).version = 2)],

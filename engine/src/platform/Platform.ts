@@ -69,6 +69,8 @@ export interface ShellDescription {
 }
 
 export interface Platform {
+  /** Quit the desktop app; browser development requests closing its tab. */
+  quit(): Promise<void>;
   readonly fs: PlatformFs;
   readonly paths: PlatformPaths;
   readonly window: PlatformWindow;

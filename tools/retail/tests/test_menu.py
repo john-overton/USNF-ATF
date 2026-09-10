@@ -30,9 +30,11 @@ class MenuExportTests(unittest.TestCase):
     def test_button_chrome_is_exported_as_nine_slice_parts(self):
         bundle, _ = self.bundle()
         self.assertEqual(
-            sorted(bundle['sprites']), ['action-left', 'action-middle', 'action-right']
+            sorted(key for key in bundle['sprites'] if key.startswith('action-')), ['action-left', 'action-middle', 'action-right']
         )
-        for states in bundle['sprites'].values():
+        for key, states in bundle['sprites'].items():
+            if not key.startswith('action-'):
+                continue
             # Only what the file names pin: the enabled button and its disabled twin.
             self.assertEqual([entry['state'] for entry in states], ['normal', 'disabled'])
             # The original composites these at run time; the background art has no

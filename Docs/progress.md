@@ -7,6 +7,37 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-10
 
+**Commit handoff:** final checks rerun after all rocker refinements: 371 Bun tests
+pass, 3 existing imported-mount fixture skips, 0 failures; typecheck/lint/format
+pass; four Python menu tests pass. User requested docs, commit and push. Retail
+assets stay ignored. Packaged Mac acceptance below is historical, not this build.
+
+**Latest page-control polish:** larger labels/counter and rocker, with raised
+bevels and inset/cast shadows; verified visually in live Linux Electron.
+
+**Latest placement correction:** briefing page switch is centered below the page
+counter, inset within the grey panel. CSS-only; live Electron visual/bounds check,
+Prettier and diff whitespace checks pass.
+
+**Page-rocker reference follow-up:** shared `MenuPageRocker` replaces the briefing's
+generic arrow pair with the supplied OG-style black counter, blue labels and pale
+vertical switch. Navigation is bounded and keyboard-accessible.
+
+**Latest mission-screen pass:** original quick-mission, briefing and loadout artwork
+now frames the authored controls. Escape pauses the retained flight; Resume keeps
+its simulation and audio session. Briefing actions sit left, page rocker right.
+Linux checks: 371 pass / 3 skips, four Python menu tests, real desktop pause smoke.
+See [mission menu evidence](baselines/mission-menu-revision.md); visual parity remains
+subject to user review, not established by automated checks.
+
+**Later correction, Omarchy menu revision:** the user rejected the prior menu
+presentation. The current local pass fixes duplicate button styling, contrast,
+off-screen notes, practice-control placement and secondary-screen layout, and
+adds optional original title-theme playback. Linux menu development verification
+has now begun; this does not accept the full Linux flight/rendering baseline.
+See [menu revision evidence](baselines/menu-revision.md). Retail fonts and exact
+original activity-menu music selection remain unverified.
+
 | Phase | Implemented | Acceptance / remaining work |
 |---|---|---|
 | 0: retail toolkit | Containers, images/fonts and data readers; bounded nearest-detail F-14 static export with textures | F-14 is recognizable in packaged flight. General SH interpreter, native animation semantics and unified deliverable remain open |
@@ -16,6 +47,100 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 | 4: flight model | Retail PT-envelope default with preserved assisted comparison/fallback and opt-in recovered-native-envelope backend; native-metadata profiles now use recovered G commands, thrust/drag and fuel/load corrections; selectable local F-14/A-4E/X-31 exteriors and per-aircraft experimental PT profiles and developer port helper, moving surfaces and A-4-specific hook; throttle/engine/gear/hook/flap/brake controls, retail engine samples, vector HUD, bracket-selected waypoints, shared square 20-button explorer/flight MFD with compass, orientation modes and waypoint teleport, north-referenced heading with A/Ctrl-A heading-altitude and waypoint autopilot holds, Default F1 enlarged retail cockpit frames with aperture-fitted HUD and live F14/A4E mirrors, Shift-arrow look/orbit and center, imported PT/JT practice guns with safety, individual velocity-inheriting rounds and luminous red/green tracers, camera-projected gun pipper using nearer terrain or a 1,000 m base range, thick lower closing-range arc (hidden at/above 1 km) and target-input plumbing; cockpit-only HUD and armed-only reticle; F2/F3 chase, practice starts and a 16-case harness, indexed exact water queries, and a deterministic wind field the flight model reads | Packaged flight, systems/animation and live fuel acceptance on Mac; exact sources/results in baseline. A-4E/X-31 fresh unpackaged checks pass. Authentic per-aircraft dynamics, physical gamepad and human USNF feel comparison remain open; Linux deferred |
 | Game shell | Steps 1–8 (all) of [game-shell-plan.md](game-shell-plan.md): one `MissionParams` object describes a session and is threaded through the viewer and the flight layer, a `Screen` state machine puts a main menu in front of the simulation without a router or a page reload, and the menu, aircraft select and debrief screens are drawn at the geometry `retail.mnu` recovers from `CHOOSEAC.DLG`, in original chrome or in the original's own artwork and sounds when a locally ported menu bundle is installed, a working loadout screen over an aircraft's recovered hardpoints, and a mocked quick fight that puts three aircraft in the sky on deterministic spawns inside the one 120 Hz clock | The quick fight's opponents fly fixed profiles: no AI, no acquisition, no damage. Stores are chosen and weighed but do not affect flight, and a station still offers only its own default because the hardpoint compatibility mask is undecoded. The bundle carries no retail fonts and no hover or pressed button art, both stated in [menu-porting.md](menu-porting.md). The `.MNU`/`.DLG` widget tables are decoded (`retail.mnu`), so those layouts can be read from the media rather than redrawn; dial and slider positions, tab order and widget state are still unknown. Two long-stale smoke assertions and one marginal braking threshold fail identically at the parent commit; see the 2026-09-10 shell entry |
 | 5–10 | Plans and importer contracts; cockpit/gun developer import brought forward by user request. Phase 6/7 groundwork brought forward 2026-09-09: retail AI script parser and VM interpreter, `.SEE` detection model, damage/hit-point model with the recovered performance penalties, swept gun-round hit geometry, and a reusable MFD bezel extracted for a future target page. 2026-09-10: game shell planned end to end in [game-shell-plan.md](game-shell-plan.md), and the aircraft port now exports `.PT` hardpoints and the `.JT`/`.GAS`/`.SEE`/`.ECM` stores they name into a validated engine contract | Full combat (targets/damage/sensors), missions, in-app retail import and release work remain planned. The new AI and combat modules are pure, unit-tested and verified against all 17 retail AI programs, but NONE of it is wired into the flight loop: no multi-aircraft world, no acquisition, no damage applied from rounds. Nine AI action semantics remain open; parser success is not flown-tactics parity. The loadout data is exported, validated and installable but drives nothing: no loadout screen, stores do not feed mass, and the hardpoint `flags` compatibility mask and `maxWeight` unit are still undecoded |
+
+## 2026-09-10: Menu revision commit handoff
+
+Updated handoff, menu-port documentation and baselines to describe the final
+original-art mission screens, title music, Exit, retained-flight pause/resume and
+larger two-row page control. Marked the old Mac handoff as historical. Final
+`bun run check`: 371 pass / 3 existing skips / 0 fail; Python menu export tests:
+4 pass / 0 skips; `git diff --check` clean. User authorized commit and push to
+the existing main branch. No retail bytes or local screenshots are included.
+Next: user review of the running development build; exact retail fonts and native
+widget parity remain open. See [mission menu evidence](baselines/mission-menu-revision.md).
+
+## 2026-09-10: Exit in the top menu bar
+
+Added Exit at the right end of the grey top bar, per the user's placement
+correction. It invokes `Platform.quit()` through the isolated preload bridge and
+Electron `app.quit()`, including on macOS. Browser development requests tab close,
+which browsers may refuse for tabs not opened by script. Updated menu list and
+smoke expectations to include Exit. Existing actions retain their positions.
+
+Verified the real Exit action closed the Electron app; relaunched and visually
+checked the final top-bar placement (`extracted/menu-exit-top.png`).
+`bun run check`: 369 pass, 3 existing asset-dependent skips, 0 fail; initial
+format check required formatting Shell.tsx, then passed. `git diff --check` clean.
+
+## 2026-09-10: green buttons and white labels
+
+User screenshot review identified the remaining beige framing in the imported
+ACTION sprites and requested green buttons with white text. The menu stylesheet
+now draws green beveled buttons with white labels, brighter hover/selected states,
+pressed feedback, and darker disabled faces. It no longer draws the beige sprite
+chrome; the original screen artwork and button positions stay intact. This is an
+authored CSS treatment matching the requested colors, not recovered native drawing.
+
+Verified in the running Linux Electron app; screenshot `extracted/menu-green.png`.
+`bunx prettier --check engine/src/ui/styles.css` and `git diff --check` pass.
+No new tests or full regression run for this CSS-only follow-up.
+
+## 2026-09-10: Larger, raised briefing rocker
+
+User requested a slightly larger, more three-dimensional control. Increased page
+text about 20% and switch dimensions about one-third; added gradient faces,
+highlighted bevels, a recessed counter and stronger cast/pressed shadows. The
+below-counter placement remains. Live Electron screenshot inspected:
+`extracted/rocker-raised.png`. Formatting and diff checks pass; CSS-only change,
+no full regression rerun. Next step remains user visual review.
+
+## 2026-09-10: Briefing rocker clipping follow-up
+
+User reported the horizontal arrangement clipped at the grey panel edge and
+requested the rocker below the counter. Shared page-control CSS now uses two rows;
+the briefing placement has additional right-edge clearance. Live Electron confirms
+the switch is below and horizontally centered under the readout. Screenshot:
+`extracted/rocker-below-counter.png`. Formatting and `git diff --check` pass;
+no full regression rerun for this CSS-only change.
+
+## 2026-09-10: Mission menus and briefing page-control correction
+
+Restored original QUIKMISS/BRIEFSC3 compositions and ORD_KITT store wells. Added
+player aircraft/weather/time controls, optional imported ordnance thumbnails, and
+true pause/resume with frozen environment, opponents, fuel/ammo, input and audio.
+User corrected briefing control placement: actions left, two-page rocker right.
+Fresh desktop smoke and code checks are recorded in
+[the baseline](baselines/mission-menu-revision.md). Next: user visual review;
+original bitmap fonts and native unlabeled-widget geometry remain unrecovered.
+
+## 2026-09-10: Omarchy menu presentation and music correction
+
+User review supersedes the previous shell presentation acceptance. Confirmed in
+the running Electron app: `MenuScreen.tsx` assigned `.menu-action` to both wrapper
+and button; CSS applied chrome/padding twice. Notes were positioned outside the
+right edge, enabled text was pale on pale sprites, cap widths were assumed equal,
+and fallback hover variables removed the artwork. `UiAudio` had only one-shots.
+
+The revision separates wrapper/button classes, restores native button dimensions,
+uses each sprite cap's width with subpixel overlap, increases and centers labels,
+keeps explanatory notes accessible without overflowing, and places the practice
+controls below the aircraft picture. Aircraft/debrief panels are centered;
+secondary-screen headings remain visible, loadout rows gain spacing and aligned
+store columns, and mock descriptions no longer expose parser implementation details.
+
+`TITLE95.SEQ` explicitly names `^MF.11K` as title music. The exporter now includes
+that optional bounded PCM clip; the menu loops it with shared mute and closes its
+context outside menus. This is an authored reuse of original title music, not a
+claim of original activity-menu music parity or XMI decoding. Converted media was
+installed only into `/home/john/.config/USNF-ATF/data/menu` and ignored `extracted/`.
+
+Verification: `bun run check` — 369 pass, 3 asset-dependent skips, 0 failures;
+`python3 -m unittest discover -s tools/retail/tests -p test_menu.py` — 4 pass;
+`git diff --check` clean. Development Electron/CDP checked main-menu bounds at
+640×480, 1280×720 and 1920×1080, plus quick-fight/aircraft/loadout navigation and
+music output/mute/teardown. Details and limitations: [baseline](baselines/menu-revision.md).
+No packaged build or full flight regression is claimed. Next: user visual review
+of the running menu, then retail font fidelity and any requested design changes.
 
 ## 2026-09-10: the game shell is in, and the regression set says what it cost
 

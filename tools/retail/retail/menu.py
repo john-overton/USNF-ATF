@@ -29,6 +29,8 @@ GAMES = {"usnf97": "USNF", "atf-gold": "ATF"}
 #: dialog is background only; there is no retail aircraft chooser to recover.
 SCREENS: Dict[str, Tuple[Optional[str], Optional[str]]] = {
     "main-menu": ("CHOOSEAC.DLG", "CHOOSEAC.PIC"),
+    "quick-fight": ("QUIKMISS.DLG", "QUIKMISS.PIC"),
+    "paused": ("BRIEFSCR.DLG", "BRIEFSC3.PIC"),
     "loadout": ("LOADORD.DLG", "ORD_KITT.PIC"),
     "debrief": (None, "DEBSC1.PIC"),
 }
@@ -147,6 +149,16 @@ def export(source_root: Path, game: str) -> Tuple[dict, dict]:
             sprites[sprite] = states
 
     clips: Dict[str, dict] = {}
+    # Store thumbnails used by the three currently importable aircraft. They are
+    # optional: another title or incomplete media can still draw text-only cards.
+    weapon_palette = palette
+    palette_file = art / "AR_BACK.PIC"
+    if palette_file.is_file():
+        weapon_palette = load_base_palette(str(record(palette_file)))
+    for name in ("AIM54C", "F250", "AIM120", "AIM9M", "MK82", "F150", "LAU61", "AGM65G", "AIM9X"):
+        path = art / f"${name}.PIC"
+        if path.is_file():
+            sprites[f"store-{name.lower()}"] = [{"state": "normal", "image": _image(record(path), weapon_palette, path.name)}]
     for name, filename in SOUNDS.items():
         path = data / filename
         if path.is_file():
@@ -160,6 +172,11 @@ def export(source_root: Path, game: str) -> Tuple[dict, dict]:
         "limitations": LIMITATIONS,
     }
     sounds = {"version": 1, "source": {"game": game}, "sounds": clips}
+    # TITLE95.SEQ explicitly plays this PCM recording during the title sequence.
+    # Reusing it for the activity menu is an authored choice, not XMI playback.
+    theme = source_root / game / f"{prefix}_8.LIB" / "^MF.11K"
+    if game == "usnf97" and theme.is_file():
+        sounds["music"] = decode_pcm(record(theme).read_bytes(), theme.name)
     return bundle, sounds
 
 

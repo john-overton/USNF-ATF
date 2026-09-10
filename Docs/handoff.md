@@ -1,9 +1,86 @@
 # Development handoff — 2026-09-10
 
-Everything after `1057085` is committed locally on `main` and **unpushed**,
+## Commit handoff: Omarchy menu revision
+
+The user approved committing and pushing this menu pass. Current development is
+on Linux/Omarchy, not the historical Mac environment below. Changes include green
+menu buttons, top-bar Exit, optional title music, original-art quick mission and
+loadout screens, retained-flight pause/resume, and the larger beveled page rocker
+centered below its counter. Retail-derived assets/screenshots remain ignored;
+only code, tests and documentation belong in this commit.
+
+Final source checks rerun after the rocker polish: `bun run check` — 371 pass,
+3 existing asset-dependent skips, 0 fail; Python menu export tests — 4 pass,
+0 skips. Formatting and `git diff --check` pass. Earlier real Electron pause
+smoke and visual evidence are detailed in the linked baselines below; the final
+CSS changes were checked in the running development app, not a new packaged build.
+Next: continue user visual review and recover remaining native widget/font details.
+
+## Latest: mission screens and retained-flight pause
+
+Latest visual adjustment: page labels/counter are about 20% larger and the switch
+about one-third larger, with beveled highlights, a recessed counter and stronger
+cast/pressed shadows. It remains below the counter and inside the panel.
+
+Placement correction: the page rocker now sits centered below its counter, using
+a two-row shared-control grid. The briefing control is inset from the panel edge
+to prevent clipping. Visually verified in the running Linux app.
+
+Reference follow-up: reusable `MenuPageRocker` in `MenuControls.tsx` now draws
+the supplied OG page control: PAGE, black “1 of 2” readout, blue PREV/NEXT labels,
+and a pale vertical two-way switch. Endpoint buttons disable; no wraparound.
+This is CSS recreation, not imported native widget artwork.
+
+Quick mission now uses QUIKMISS art with friendly/hostile columns; Arm plane goes
+directly to loadout. Loadout places store pictures and station controls in ORD_KITT's
+wells. Escape opens BRIEFSC3 over the retained, frozen viewer; Resume or Escape
+continues it, while Main menu disposes it. Per user correction, briefing buttons
+are on the left of the grey panel, with a working two-page rocker to their right.
+The pages contain mission orders and flight status. Menu components remain effect-free.
+
+Current verification: `bun run check` 371 pass / 3 existing skips / 0 fail;
+Python menu export tests 4 pass. Fresh unpackaged Linux Electron pause smoke passed
+state/input/audio freeze, both pages, same-canvas resume without catch-up, and quit.
+See [mission menu evidence](baselines/mission-menu-revision.md). Exact retail fonts,
+native rocker chrome and full original functionality remain open. No combat added.
+
+## Correction: Omarchy menu pass, later on 2026-09-10
+
+Exit is now at the right end of the grey top bar and quits the desktop application
+through the platform/preload boundary. Real Electron quit and final placement
+were checked; the full check remains 369 pass / 3 existing skips.
+
+**Latest visual follow-up:** the user requested green buttons with white text.
+Buttons now use authored green beveled CSS chrome instead of the beige-edged
+ACTION sprites. Original background artwork remains. Visually checked in Electron;
+`extracted/menu-green.png` records it. This supersedes the sprite-chrome description below.
+
+The Mac snapshot below predates the user's rejection of the menu presentation.
+Do not treat its navigation smoke passes as visual or audio acceptance. Current
+work is on the Omarchy Linux box, with local changes based on `fc7f315`.
+The menu wrapper and button shared `.menu-action`, applying padding and sprites
+twice. Labels overflowed the screen, enabled text lacked contrast, added controls
+were squeezed below the retail panel, and music had never been implemented.
+
+The current pass fixes those defects, centers aircraft/debrief panels, restores
+headings on secondary screens, and improves loadout spacing. The locally imported
+`^MF.11K` title theme now loops in menus, shares mute, and stops when leaving menus.
+This is the original **title** theme reused for the menu; the original activity
+menu's music selection is not established. Retail font rendering remains open.
+
+Verification: `bun run check` — 369 pass, 3 asset-dependent skips; Python menu
+export tests — 4 pass. Linux Electron development screenshots and audio graph
+measurements are in [the menu revision baseline](baselines/menu-revision.md).
+The app is running from source; packaged Mac artifacts are not this revision.
+Historical platform deferrals and acceptance statements below remain historical.
+
+## Historical Mac handoff (superseded by the Linux revision above)
+
+At the time of this earlier handoff, everything after `1057085` was committed locally on `main` and **unpushed**,
 starting at `7b7866f`. The packaged Mac app at `build/mac/mac-arm64/USNF-ATF.app`
 was built from `51298fb`; every commit after it is documentation only, so the
-package is current product code. Apple Silicon, Bun 1.4.2, Node 22.14, Electron 44.2.0, Python 3.14.6.
+package was then current product code; it does not contain this Linux menu revision.
+Apple Silicon, Bun 1.4.2, Node 22.14, Electron 44.2.0, Python 3.14.6.
 Linux is deferred by user decision; Windows launch is a phase 9 item.
 
 This document is the current state and the decisions worth preserving. The

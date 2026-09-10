@@ -152,6 +152,10 @@ function registerIpc(onProbe: (result: unknown) => void): void {
     (e) => BrowserWindow.fromWebContents(e.sender)?.isFullScreen() ?? false,
   );
   ipcMain.handle(IPC.powerCurrent, () => currentPowerState());
+  ipcMain.handle(IPC.quit, () => {
+    // Let the invoke response settle before tearing down the renderer.
+    setImmediate(() => app.quit());
+  });
   ipcMain.handle(IPC.reportProbe, (_e, result: unknown) => {
     onProbe(result);
   });

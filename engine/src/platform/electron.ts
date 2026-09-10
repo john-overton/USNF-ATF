@@ -8,6 +8,7 @@ import { type ShellBridge } from './bridge';
 export function createElectronPlatform(bridge: ShellBridge): Platform {
   const description = bridge.describe();
   return {
+    quit: () => bridge.quit(),
     fs: {
       readBytes: (root, p) => bridge.fsReadBytes(root, p),
       readText: (root, p) => bridge.fsReadText(root, p),

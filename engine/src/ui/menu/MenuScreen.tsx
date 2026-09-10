@@ -28,6 +28,7 @@ function MenuButton({
       data-menu-command={widget.command}
       {...(widget.value ? { 'data-menu-aircraft': widget.value } : {})}
       disabled={widget.disabled}
+      title={widget.note}
       {...(widget.pressed === undefined ? {} : { 'aria-pressed': widget.pressed })}
       onClick={() =>
         widget.command &&
@@ -50,6 +51,7 @@ export function MenuScreen({
   problems = [],
   onCommand,
   children,
+  frameContent,
 }: {
   screen: string;
   layout: MenuLayout;
@@ -58,6 +60,7 @@ export function MenuScreen({
   problems?: readonly string[];
   onCommand: (action: MenuAction) => void;
   children?: React.ReactNode;
+  frameContent?: React.ReactNode;
 }) {
   const { rect } = layout;
   const background = screenBackground(assets, screen);
@@ -82,7 +85,7 @@ export function MenuScreen({
           {layout.widgets.map((widget, index) => (
             <div
               key={`${widget.command ?? widget.type}-${index}`}
-              className={`menu-widget menu-${widget.type}`}
+              className={`menu-widget menu-widget-${widget.type}`}
               style={{
                 left: percent(widget.x, rect.width),
                 top: percent(widget.y, rect.height),
@@ -107,6 +110,7 @@ export function MenuScreen({
             </ul>
           )}
         </div>
+        {frameContent}
       </div>
     </div>
   );

@@ -14,8 +14,7 @@ export function MainMenu({
   assets?: MenuAssets;
   onCommand: (action: MenuAction) => void;
 }) {
-  // With a bundle installed the panel is the original's own rect, and the two rows
-  // we add move below it, where the artwork is plain.
+  // Preserve the original activity panel; practice controls occupy the lower left.
   const rect = retailRect(assets, 'main-menu');
   const layout = rect ? mainMenuLayout(rect) : mainMenuLayout();
   return (
@@ -24,11 +23,20 @@ export function MainMenu({
       layout={layout}
       {...(assets ? { assets } : {})}
       onCommand={onCommand}
-    >
-      <p className="menu-summary">
-        {mission.aircraft.toUpperCase()} · {mission.theater} ·{' '}
-        {(mission.loadout.internalFuelFraction * 100).toFixed(0)}% internal fuel
-      </p>
-    </MenuScreen>
+      frameContent={
+        <>
+          <p className="menu-main-status">
+            Development build · Dimmed activities are unavailable · M: mute
+          </p>
+          <div className="menu-main-caption">
+            <strong>Practice & exploration</strong>
+            <span>
+              {mission.aircraft.toUpperCase()} · {mission.theater} ·{' '}
+              {(mission.loadout.internalFuelFraction * 100).toFixed(0)}% fuel
+            </span>
+          </div>
+        </>
+      }
+    />
   );
 }

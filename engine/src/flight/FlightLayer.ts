@@ -172,6 +172,7 @@ export class FlightLayer {
   private landings = 0;
   private waiting = false;
   private disposed = false;
+  private paused = false;
   private teleportRequest = 0;
   private autopilotHold: AutopilotHold | undefined;
   private autopilotEngaged: AutopilotMode = 'off';
@@ -501,7 +502,15 @@ export class FlightLayer {
       this.definition.massKg = this.profile.emptyMassKg + this.fuel.fuelKg + this.payloadMassKg;
     }
   }
+  setPaused(value: boolean): void {
+    this.paused = value;
+    this.input.setPaused(value);
+    this.audio.setPaused(value);
+    this.gun.setPaused(value);
+  }
+
   advance(seconds: number): void {
+    if (this.paused) return;
     if (this.input.resetRequested) {
       this.teleportRequest++;
       this.fuel = createFuelState(this.fuel.capacityKg, this.resetFuelFraction);

@@ -26,8 +26,6 @@ export const BUTTON_X = 31;
 export const BUTTON_WIDTH = 180;
 /** The retail nine-slice button art is 30 px tall, on a 32 px row pitch. */
 export const BUTTON_HEIGHT = 30;
-/** The two rows below the retail group are ours, so our panel is that much taller. */
-const OUR_ROWS = [317, 349] as const;
 
 export interface Rect {
   x: number;
@@ -59,28 +57,21 @@ export interface MenuLayout {
 }
 
 /**
- * The panel is 64 px taller than the retail one and sits 40 px higher, which is
- * exactly the room the two rows we add need. Everything inside the retail group
- * keeps its recovered position.
+ * Both artwork and fallback use the same activity panel. Practice controls live
+ * in the lower-left of the frame, clear of the retail panel and its logo.
  */
-export const MAIN_MENU_RECT: Rect = { x: 379, y: 40, width: 238, height: 425 };
+export const MAIN_MENU_RECT: Rect = RETAIL_MAIN_MENU_RECT;
 
 /**
- * With the retail bundle installed the panel is the original's own rect, which has
- * no room below `Reference` for the two rows we add. They go side by side just
- * under the panel instead, where the artwork is plain.
+ * Widget coordinates are relative to the panel; the practice controls use frame
+ * positions translated into that coordinate system.
  */
 export function mainMenuLayout(rect: Rect = MAIN_MENU_RECT): MenuLayout {
-  const stacked = rect.height >= (OUR_ROWS[1] ?? 0) + BUTTON_HEIGHT;
-  const ours = stacked
-    ? OUR_ROWS.map((y) => ({ x: BUTTON_X, y, width: BUTTON_WIDTH }))
-    : [
-        { x: BUTTON_X, y: rect.height + 2, width: 86 },
-        { x: BUTTON_X + 94, y: rect.height + 2, width: 86 },
-      ];
+  const ours = [24, 198].map((x) => ({ x: x - rect.x, y: 438 - rect.y, width: 160 }));
   const places = [
     ...RETAIL_MAIN_MENU_ROWS.map((y) => ({ x: BUTTON_X, y, width: BUTTON_WIDTH })),
     ...ours,
+    { x: 546 - rect.x, y: 39 - rect.y, width: 66 },
   ];
   return {
     rect,
@@ -90,7 +81,7 @@ export function mainMenuLayout(rect: Rect = MAIN_MENU_RECT): MenuLayout {
       return {
         type: 'action' as const,
         ...place,
-        height: BUTTON_HEIGHT,
+        height: item.command === 'exit' ? 16 : BUTTON_HEIGHT,
         command: item.command,
         label: item.label,
         disabled: !item.enabled,
@@ -107,14 +98,14 @@ export function mainMenuLayout(rect: Rect = MAIN_MENU_RECT): MenuLayout {
 export function aircraftSelectLayout(current: AircraftId): MenuLayout {
   const ids = Object.keys(AIRCRAFT) as AircraftId[];
   return {
-    rect: { x: 379, y: 80, width: 238, height: 240 },
+    rect: { x: 180, y: 90, width: 280, height: 270 },
     title: 'Select aircraft',
     widgets: [
       ...ids.map((aircraft, index) => ({
         type: 'action' as const,
-        x: BUTTON_X,
-        y: 24 + index * 32,
-        width: BUTTON_WIDTH,
+        x: 30,
+        y: 44 + index * 40,
+        width: 220,
         height: BUTTON_HEIGHT,
         command: 'choose-aircraft' as const,
         value: aircraft,
@@ -124,8 +115,8 @@ export function aircraftSelectLayout(current: AircraftId): MenuLayout {
       {
         type: 'action',
         x: BUTTON_X,
-        y: 24 + ids.length * 32 + 18,
-        width: BUTTON_WIDTH,
+        y: 44 + ids.length * 40 + 18,
+        width: 220,
         height: BUTTON_HEIGHT,
         command: 'back',
         label: 'Back',
@@ -141,21 +132,21 @@ export interface DebriefLines {
 
 export function debriefLayout(debrief: DebriefLines): MenuLayout {
   return {
-    rect: { x: 379, y: 80, width: 238, height: 280 },
+    rect: { x: 180, y: 90, width: 280, height: 280 },
     title: 'Debrief',
     widgets: [
-      { type: 'text', x: BUTTON_X, y: 20, width: BUTTON_WIDTH, label: debrief.aircraft },
+      { type: 'text', x: BUTTON_X, y: 40, width: 220, label: debrief.aircraft },
       ...debrief.lines.map((label, index) => ({
         type: 'text' as const,
         x: BUTTON_X,
-        y: 48 + index * 22,
-        width: BUTTON_WIDTH,
+        y: 68 + index * 22,
+        width: 220,
         label,
       })),
       {
         type: 'action',
         x: BUTTON_X,
-        y: 48 + debrief.lines.length * 22 + 24,
+        y: 68 + debrief.lines.length * 22 + 24,
         width: BUTTON_WIDTH,
         height: BUTTON_HEIGHT,
         command: 'main-menu',

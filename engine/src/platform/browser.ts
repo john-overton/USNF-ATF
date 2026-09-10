@@ -143,6 +143,11 @@ export function createBrowserPlatform(baseUrl = '/dev-root/'): Platform {
         return Promise.resolve();
       },
     },
+    // Browsers may refuse to close a tab that wasn't opened by script.
+    quit: () => {
+      window.close();
+      return Promise.resolve();
+    },
     describe: () => description,
   };
 }

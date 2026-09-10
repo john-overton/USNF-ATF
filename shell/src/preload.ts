@@ -13,6 +13,7 @@ import { IPC } from './ipc';
 const description = ipcRenderer.sendSync(IPC.describe) as ShellDescription;
 
 const bridge: ShellBridge = {
+  quit: () => ipcRenderer.invoke(IPC.quit) as Promise<void>,
   describe: () => description,
   fsReadBytes: (root, p) => ipcRenderer.invoke(IPC.fsReadBytes, root, p) as Promise<Uint8Array>,
   fsReadText: (root, p) => ipcRenderer.invoke(IPC.fsReadText, root, p) as Promise<string>,

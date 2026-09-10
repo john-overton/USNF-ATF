@@ -157,6 +157,7 @@ export function startTerrainViewer(
   mission: MissionParams,
 ): {
   dispose(): void;
+  setPaused(paused: boolean): void;
   setCockpitMirrors(layout: CockpitMirrorLayout): void;
   setFuelFraction(fraction: number): void;
   setTimeOfDay(hours: number): void;
@@ -239,6 +240,7 @@ export function startTerrainViewer(
     manifest: TheaterManifest | undefined,
     folder = '';
   let disposed = false,
+    paused = false,
     teleportRequest = 0,
     raf = 0,
     last = performance.now(),
@@ -529,6 +531,7 @@ export function startTerrainViewer(
         return;
       }
       flight = layer;
+      flight.setPaused(paused);
       flight.environmentModel = environment;
       flight.activate();
       Object.assign(world, flight.pose().camera);
@@ -686,6 +689,10 @@ export function startTerrainViewer(
     frameTimes.push(now - last);
     if (frameTimes.length > 240) frameTimes.shift();
     last = now;
+    if (paused) {
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     // The clock runs in real time; time acceleration is deferred.
     environment.advance(frameSeconds);
     if (flight) {
@@ -879,6 +886,12 @@ export function startTerrainViewer(
   return {
     setCockpitMirrors(layout: CockpitMirrorLayout): void {
       mirrors?.setLayout(layout);
+    },
+    setPaused(value: boolean): void {
+      paused = value;
+      keys.clear();
+      last = performance.now();
+      flight?.setPaused(value);
     },
     async setTerrainPaint(mode: string): Promise<void> {
       if (disposed || !manifest) throw new Error('Terrain viewer is not ready');

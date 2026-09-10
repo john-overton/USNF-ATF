@@ -175,7 +175,13 @@ export class FlightInput {
   resetRequested = false;
   waypointIndex = 0;
   gamepadConnected = false;
+  private paused = false;
+  setPaused(value: boolean): void {
+    this.paused = value;
+    this.keys.clear();
+  }
   private key = (event: KeyboardEvent): void => {
+    if (this.paused) return;
     const editing =
       event.target instanceof HTMLInputElement ||
       event.target instanceof HTMLTextAreaElement ||

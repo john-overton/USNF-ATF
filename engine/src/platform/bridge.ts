@@ -6,6 +6,7 @@
 import type { FsRoot, PowerState, ShellDescription } from './Platform';
 
 export interface ShellBridge {
+  quit(): Promise<void>;
   describe(): ShellDescription;
   fsReadBytes(root: FsRoot, relPath: string): Promise<Uint8Array>;
   fsReadText(root: FsRoot, relPath: string): Promise<string>;

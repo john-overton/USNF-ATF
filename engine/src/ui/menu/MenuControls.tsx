@@ -1,9 +1,48 @@
-/**
- * One component per recovered `_Draw*` widget class, in original chrome. A rocker
- * is the original's stepper — a pair of arrows either side of a value — and a dial
- * is its continuous control. Both are ordinary buttons and a range input, so they
- * are keyboard-reachable and need no effect.
- */
+/** Effect-free controls. Chrome is authored CSS informed by original-game references. */
+export function MenuPageRocker({
+  page,
+  pages,
+  onPage,
+  command,
+}: {
+  /** Zero-based current page. */
+  page: number;
+  pages: number;
+  onPage: (page: number) => void;
+  command: string;
+}) {
+  return (
+    <span className="menu-page-rocker" role="group" aria-label="Page navigation">
+      <span className="menu-page-label">Page</span>
+      <output className="menu-page-readout" data-menu-value={command} aria-live="polite">
+        {page + 1} of {pages}
+      </output>
+      <span className="menu-page-switch">
+        <button
+          type="button"
+          className="menu-page-prev"
+          aria-label="Previous page"
+          data-menu-command={`${command}-down`}
+          disabled={page <= 0}
+          onClick={() => onPage(Math.max(0, page - 1))}
+        >
+          <span>Prev</span>
+        </button>
+        <button
+          type="button"
+          className="menu-page-next"
+          aria-label="Next page"
+          data-menu-command={`${command}-up`}
+          disabled={page >= pages - 1}
+          onClick={() => onPage(Math.min(pages - 1, page + 1))}
+        >
+          <span>Next</span>
+        </button>
+      </span>
+    </span>
+  );
+}
+
 export function MenuRocker({
   label,
   value,

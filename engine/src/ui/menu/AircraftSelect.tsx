@@ -21,9 +21,7 @@ export function AircraftSelect({
       onCommand={onCommand}
     >
       <p className="menu-summary">
-        {mission.mode === 'quick-fight'
-          ? 'Quick fight · opponents are not flown yet'
-          : 'Free flight'}
+        {mission.mode === 'quick-fight' ? 'Quick fight · fixed-course opponents' : 'Free flight'}
       </p>
     </MenuScreen>
   );

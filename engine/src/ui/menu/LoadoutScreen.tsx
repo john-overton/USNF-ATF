@@ -1,61 +1,13 @@
 import type { MissionParams } from '../../sim/mission/params';
-import type { RetailLoadout } from '../../data/retail-loadout';
+import { storeLabel, type RetailLoadout } from '../../data/retail-loadout';
+import { AIRCRAFT } from '../../flight/aircraft-catalog';
 import { MenuScreen } from './MenuScreen';
 import { MenuDial, MenuRocker } from './MenuControls';
-import type { MenuAssets } from './assets';
-import { BUTTON_HEIGHT, BUTTON_WIDTH, BUTTON_X, type MenuLayout } from './layout';
-import { cycleStore, kilograms, loadoutView, stepCount } from './loadout-view';
+import { storeImage, type MenuAssets } from './assets';
+import { cycleStore, loadoutView, stepCount } from './loadout-view';
 import type { MenuAction } from './navigation';
 
-/**
- * The pre-mission screen: stations, fuel, and what the aircraft weighs. Modelled on
- * `LOADORD.DLG`, which recovers as two dials, two rockers and the Fly / Select Plane
- * pair (Docs/formats/mnu.md).
- *
- * Two things it is honest about. Stores are **displayed** against the `.PT`
- * `loadedDrag` family of penalties; the flight model does not apply them yet. And
- * because the hardpoint `flags` compatibility mask is undecoded, a station offers
- * its own default and an empty rack, and nothing else unless the developer toggle
- * named after the original's own "Cheat (load anything anywhere)" is on.
- */
-const pounds = (lb: number) => `${Math.round(lb).toLocaleString()} lb`;
-const tonnes = (lb: number) => `${(kilograms(lb) / 1000).toFixed(2)} t`;
-
-function layout(title: string): MenuLayout {
-  return {
-    rect: { x: 24, y: 40, width: 592, height: 400 },
-    title,
-    widgets: [
-      {
-        type: 'action',
-        x: BUTTON_X,
-        y: 350,
-        width: BUTTON_WIDTH,
-        height: BUTTON_HEIGHT,
-        command: 'fly',
-        label: 'Fly',
-      },
-      {
-        type: 'action',
-        x: BUTTON_X + 200,
-        y: 350,
-        width: BUTTON_WIDTH,
-        height: BUTTON_HEIGHT,
-        command: 'select-plane',
-        label: 'Select Plane',
-      },
-      {
-        type: 'action',
-        x: BUTTON_X + 400,
-        y: 350,
-        width: 120,
-        height: BUTTON_HEIGHT,
-        command: 'main-menu',
-        label: 'Main menu',
-      },
-    ],
-  };
-}
+const pounds = (lb: number) => Math.round(lb).toLocaleString() + ' lb';
 
 export function LoadoutScreen({
   mission,
@@ -68,7 +20,6 @@ export function LoadoutScreen({
   onCommand,
 }: {
   mission: MissionParams;
-  /** Absent until an aircraft's `<id>-loadout.json` has been ported and installed. */
   loadout?: RetailLoadout;
   unrestricted?: boolean;
   problems: readonly string[];
@@ -77,22 +28,19 @@ export function LoadoutScreen({
   onUnrestricted: (value: boolean) => void;
   onCommand: (action: MenuAction) => void;
 }) {
-  if (!loadout)
-    return (
-      <MenuScreen
-        screen="loadout"
-        layout={layout('Loadout')}
-        {...(assets ? { assets } : {})}
-        problems={problems}
-        onCommand={onCommand}
-      >
-        <p className="menu-summary" data-loadout="unavailable">
-          No stations to show: {mission.aircraft.toUpperCase()} has no ported loadout installed. See
-          Docs/aircraft-porting.md. Fuel still follows the practice flight&rsquo;s own slider.
-        </p>
-      </MenuScreen>
-    );
-  const view = loadoutView(loadout, mission.loadout, { unrestricted });
+  const view = loadout ? loadoutView(loadout, mission.loadout, { unrestricted }) : undefined;
+  const stores =
+    loadout && view
+      ? [
+          ...new Set(
+            view.stations.flatMap((row) =>
+              row.choices.flatMap((choice) => (choice.store ? [choice.store] : [])),
+            ),
+          ),
+        ]
+          .map((file) => loadout.stores[file]!)
+          .filter(Boolean)
+      : [];
   const setStation = (index: number, selection: { store: string | null; count: number }) =>
     onMission({
       ...mission,
@@ -104,75 +52,143 @@ export function LoadoutScreen({
   return (
     <MenuScreen
       screen="loadout"
-      layout={layout(view.aircraft)}
+      layout={{
+        rect: { x: 0, y: 0, width: 640, height: 480 },
+        title: 'Load ordnance',
+        widgets: [
+          {
+            type: 'action',
+            x: 383,
+            y: 414,
+            width: 80,
+            height: 26,
+            command: 'fly',
+            label: 'Fly',
+            disabled: !!view?.problems.length || problems.length > 0,
+          },
+          {
+            type: 'action',
+            x: 473,
+            y: 414,
+            width: 100,
+            height: 26,
+            command: 'select-plane',
+            label: 'Select Plane',
+          },
+          {
+            type: 'action',
+            x: 508,
+            y: 39,
+            width: 84,
+            height: 16,
+            command: 'main-menu',
+            label: 'Main menu',
+          },
+        ],
+      }}
       {...(assets ? { assets } : {})}
-      problems={[...problems, ...view.problems]}
+      problems={[...problems, ...(view?.problems ?? [])]}
       onCommand={onCommand}
+      frameContent={
+        <p className="mission-topbar">
+          {view?.aircraft ?? AIRCRAFT[mission.aircraft].name} · Select stores and fuel
+        </p>
+      }
     >
-      <div className="menu-loadout" data-loadout="ready">
-        <ul className="menu-stations">
-          {view.stations.map((row) => (
+      <div className="ordnance-content" data-loadout={view ? 'ready' : 'unavailable'}>
+        <h2 className="ordnance-stores-title">Available stores</h2>
+        <ul className="ordnance-stores">
+          {stores.map((store) => {
+            const image = storeImage(assets, store.file);
+            return (
+              <li key={store.file} title={storeLabel(store)}>
+                <span>{storeLabel(store)}</span>
+                {image ? (
+                  <img src={image} alt="" />
+                ) : (
+                  <span className="ordnance-store-kind">
+                    {store.kind === 'tank' ? 'External fuel tank' : 'Weapon store'}
+                  </span>
+                )}
+                <small>{pounds(store.weightLb)} each</small>
+              </li>
+            );
+          })}
+          {!view && <li className="ordnance-empty">No stores installed</li>}
+        </ul>
+        <h2 className="ordnance-stations-title">Aircraft hardpoints</h2>
+        <ul className="ordnance-stations">
+          {view?.stations.map((row) => (
             <li key={row.index} data-station={row.index}>
-              <span className="menu-station-name">Station {row.index}</span>
+              <div className="ordnance-station-heading">
+                Station {row.index}
+                <span>{pounds(row.weightLb)}</span>
+              </div>
               <MenuRocker
-                label={`Station ${row.index} store`}
-                command={`station-${row.index}-store`}
+                label={'Station ' + row.index + ' store'}
+                command={'station-' + row.index + '-store'}
                 value={row.label}
                 onStep={(direction) => setStation(row.index, cycleStore(row, direction))}
                 disabled={row.choices.length < 2}
               />
               <MenuRocker
-                label={`Station ${row.index} count`}
-                command={`station-${row.index}-count`}
-                value={`${row.count} / ${row.maxItems}`}
+                label={'Station ' + row.index + ' count'}
+                command={'station-' + row.index + '-count'}
+                value={row.count + ' / ' + row.maxItems}
                 onStep={(direction) => setStation(row.index, stepCount(row, direction))}
                 disabled={row.store === null}
               />
-              <span className="menu-station-weight">{pounds(row.weightLb)}</span>
             </li>
           ))}
         </ul>
-        <MenuDial
-          label="Internal fuel"
-          command="fuel"
-          value={view.internalFuelFraction}
-          readout={`${(view.internalFuelFraction * 100).toFixed(0)}% · ${pounds(view.internalFuelLb)}`}
-          onChange={(value) =>
-            onMission({
-              ...mission,
-              loadout: { ...mission.loadout, internalFuelFraction: value },
-            })
-          }
-        />
-        <dl className="menu-weights">
-          <dt>Fuel, internal + external</dt>
-          <dd data-loadout-value="fuel">
-            {pounds(view.totalFuelLb)}
-            {view.externalFuelLb > 0 ? ` (${pounds(view.externalFuelLb)} in tanks)` : ''}
-          </dd>
-          <dt>Stores</dt>
-          <dd data-loadout-value="stores">{pounds(view.storesWeightLb)}</dd>
-          <dt>Gross weight</dt>
-          <dd data-loadout-value="gross" data-over-weight={view.overWeight}>
-            {pounds(view.grossWeightLb)} · {tonnes(view.grossWeightLb)} of{' '}
-            {pounds(view.maxTakeoffWeightLb)}
-          </dd>
-        </dl>
-        <p className="menu-penalties">
-          Loaded penalties, from the aircraft&rsquo;s own data and <strong>shown only</strong>:{' '}
-          {view.penalties.map((p) => `${p.label} ${p.percent}%`).join(' · ')}. The flight model does
-          not apply them yet.
-        </p>
-        <label className="menu-toggle">
-          <input
-            type="checkbox"
-            data-menu-command="unrestricted"
-            checked={unrestricted}
-            onChange={(event) => onUnrestricted(event.target.checked)}
+        <div className="ordnance-weight">
+          <dl>
+            <dt>Max</dt>
+            <dd>{view ? pounds(view.maxTakeoffWeightLb) : '—'}</dd>
+            <dt>Current</dt>
+            <dd data-loadout-value="gross" data-over-weight={view?.overWeight}>
+              {view ? pounds(view.grossWeightLb) : '—'}
+            </dd>
+            <dt>Avail</dt>
+            <dd>{view ? pounds(view.maxTakeoffWeightLb - view.grossWeightLb) : '—'}</dd>
+          </dl>
+        </div>
+        <div className="ordnance-fuel">
+          <MenuDial
+            label="Internal fuel"
+            command="fuel"
+            value={mission.loadout.internalFuelFraction}
+            readout={Math.round(mission.loadout.internalFuelFraction * 100) + '%'}
+            onChange={(value) =>
+              onMission({
+                ...mission,
+                loadout: { ...mission.loadout, internalFuelFraction: value },
+              })
+            }
           />
-          Load anything anywhere — the compatibility mask is undecoded, so this offers every store
-          rather than the ones the original would allow.
-        </label>
+        </div>
+        <div className="ordnance-options">
+          <label>
+            <input
+              type="checkbox"
+              data-menu-command="unrestricted"
+              checked={unrestricted}
+              onChange={(event) => onUnrestricted(event.target.checked)}
+            />{' '}
+            Unrestricted loadout
+          </label>
+          <p>
+            {view
+              ? 'Use the station arrows to load or remove stores. Stores do not affect flight performance yet.'
+              : 'No stations to show: this aircraft has no loadout installed. You can still set fuel and fly.'}
+          </p>
+        </div>
+        {view && (
+          <p className="ordnance-totals">
+            Fuel <span data-loadout-value="fuel">{pounds(view.totalFuelLb)}</span> · Stores{' '}
+            <span data-loadout-value="stores">{pounds(view.storesWeightLb)}</span>
+          </p>
+        )}
       </div>
     </MenuScreen>
   );

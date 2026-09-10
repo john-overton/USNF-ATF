@@ -30,6 +30,12 @@ export interface MenuAssets {
 
 const dataUrl = (pngBase64: string) => `url("data:image/png;base64,${pngBase64}")`;
 
+export function storeImage(assets: MenuAssets | undefined, file: string): string | undefined {
+  const id = `store-${file.split('.')[0]?.toLowerCase()}`;
+  const image = assets?.bundle?.sprites[id]?.[0]?.image;
+  return image ? `data:image/png;base64,${image.pngBase64}` : undefined;
+}
+
 /** The rect the retail dialog gives for a screen, when the bundle has one. */
 export function retailRect(assets: MenuAssets | undefined, screen: string): Rect | undefined {
   const found = assets?.bundle?.screens[screen];
@@ -61,6 +67,8 @@ export function buttonChrome(assets: MenuAssets | undefined): Record<string, str
   if (middle) style['--menu-button-height'] = `${middle.height}`;
   const left = sprites['action-left']?.[0]?.image;
   if (left) style['--menu-button-cap'] = `${left.width}`;
+  const right = sprites['action-right']?.[0]?.image;
+  if (right) style['--menu-button-right-cap'] = `${right.width}`;
   return style;
 }
 

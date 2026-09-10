@@ -130,7 +130,7 @@ test('an overweight aircraft is reported, not silently flown', () => {
   expect(view.problems.some((problem) => problem.toLowerCase().includes('weight'))).toBe(true);
 });
 
-test('the screen draws a station per rack, the fuel dial, and the penalties as display only', () => {
+test('the screen draws the store bank, a station per rack, fuel and the flight limitation', () => {
   const markup = renderToStaticMarkup(
     createElement(LoadoutScreen, {
       mission: { ...DEFAULT_MISSION, loadout: { ...chosen(), payloadMassKg: 0 } },
@@ -149,7 +149,7 @@ test('the screen draws a station per rack, the fuel dial, and the penalties as d
   expect(markup).toContain('data-menu-command="station-0-count-down"');
   expect(markup).toContain('data-menu-command="unrestricted"');
   expect(markup).toContain('data-loadout-value="gross"');
-  expect(markup).toContain('Drag 12%');
-  expect(markup).toContain('does not apply them yet');
+  expect(markup).toContain('Available stores');
+  expect(markup).toContain('Stores do not affect flight performance yet');
   expect(markup).toContain('data-over-weight="false"');
 });

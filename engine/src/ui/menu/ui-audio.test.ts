@@ -32,6 +32,8 @@ class StubElement {
 interface StubSource {
   buffer: unknown;
   started: boolean;
+  stopped?: boolean;
+  loop?: boolean;
 }
 interface StubContext {
   state: AudioContextState;
@@ -70,7 +72,9 @@ function createStubContext(): StubContext {
         start: () => {
           source.started = true;
         },
-        stop: () => undefined,
+        stop: () => {
+          source.stopped = true;
+        },
       };
       context.sources.push(source);
       return source;
@@ -119,6 +123,24 @@ function clip(sampleRate: 5512 | 8000 | 11025 = 11025): { sampleRate: number; pc
   return { sampleRate, pcm: Array.from({ length: 64 }, (_, i) => 100 + (i % 32)) };
 }
 const allClips = (): UiClips => Object.fromEntries(UI_SOUNDS.map((name) => [name, clip()]));
+
+test('title music loops once across gestures, shares mute, and stops on disposal', () => {
+  installWindow();
+  const audio = new UiAudio(allClips(), clip());
+  expect(created).toBe(1);
+  const context = live!;
+  const music = context.sources[0]!;
+  expect(music.started).toBe(true);
+  expect(music.loop).toBe(true);
+  gesture();
+  gesture();
+  expect(context.sources).toHaveLength(1);
+  pressM();
+  expect(audio.diagnostics().muted).toBe(true);
+  audio.dispose();
+  expect(music.stopped).toBe(true);
+  expect(context.state).toBe('closed');
+});
 
 test('play is a silent no-op before a gesture and with no clips installed', () => {
   installWindow();
@@ -200,6 +222,9 @@ test('M toggles mute for menu and flight audio together, ignoring form elements'
   pressM();
   expect(ui.diagnostics().muted).toBe(false);
   expect(flight.diagnostics().muted).toBe(false);
+  pressM(new StubElement('button'));
+  expect(ui.diagnostics().muted).toBe(true);
+  expect(flight.diagnostics().muted).toBe(true);
   ui.dispose();
   flight.dispose();
 });

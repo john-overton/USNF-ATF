@@ -144,12 +144,21 @@ export class FlightAudio {
   private sources: (AudioBufferSourceNode | OscillatorNode)[] = [];
   private previous?: FlightAudioState;
   private disposed = false;
+  private paused = false;
+  setPaused(value: boolean): void {
+    this.paused = value;
+    const context = this.context;
+    if (!context || context.state === 'closed') return;
+    void (value ? context.suspend() : context.resume()).catch((error: unknown) => {
+      this.error = String(error);
+    });
+  }
   private unsubscribeMute?: () => void;
   private error: string | undefined;
   private levels = { jet: 0, wind: 0, burner: 0, frequency: 65 };
 
   private gesture = (event: Event): void => {
-    if (!event.isTrusted || this.disposed) return;
+    if (!event.isTrusted || this.disposed || this.paused) return;
     if (event.type === 'keydown') {
       const key = event as KeyboardEvent;
       if (key.repeat || isEditingTarget(key.target)) return;

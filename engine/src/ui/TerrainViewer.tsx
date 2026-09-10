@@ -22,10 +22,12 @@ import {
 export function TerrainViewer({
   mission,
   parseError = '',
+  paused = false,
 }: {
   mission: MissionParams;
   /** A query the shell could not read; shown here because this is where errors live. */
   parseError?: string;
+  paused?: boolean;
 }) {
   const flightMode = mission.mode !== 'explorer';
   const [root, setRoot] = useState<FsRoot>(mission.root);
@@ -84,6 +86,9 @@ export function TerrainViewer({
       if (viewerRef.current === viewer) viewerRef.current = null;
     };
   }, [request, mission, parseError]);
+  useEffect(() => {
+    viewerRef.current?.setPaused(paused);
+  }, [paused, request, mission, parseError]);
   return (
     <div className="probe-root">
       {stats?.imageryAttribution && (

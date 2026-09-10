@@ -18,6 +18,7 @@ export type Screen =
   | 'aircraft-select'
   | 'loadout'
   | 'flight'
+  | 'paused'
   | 'debrief'
   | 'probe';
 
@@ -26,6 +27,8 @@ export type Screen =
  * `aria-label`s do. The retail names come from `CHOOSEAC.DLG`; the last two are ours.
  */
 export type MenuCommand =
+  | 'resume'
+  | 'exit'
   | 'single-mission'
   | 'quick-mission'
   | 'pro-mission'
@@ -123,7 +126,7 @@ export const MAIN_MENU_ITEMS: readonly MenuItem[] = [
     command: 'quick-mission',
     label: 'Create Quick Mission',
     enabled: true,
-    note: 'Opponents are not flown yet',
+    note: 'Mock quick fight: fixed-course opponents, no weapons damage',
   },
   {
     command: 'pro-mission',
@@ -158,6 +161,7 @@ export const MAIN_MENU_ITEMS: readonly MenuItem[] = [
   { command: 'reference', label: 'Reference', enabled: false, note: 'Encyclopedia is phase 8' },
   { command: 'free-flight', label: 'Free Flight', enabled: true },
   { command: 'terrain-explorer', label: 'Terrain Explorer', enabled: true },
+  { command: 'exit', label: 'Exit', enabled: true },
 ];
 
 export const AIRCRAFT_ITEMS: readonly { aircraft: AircraftId; label: string }[] = (
@@ -202,10 +206,10 @@ export function nextScreen(screen: Screen, action: MenuAction, mission: MissionP
       if (action.command === 'quick-mission') return 'quick-fight';
       if (action.command === 'free-flight') return 'aircraft-select';
       if (action.command === 'terrain-explorer') return 'explorer';
-      // Everything else on the main menu is disabled and goes nowhere.
+      // Exit is handled by the host; the remaining activities are disabled.
       return 'main-menu';
     case 'quick-fight':
-      if (action.command === 'continue') return 'aircraft-select';
+      if (action.command === 'continue') return 'loadout';
       if (action.command === 'back' || action.command === 'main-menu') return 'main-menu';
       return 'quick-fight';
     case 'aircraft-select':
@@ -221,7 +225,13 @@ export function nextScreen(screen: Screen, action: MenuAction, mission: MissionP
       if (action.command === 'main-menu') return 'main-menu';
       return 'loadout';
     case 'flight':
-      return action.command === 'end-flight' || action.command === 'back' ? 'debrief' : 'flight';
+      if (action.command === 'back') return 'paused';
+      return action.command === 'end-flight' ? 'debrief' : 'flight';
+    case 'paused':
+      if (action.command === 'resume' || action.command === 'back') return 'flight';
+      if (action.command === 'main-menu') return 'main-menu';
+      if (action.command === 'end-flight') return 'debrief';
+      return 'paused';
     case 'debrief':
       return action.command === 'main-menu' || action.command === 'back' ? 'main-menu' : 'debrief';
     case 'explorer':

@@ -48,10 +48,10 @@ try {
   evidence.items = items;
   assert.deepEqual(
     items.filter((item: { disabled: boolean }) => !item.disabled).map((item: { command: string }) => item.command),
-    ['quick-mission', 'free-flight', 'terrain-explorer'],
+    ['quick-mission', 'free-flight', 'terrain-explorer', 'exit'],
     'Only what this build delivers may be enabled',
   );
-  assert.equal(items.length, 10, 'The retail item list stays whole, with the rest disabled');
+  assert.equal(items.length, 11, 'The retail list stays whole, plus practice, explorer and exit');
 
   // The quick fight is set up before an aircraft is chosen, and backing out
   // returns to the setup rather than jumping to the main menu.
@@ -65,8 +65,9 @@ try {
     await session.evaluate(
       `document.querySelector('[data-menu-screen]')?.getAttribute('data-menu-screen')`,
     ),
-    'aircraft-select',
+    'loadout',
   );
+  await session.evaluate(`document.querySelector('[data-menu-command="select-plane"]').click()`);
   await session.evaluate(`document.querySelector('[data-menu-command="back"]').click()`);
   assert.equal(
     await session.evaluate(
