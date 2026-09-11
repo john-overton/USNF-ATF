@@ -21,6 +21,10 @@ try{
  await Bun.write(s.out+'/report.json',JSON.stringify(report,null,2));
  assert.equal(s.errors.length,0);assert.equal(report.glError,0);assert(report.nonzero>5);
  for(const sample of report.samples) for(const [ported,original] of [[sample[0],sample[1]],[sample[2],sample[3]]]) {assert(Number.isFinite(ported));assert(Number.isFinite(original));assert(Math.abs(ported-original)<.0001);}
+ assert(report.depthInvariant[0]<.00001);assert(report.depthInvariant[1]>.99);assert(report.depthInvariant[2]<60000);
+ assert(Math.abs(report.brightnessRatios[1]-.75)<.002);
+ assert(Math.abs(report.brightnessRatios[2]-.5)<.002);
+ assert(report.distantMinimumTransmittance < 15360, 'clouds must render on known terrain 80km away');
  assert(report.maxRebase<=2);assert(report.lowLayerMinimumTransmittance < 15360, 'low clouds must remain visible from 20km altitude');
- console.log({nonzero:report.nonzero,maxRebase:report.maxRebase,densitySamples:report.samples.length,glError:report.glError});
+ console.log({depthInvariant:report.depthInvariant,brightnessRatios:report.brightnessRatios,distantMinimumTransmittance:report.distantMinimumTransmittance,nonzero:report.nonzero,maxRebase:report.maxRebase,densitySamples:report.samples.length,glError:report.glError});
 }finally{await s.close();}

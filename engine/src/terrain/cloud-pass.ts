@@ -74,6 +74,11 @@ export interface CloudUniformState {
   appearance?: 'sunshine' | 'solid' | 'volume';
 }
 
+/** Authored linear-radiance weather adjustment, applied before distance haze. */
+function cloudWeatherBrightness(type: CloudLayer['type'] | undefined): number {
+  return type === 'stratus' ? 0.75 : type === 'cumulonimbus' ? 0.5 : 1;
+}
+
 export function cloudScaleFor(quality: CloudQuality): number {
   switch (quality) {
     case 'full':
@@ -277,6 +282,7 @@ uniform float cloudTopM;
 uniform float cloudDensity;
 uniform float cloudStratus;
 uniform float cloudTower;
+uniform float cloudWeatherBrightness;
 uniform vec2 cirrusOffset;
 uniform float cloudMarch;
 uniform float groundFog;
@@ -446,6 +452,7 @@ void integrateMedium(vec3 ro, vec3 dir, float start, float end, float jitter,
                         cloudGroundColor * 0.1) * cloudAmbientStrength;
         lum = cloudSunColor * cloudSunStrength *
               (direct * (0.24 + phase * 0.7) + multiple) + ambient;
+        lum *= cloudWeatherBrightness;
         lum = mix(lum, cloudFogColor, fogAmount(t));
       }
       lum = (lum * d * EXTINCTION + cloudFogColor * fog) / sigma;
@@ -633,6 +640,7 @@ void main() {
       vec3 face = cloudSunColor * cloudSunStrength *
         (0.15 + 0.85 * sun) * exp(-lightOpticalDepth(surfacePoint) * 0.35)
         + (cloudZenithColor * mix(0.12, 0.5, sky) + cloudGroundColor * 0.1) * cloudAmbientStrength;
+      face *= cloudWeatherBrightness;
       face = mix(face, cloudFogColor, fogAmount(length(surfacePoint - ro)));
       scatter += transmittance * surfaceAlpha * face;
       transmittance *= 1.0 - surfaceAlpha;
@@ -816,6 +824,7 @@ export class CloudPass extends Pass {
         cloudDensity: { value: 0 },
         cloudStratus: { value: 0 },
         cloudTower: { value: 0 },
+        cloudWeatherBrightness: { value: 1 },
         cirrusOffset: { value: new Vector2() },
         cloudMarch: { value: 0 },
         groundFog: { value: 0 },
@@ -1010,6 +1019,7 @@ export class CloudPass extends Pass {
     u.cloudDensity!.value = layer ? layer.density : 0;
     u.cloudStratus!.value = layer?.type === 'stratus' ? 1 : 0;
     u.cloudTower!.value = layer?.type === 'cumulonimbus' ? 1 : 0;
+    u.cloudWeatherBrightness!.value = cloudWeatherBrightness(layer?.type);
     (u.cirrusOffset!.value as Vector2).set(state.cirrusOffset.x, state.cirrusOffset.z);
     u.cirrusBaseM!.value = Math.max(
       state.cirrus?.baseM ?? 0,

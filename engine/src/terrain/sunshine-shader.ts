@@ -244,7 +244,7 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
   float minstep = 400.0 * scale;
   float maxstep = 500.0 * scale;
   float lightDistance = 10000.0 * scale;
-  float maxDistance = maxstep * float(sunshineSteps);
+  float maxDistance = 180000.0;
   float coverage = sunshineCoverage * 1.01;
   float densityMultiplier = sunshineDensity;
   float sharpness = 0.508;
@@ -267,10 +267,11 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
     entry = (weatherRange.y + cloudTopM - ro.y) / raydirection.y;
   if (ro.y < weatherRange.x + cloudBaseM && raydirection.y > 0.00001)
     entry = (weatherRange.x + cloudBaseM - ro.y) / raydirection.y;
+  float marchRange = max(0.0, maxDistance - entry);
   float traveled = entry + maxstep * texture(dither_small, vec3(vUv * 40.037, sunshineTime)).r;
-  float initial = entry + maxDistance;
+  float initial = maxDistance;
   float highest = 0.0;
-  float highestDistance = entry + maxDistance;
+  float highestDistance = maxDistance;
   float density = 0.0;
   float ambient = 0.0;
   float lightingSamples = 0.0;
@@ -279,13 +280,13 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
   float sunUp = smoothstep(-0.03, 0.07, cloudSunDirection.y);
   float phase = pow(HenyeyGreenstein(0.16, dot(cloudSunDirection, raydirection)), 1.84);
   for (int i = 0; i < sunshineSteps; i++) {
-    if (traveled >= sceneDistance) { depthBreak = true; break; }
+    if (traveled >= min(sceneDistance, maxDistance)) { depthBreak = traveled >= sceneDistance; break; }
     vec3 p = ro + raydirection * traveled;
     vec2 ground = cloudGroundAt(p.xz);
     float d = 0.0;
     float nextStep = maxstep;
     if (ground.y > 0.5 && p.y - ground.x >= cloudBaseM && p.y - ground.x <= cloudTopM) {
-      float lod = 1.0 - clamp((traveled - entry) / maxDistance, 0.0, 1.0);
+      float lod = 1.0 - clamp(traveled / maxDistance, 0.0, 1.0);
       vec4 maskSample = texture(extra_large_noise, (p.xz - extraPos.xz) / extraScale);
       d = pow(sampleScene(largePos, mediumPos, smallPos, p, cloudTopM, cloudBaseM,
         maskSample.a, largeScale, mediumScale, smallScale, coverage, 1.075, curlPower, lod, false)
@@ -312,16 +313,23 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
       density += d;
       if (density >= 1.0) break;
     }
-    traveled += nextStep;
+    // Exponential interval widths sum to the full remaining viewing range.
+    // Keep adaptive detail near the camera, but do not spend the whole budget
+    // within a few kilometres of a thin layer. No extra primary iterations.
+    float f0 = float(i) / float(sunshineSteps);
+    float f1 = float(i + 1) / float(sunshineSteps);
+    float distantStep = marchRange * (exp(6.0 * f1) - exp(6.0 * f0)) / (exp(6.0) - 1.0);
+    traveled += max(nextStep, distantStep);
     if (p.y > weatherRange.y + cloudTopM && raydirection.y > 0.0) break;
     if (p.y < weatherRange.x + cloudBaseM && raydirection.y < 0.0) break;
   }
-  density *= 1.0 - smoothstep(minstep * float(sunshineSteps), maxDistance, traveled - entry);
+  density *= 1.0 - smoothstep(150000.0, maxDistance, initial);
   ambient = clamp(ambient / max(1.0, lightingSamples), 0.0, 1.0);
   // Source's neutral sky tint with occlusion. Scene-specific red test AO is
   // adapted to this environment's sheltered gray/blue cloud bases.
   vec3 fill = vec3(0.761,0.784,0.824) * vec3(0.133,0.2,0.243) * cloudAmbientStrength;
   light += mix(fill, fill * vec3(0.3,0.38,0.5), ambient);
+  light *= cloudWeatherBrightness;
   light = mix(light, cloudFogColor, fogAmount(traveled));
   rayData = vec4(initial, min(traveled, sceneDistance), min(traveled, highestDistance), float(depthBreak));
   return vec4(light, clamp(density, 0.0, 1.0));

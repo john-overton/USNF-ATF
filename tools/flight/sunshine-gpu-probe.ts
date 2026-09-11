@@ -1,5 +1,5 @@
 /** Actual GL comparison of ported and upstream density on exact exported textures. */
-import {Color,FloatType,PerspectiveCamera,ShaderMaterial,Vector3,Vector4,WebGLRenderer,WebGLRenderTarget} from 'three';
+import {Color,DataUtils,FloatType,PerspectiveCamera,ShaderMaterial,Vector3,Vector4,WebGLRenderer,WebGLRenderTarget} from 'three';
 import {FullScreenQuad} from 'three/addons/postprocessing/Pass.js';
 import {CloudPass,MARCH_FRAGMENT,type CloudUniformState} from '../../engine/src/terrain/cloud-pass';
 import {heightField} from '../../engine/src/terrain/weather-height';
@@ -42,6 +42,17 @@ async function sunshineProbe(encoded:Record<string,string>, reference:string) {
  (pass as unknown as {historyValid:boolean}).historyValid=false;
  const rebased=render(50000,28000,50000);
  let maxRebase=0;for(let i=0;i<first.length;i++)maxRebase=Math.max(maxRebase,Math.abs(first[i]!-rebased[i]!));
+ const brightnessSums:number[]=[];
+ state.fogNear=1e9;state.fogFar=2e9;
+ for(const type of ['cumulus','stratus','cumulonimbus'] as const){
+  state.layer={...state.layer!,type};
+  render(50000,28000,50000);
+  const values=new Uint16Array(192*108*4);
+  renderer.readRenderTargetPixels((pass as unknown as {target:WebGLRenderTarget}).target,0,0,192,108,values);
+  let sum=0;for(let i=0;i<values.length;i++)if(i%4!==3)sum+=DataUtils.fromHalfFloat(values[i]!);
+  brightnessSums.push(sum);
+ }
+ const brightnessRatios=brightnessSums.map(sum=>sum/brightnessSums[0]!);
  const canvas=document.createElement('canvas');canvas.width=192;canvas.height=108;
  const ctx=canvas.getContext('2d')!;const flipped=new Uint8ClampedArray(first.length);
  for(let y=0;y<108;y++)flipped.set(first.subarray(y*192*4,(y+1)*192*4),(107-y)*192*4);
@@ -54,8 +65,28 @@ async function sunshineProbe(encoded:Record<string,string>, reference:string) {
  renderer.readRenderTargetPixels((pass as unknown as {target:WebGLRenderTarget}).target,0,0,192,108,marchPixels);
  let lowLayerMinimumTransmittance=15360;
  for(let i=3;i<marchPixels.length;i+=4)lowLayerMinimumTransmittance=Math.min(lowLayerMinimumTransmittance,marchPixels[i]!);
+ // Only terrain at 80–180 km is known: all cloud opacity must come from far
+ // beyond the former thin-layer budget. Narrow FOV resolves the thin horizon.
+ const distantTerrain=heightField(new Float32Array(4),2,2,new Vector4(80000,-100000,100000,200000));
+ state.terrain=distantTerrain;state.origin={x:0,z:0};
+ camera.fov=20;camera.updateProjectionMatrix();camera.position.set(0,1100,0);
+ camera.lookAt(100000,1100,0);camera.updateMatrixWorld();
+ pass.update(state);pass.render(renderer,output,input,0,false);
+ renderer.readRenderTargetPixels((pass as unknown as {target:WebGLRenderTarget}).target,0,0,192,108,marchPixels);
+ let distantMinimumTransmittance=15360;
+ for(let i=3;i<marchPixels.length;i+=4)distantMinimumTransmittance=Math.min(distantMinimumTransmittance,marchPixels[i]!);
+ const middleTerrain=heightField(new Float32Array(4),2,2,new Vector4(20000,-100000,160000,200000));
+ state.terrain=middleTerrain;pass.update(state);
+ const depthMaterial=new ShaderMaterial({defines:{LIGHT_STEPS:6},uniforms,
+ vertexShader:'varying vec2 vUv; void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}',
+ fragmentShader:prefix+'void main(){vec4 ad,bd;vec4 a=sunshineMarch(vec3(0,1100,0),vec3(1,0,0),60000.0,ad);vec4 b=sunshineMarch(vec3(0,1100,0),vec3(1,0,0),180000.0,bd);vec4 diff=abs(a-b);gl_FragColor=vec4(max(max(diff.r,diff.g),max(diff.b,diff.a)),a.a,ad.g,bd.g);}',depthTest:false,depthWrite:false});
+ quad.material=depthMaterial;renderer.setRenderTarget(target);quad.render(renderer);
+ const depthValues=new Float32Array(4);renderer.readRenderTargetPixels(target,0,0,1,1,depthValues);
+ const depthInvariant=Array.from(depthValues);
+ depthMaterial.dispose();middleTerrain.texture.dispose();
+ distantTerrain.texture.dispose();
  const glError=renderer.getContext().getError();
  quad.dispose();material.dispose();target.dispose();output.dispose();input.dispose();pass.dispose();terrain.texture.dispose();renderer.dispose();
- return {samples,lowLayerMinimumTransmittance,maxRebase,glError,png,nonzero:samples.filter(s=>s[0]!>.001).length};
+ return {samples,depthInvariant,brightnessRatios,distantMinimumTransmittance,lowLayerMinimumTransmittance,maxRebase,glError,png,nonzero:samples.filter(s=>s[0]!>.001).length};
 }
 Object.assign(window,{sunshineProbe});
