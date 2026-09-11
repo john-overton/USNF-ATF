@@ -7,6 +7,23 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-11
 
+## 2026-09-11: Keep cloud contours independent of camera distance
+
+User reports that `be4e89b` improves interiors but approaching cloud fringes still
+look like fire. Preserve its light/opacity weighting and history-depth correction.
+Curl displacement now stays fixed in world space instead of scaling with view
+LOD. Reduce animated ray-start jitter to 15% of an interval around its midpoint;
+this does not reintroduce the rejected fixed screen-space dither. Fine vertical
+mist evolution slows from 12 to 3 source-scaled metres/second; wind remains.
+
+GPU sampling at 128 fixed world positions across four LOD values changes density
+by up to .413096 in `be4e89b` versus zero now. The existing full-detail upstream
+comparison still passes. Moving-edge mean RGB variation decreases from .156063
+to .097009 in the synthetic sequence, while the interior-light invariant remains
+zero. These metrics support the changes but do not establish user acceptance.
+See the phase 3 baseline. Next: restart and repeat the moving approach, checking
+steadier fringes and the already-improved interiors together.
+
 ## 2026-09-11: Correct cloud lighting discontinuities during camera motion
 
 User acceptance correction: `bb791a8` made cloud fringes dance and did not remove

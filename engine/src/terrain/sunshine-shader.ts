@@ -85,12 +85,14 @@ float sampleScene(
 	vec2 WindDirection = sunshineWind;
 	worldPosition += vec3(WindDirection.x, 0.0, WindDirection.y) * 0.0 * quadraticIn(1.0 - clamp(clampedWorldHeight / 0.54, 0.0, 1.0));
 
-	if (lod > 0.0){
+	if (curlPower > 0.0){
 		effectorAdditive = sampleEffectorAdditive(worldPosition) * edgeFade;
 
-		if (!ambientsample && curlHeightSample > 0.0 && min(curlPower, lod) > 0.5){
+		if (!ambientsample && curlHeightSample > 0.0 && curlPower > 0.5){
 
-			float curlLod = remap(lod, 0.5, 1.0, 0.0, 1.0);
+			// Curl defines the silhouette in world space. Scaling it with camera
+            // distance deformed the same cloud as the observer approached it.
+            float curlLod = 1.0;
 			worldPosition += (((texture(curl_noise, (worldPosition - mediumNoisePos) / mediumnoisescale).xyz * 2.0) - 1.0) * vec3(1.0, 0.2, 1.0) + vec3(WindDirection.x, 0.0, WindDirection.y) * 0.9) * curlPower * curlHeightSample * curlLod;
 			worldPosition += (((texture(curl_noise, (worldPosition - mediumNoisePos) / mediumnoisescale).xyz * 2.0) - 1.0) * vec3(1.0, 0.2, 1.0) + vec3(WindDirection.x, 0.0, WindDirection.y) * 0.9) * curlPower * curlHeightSample * curlLod;
 			worldPosition += (((texture(curl_noise, (worldPosition - mediumNoisePos) / mediumnoisescale).xyz * 2.0) - 1.0) * vec3(1.0, 0.2, 1.0) + vec3(WindDirection.x, 0.0, WindDirection.y) * 0.9) * curlPower * curlHeightSample * curlLod;
@@ -254,7 +256,7 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
   vec3 largePos = extraPos * (100.0 / 140.0);
   vec3 mediumPos = extraPos * (40.0 / 140.0);
   vec3 smallPos = extraPos * (12.0 / 140.0);
-  smallPos.y = sunshineTime / 15.111 * 12.0 * scale;
+  smallPos.y = sunshineTime / 15.111 * 3.0 * scale;
   float extraScale = 320000.0 * scale;
   float largeScale = 120000.0 * scale;
   float mediumScale = 20000.0 * scale;
@@ -268,8 +270,9 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
   if (ro.y < weatherRange.x + cloudBaseM && raydirection.y > 0.00001)
     entry = (weatherRange.x + cloudBaseM - ro.y) / raydirection.y;
   float marchRange = max(0.0, maxDistance - entry);
-  // Animated spatial jitter avoids locking the noise pattern to the screen.
-  float traveled = entry + maxstep * texture(dither_small, vec3(vUv * 40.037, sunshineTime)).r;
+  // A narrow animated offset retains dithering without jumping across most
+  // of a cloud-edge sample interval each frame. Do not lock it to the screen.
+  float traveled = entry + maxstep * (0.425 + 0.15 * texture(dither_small, vec3(vUv * 40.037, sunshineTime)).r);
   float initial = maxDistance;
   float weightedDistance = 0.0;
   float density = 0.0;

@@ -1394,3 +1394,51 @@ that the moving tunnel is gone.
 Remaining: representative-depth reprojection, adaptive ray spacing and animated
 jitter remain approximations. This is one further attempt; the user's actual
 moving-camera flight remains the acceptance gate before deciding to revert.
+
+## 2026-09-11: Stable cloud contours on approach
+
+Source: working tree based on `be4e89b`, with the accompanying shape stability
+changes. Linux Omarchy, RTX 4070 / NVIDIA 610.57.04, ANGLE OpenGL ES 3.2,
+Bun 1.4.2, Node 26.8.1. The user accepts the improved interior behavior but reports
+fire-like fringes during approach; preserve that interior correction.
+
+Changes: fix curl displacement at full-detail strength independent of camera LOD;
+retain animated jitter but narrow its interval from [0,1] to [.425,.575]; slow
+vertical fine-noise evolution from 12 to 3 source-scaled m/s. Wind-driven offsets
+are unchanged. Fixed spatial dither from `bb791a8` is not restored.
+
+```sh
+bun run check
+bun tools/flight/sunshine-gpu-smoke.ts be4e89b
+bun tools/flight/sunshine-gpu-smoke.ts
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/cloud-smoke.ts stable-shapes above,inside,tower-side
+git diff --check
+```
+
+Actual GPU density at 128 world positions, with view LOD 1/.8/.3/0: maximum
+change .413095534 in the parent versus 0 after fixing curl strength; 53 positions
+contain density. This directly tests camera-independent geometry. Near/full-detail
+upstream density and lighting parity remains within 1e-4 at all 128 positions;
+distant density deliberately differs from the source's camera-dependent shape.
+
+The existing 48-frame synthetic sequences (32 measured frames; motion 480 m/s)
+report mean adjacent-frame RGB differences stationary/interior-moving/edge-moving
+.093336/.123131/.156063 in the parent, versus .027046/.092799/.097009 now.
+These include actual motion and lighting, and are not perceptual acceptance.
+Uniform-cloud lighting variation remains 0, all opacities >.999; far-cloud and
+high-altitude visibility, geometry-depth clipping, rebase, brightness factors,
+FOV reset and far-clip history tests pass. GL error 0, no renderer console errors.
+
+Limits: finite ray steps and temporal reprojection can still cause movement
+artifacts. Holding full curl at distance can cost more far-cloud texture samples;
+the primary iteration budget is unchanged. Inspect distant silhouettes as well as
+near fringes during the user's next flight. Noise erosion still evolves slowly;
+wind still advects clouds. This is not a claim of fully static clouds or complete
+Godot image parity. GPU reports in ignored `extracted/cloud-review/sunshine-gpu/`
+and `sunshine-gpu-be4e89b/`; desktop captures in `stable-shapes/`.
+
+Verification results: `bun run check` passes types/lint/format and 476 tests,
+with 3 existing imported-mount skips (F14/A4E/X31), zero failures. No Python
+changes/tests. Fresh 2560×1440 desktop above/interior/tower captures report median
+16.7 ms and p95 16.7/16.8/16.7 ms with zero runtime errors; vsync-limited results.

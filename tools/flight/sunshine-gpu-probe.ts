@@ -28,6 +28,17 @@ async function sunshineProbe(encoded:Record<string,string>, reference:string) {
   renderer.setRenderTarget(target);quad.render(renderer);const pixel=new Float32Array(4);
   renderer.readRenderTargetPixels(target,0,0,1,1,pixel); samples.push(Array.from(pixel));
  }
+ // A fixed world point must keep its silhouette density as view LOD changes.
+ material.fragmentShader=prefix+'uniform vec3 probePosition; float geometryAt(float lod){vec3 p=probePosition;float extra=texture(extra_large_noise,p.xz/320000.0).a;return sampleScene(vec3(0),vec3(0),vec3(0),p,25000.0,1500.0,extra,120000.0,20000.0,8500.0,.874*1.01,1.075,4500.0,lod,false);}void main(){gl_FragColor=vec4(geometryAt(1.0),geometryAt(.8),geometryAt(.3),geometryAt(0.0));}';
+ material.needsUpdate=true;
+ let geometryLodDifference=0,geometryNonzero=0;
+ for(let i=0;i<128;i++){
+  material.uniforms.probePosition!.value.set((i*7319)%150000,1600+(i*1193)%23000,(i*3727)%150000);
+  renderer.setRenderTarget(target);quad.render(renderer);const pixel=new Float32Array(4);
+  renderer.readRenderTargetPixels(target,0,0,1,1,pixel);
+  if(pixel[0]!>.001)geometryNonzero++;
+  for(let channel=1;channel<4;channel++)geometryLodDifference=Math.max(geometryLodDifference,Math.abs(pixel[0]!-pixel[channel]!));
+ }
  const output=new WebGLRenderTarget(192,108);const input=new WebGLRenderTarget(192,108);
  renderer.setRenderTarget(input);renderer.setClearColor(0x345678);renderer.clear();
  const render=(x:number,y:number,z:number)=>{
@@ -132,6 +143,6 @@ async function sunshineProbe(encoded:Record<string,string>, reference:string) {
  constantMaterial.dispose();
  const glError=renderer.getContext().getError();
  quad.dispose();material.dispose();target.dispose();output.dispose();input.dispose();pass.dispose();terrain.texture.dispose();renderer.dispose();
- return {constantLightSpread,constantSamples,flicker,farClipHistory,fovHistory,samples,depthInvariant,brightnessRatios,distantMinimumTransmittance,lowLayerMinimumTransmittance,maxRebase,glError,png,nonzero:samples.filter(s=>s[0]!>.001).length};
+ return {geometryLodDifference,geometryNonzero,constantLightSpread,constantSamples,flicker,farClipHistory,fovHistory,samples,depthInvariant,brightnessRatios,distantMinimumTransmittance,lowLayerMinimumTransmittance,maxRebase,glError,png,nonzero:samples.filter(s=>s[0]!>.001).length};
 }
 Object.assign(window,{sunshineProbe});

@@ -24,6 +24,8 @@ try{
  assert.equal(s.errors.length,0);assert.equal(report.glError,0);assert(report.nonzero>5);
  for(const sample of report.samples) for(const [ported,original] of [[sample[0],sample[1]],[sample[2],sample[3]]]) {assert(Number.isFinite(ported));assert(Number.isFinite(original));assert(Math.abs(ported-original)<.0001);}
  if(!baseline){
+  assert(report.geometryNonzero>5);
+  assert(report.geometryLodDifference<.00001, 'camera distance must not deform cloud silhouettes');
   assert(report.constantLightSpread<.00001, 'opaque cloud light must not jump at primary-step boundaries');
   for(const sample of report.constantSamples)assert(sample[3]>.999);
   assert.equal(report.farClipHistory,1, 'far-clip retuning must preserve temporal history');
@@ -34,5 +36,5 @@ try{
  assert(Math.abs(report.brightnessRatios[2]-.5)<.002);
  assert(report.distantMinimumTransmittance < 15360, 'clouds must render on known terrain 80km away');
  assert(report.maxRebase<=2);assert(report.lowLayerMinimumTransmittance < 15360, 'low clouds must remain visible from 20km altitude');
- console.log({constantLightSpread:report.constantLightSpread,flicker:report.flicker,farClipHistory:report.farClipHistory,fovHistory:report.fovHistory,depthInvariant:report.depthInvariant,brightnessRatios:report.brightnessRatios,distantMinimumTransmittance:report.distantMinimumTransmittance,nonzero:report.nonzero,maxRebase:report.maxRebase,densitySamples:report.samples.length,glError:report.glError});
+ console.log({geometryLodDifference:report.geometryLodDifference,constantLightSpread:report.constantLightSpread,flicker:report.flicker,farClipHistory:report.farClipHistory,fovHistory:report.fovHistory,depthInvariant:report.depthInvariant,brightnessRatios:report.brightnessRatios,distantMinimumTransmittance:report.distantMinimumTransmittance,nonzero:report.nonzero,maxRebase:report.maxRebase,densitySamples:report.samples.length,glError:report.glError});
 }finally{await s.close();}
