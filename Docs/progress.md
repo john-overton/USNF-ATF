@@ -7,6 +7,24 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-10
 
+## 2026-09-11: Terrain-relative clouds, ground fog and solid exterior
+
+Implementation `3c04820` makes low/storm cloud heights terrain-relative and adds
+ground fog dense through 200 ft AGL, tapering clear by 600 ft. Independent weather
+DEMs preserve contact/visual-LOD boundaries and unknown terrain. Default solid
+exterior uses the density field's contour and gradient, blending to volume near
+entry/inside; the panel retains a Volumetric comparison. Cirrus stays translucent.
+Storm field stretching, denser sampling and half-float composition address repeat
+patterns and quantization separately; not all silhouette artifacts are eliminated.
+
+`bun run check`: 474 pass, 3 existing imported-mount skips. Fresh Electron GPU
+checks, Salt Lake valley/hillside fog/cloud captures, synthetic cloud matrix and
+imported F-14 pause/resume pass. No new platform acceptance claim. See
+[phase 3 baseline](baselines/phase-3.md) for exact commands, initial failures,
+review corrections, costs and remaining gaps. Next: restart the rebuilt app,
+compare Solid exterior/Volumetric during cloud entry and inspect storm contours.
+These remain authored cloud shapes, not meteorological simulation.
+
 ## 2026-09-11: Cloud billows, optical-depth lighting and distinct cloud types
 
 Implemented the approved [cloud review](cloud-rendering-review.md): separate broad

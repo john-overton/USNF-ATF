@@ -209,34 +209,43 @@ the HUD gains a small `WIND ddd/ss` readout.
 - Depth reconstruction: the scene uses the logarithmic depth buffer, where
   stored depth `d = log2(1 + w) / log2(far + 1)`, so view distance is
   `w = (far + 1)^d − 1`. A cleared depth of 1 means sky.
-- Pass 1 renders the march at a selectable scale (full, half, quarter) into an
-  RGBA8 target storing premultiplied color and transmittance. Pass 2 composites
-  it over the full-resolution scene. The first version upsamples bilinearly;
-  depth-aware upsampling is the follow-up if terrain edges smear.
-- March: ray/slab intersection with the main layer, a fixed step count
-  (default 40, uniform), per-pixel jitter, density from a 512² tiling coverage
-  texture times a 64³ Perlin-Worley `Data3DTexture` (both generated on the CPU
-  at startup), a height gradient, four to six light steps toward the sun with
-  Beer's law and a powder term, Henyey-Greenstein phase, ambient from the sky
-  table's zenith and ground colors, and the scene fog applied by distance so
-  distant clouds sit in the same haze as terrain. Cirrus is an analytic sheet
-  at its altitude sampled once. Camera inside the slab starts the march at the
-  camera, which gives fly-through whiteout without extra code.
-- Cloud drift uses the wind at layer altitude; the coverage offset is shared
-  with the cloud-shadow uniforms.
-- Performance controls: URL parameters `clouds=off|quarter|half|full` and
-  `cloudSteps=N`, mirrored in the panel's quality selector. Diagnostics report
-  the scale and step count. There is no GPU timer in WebGL2, so cost is the
-  frame-time delta between `off` and each quality at the same viewpoint, plus
-  the CPU submission time.
+- Current implementation (2026-09-11): half-float color/transmittance and scene
+  composition on GPUs supporting float color buffers; RGBA8 fallback. Depth-aware
+  upsampling preserves foreground geometry. This supersedes the original RGBA8,
+  powder-lighting design.
+- Broad 64³ shape plus weak edge erosion, periodic rolling, progressive march
+  intervals, six sun/four sky samples (twelve sun samples for storm), Beer
+  integration and phase lighting. Storm uses at least 80 view samples and a
+  vertically stretched/sheared field to reduce repeated horizontal structure.
+- Default `cloudAppearance=solid` finds a density isosurface within each
+  unintegrated interval, refines it, and shades its outward gradient. Composite
+  front volume, face, remaining volume in order. Exterior opacity fades within
+  80–350 m and with camera immersion; `volume` retains the volumetric comparison.
+  Cirrus remains translucent in both modes. This is an artistic approximation;
+  coarse sampling can still miss thin features and leave scalloped silhouettes.
+- Cumulus, stratus and storm bases/tops are AGL using a fixed-resolution theater
+  weather DEM (nominal 300 m, size-capped), independent of visual LOD/contact.
+  Cirrus stays MSL, lifted above the highest possible main-layer top when needed.
+  Ground-shadow projection samples the same DEM. Unknown terrain suppresses
+  local weather rather than implying sea level.
+- Ground fog defaults on: full extinction below 60.96 m AGL, smooth taper to zero
+  at 182.88 m; underground density is zero. A moving 25.6 km weather DEM at 100 m
+  spacing includes known water surfaces. Fog receives 64 intervals, merged with
+  the cloud march in depth order, and fades between 6–8 km viewing distance.
+  Weather maps publish atomically and expose loading/errors in diagnostics.
+- Drift shares world offsets with cloud shadows and freezes with the viewer.
+  Quality controls remain `clouds=off|quarter|half|full`, `cloudSteps=N`.
+  Fog can run at half resolution with clouds off; disable fog too for a full
+  weather-pass-off comparison. Current measurements are vsync limited and do
+  not isolate GPU cost.
 
 ## Controls, parameters and diagnostics
 
 - URL: `time=14.5` (hours), `date=07-15` or day of year, `weather=`, `wind=`,
-  `clouds=`, `cloudSteps=`. Invalid values show the existing explicit error
+  `clouds=`, `cloudSteps=`, `cloudAppearance=solid|volume`, `fog=ground|off`. Invalid values show the existing explicit error
   path rather than silently defaulting.
 - Panel: Environment section with the time slider (0–24 h, shows HH:MM and sun
-  elevation), Weather select, Wind select and Cloud quality select. Controls
+  elevation), Weather, Wind, Cloud appearance and Cloud quality selects, plus Ground fog. Controls
   restore keyboard focus to the canvas like the MFD buttons do.
 - `__terrainDiagnostics()` gains `environment`: time of day, day of year,
   season, sun/moon elevation and azimuth, weather, wind preset, wind at the

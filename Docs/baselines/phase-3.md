@@ -1068,3 +1068,80 @@ above and below the layer, and inspect the saved matrix for the desired artistic
 feel. To undo this experiment, revert implementation commit `6d30f99` (which
 includes its UI/docs changes); retain this dated evidence as history. No retail
 bytes or reference-project code/assets were copied into the repository.
+
+## 2026-09-11 — terrain-relative weather and solid exterior
+
+Source: `3c04820` (the exact implementation tree tested before commit; this
+documentation-only follow-up does not change it). Linux/Omarchy development
+machine, RTX 4070 via ANGLE OpenGL ES 3.2, Bun 1.4.2, Node 26.8.1.
+Scope: current Electron/WebGL renderer at 2560×1440, synthetic theater and locally
+supplied Salt Lake terrain/F-14. No new Mac/Windows launch or installer testing.
+
+Implementation: fixed-source weather DEMs move low/storm cloud envelopes relative
+to terrain; cirrus remains high/MSL and translucent. Fog uses known terrain/water,
+full density below 200 ft, taper to clear at 600 ft AGL, 6–8 km distance fade.
+Default solid exterior derives an isosurface and normal from the cloud density,
+with opacity fading near entry and immersion. Volume comparison stays selectable.
+Cloud/fog/surface contributions compose front to back. Storm sampling is at least
+80 primary/12 sunlight samples; vertical shape stretching/shearing reduces repeat
+structure. Half-float march/composer attachments reduce linear-color banding;
+fallback RGBA8 path exists but was not exercised on a GPU lacking float support.
+
+Exact verification commands, all successful on the final source:
+
+```sh
+bun run check
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/cloud-gpu-smoke.ts
+bun tools/flight/weather-gpu-smoke.ts
+bun tools/flight/weather-smoke.ts
+bun tools/flight/cloud-smoke.ts solid-final tower-side,above,inside,cirrus
+bun tools/flight/cloud-flight-smoke.ts
+git diff --check
+```
+
+- Check: 474 pass, 3 skipped F-14/A-4E/X-31 imported mount tests, zero failures;
+  TypeScript, lint and formatting passed. Python tests not rerun: no Python change.
+- Actual GPU: solid exterior changes exterior pixels; repeated/rebased renders
+  identical; fully immersed solid/volume comparison identical. Existing volume
+  convergence, evolution/wrap and constant-density light integration passed.
+- Weather GLSL: known 0/2000 m slope shifts cloud density by precisely 2000 m;
+  equal AGL fog gives equal extinction; 200/600 ft endpoints, underground and
+  unknown terrain behave correctly. Fog still renders with clouds off and
+  disabling it disables the pass. No GL or renderer-console errors.
+- Salt Lake: valley weather/fog DEM heights 1286.75/1286.78 m; hillside
+  1871.12/1875.55 m (different fixed sample resolutions). Captured 100/600 ft AGL
+  fog and clouds at 1900 m above weather terrain at both sites. Fog visibly wraps
+  hills with clearer nearby peaks from the higher viewpoint.
+- Synthetic matrix: median frame interval 16.7 ms in all four cases; p95
+  16.8 ms above/inside/tower-side, 17.2 ms cirrus. Vsync limited, not isolated GPU
+  cost. Salt Lake startup-inclusive diagnostic means 20.7–21.6 ms and p95 up to
+  33.5 ms; this is not a warmed matched performance benchmark.
+- Imported F-14 cloud composition, pause freeze and resume passed.
+
+Ignored artifacts: `extracted/cloud-review/solid-final/`, `cloud-review/gpu/`,
+`cloud-review/flight/`, `extracted/cloud-agl/gpu/`, `cloud-agl/terrain/`.
+Earlier `agl-storm`, `agl-float`, `solid` captures are superseded iterations.
+
+Failures/corrections: initial full check found a type issue in fog tests and an
+await-thenable lint error in rejection testing; both corrected before final pass.
+Independent review caught sub-metre height packing and fog range beyond guaranteed
+local-map coverage; corrected encoding span and shortened range. Solid prototype
+initially omitted volume behind partially faded faces and refined into already
+integrated cells; corrected to bracket unintegrated cells and split front/face/
+remainder. Reviewer confirmed both fixes. Initial immersed GPU fixture was above
+the stratus layer; corrected to known dense mid-layer before asserting parity.
+
+Remaining limits: storm exteriors now look continuous and opaque, but can look
+sculpted/steep; scalloped silhouettes and interior/fog grain remain. The screenshot
+does not establish a single cause for all original stripes. No temporal
+reconstruction, fluid convection, dynamic weather or meteorological validation.
+A coarse DEM intentionally smooths terrain, local fog updates asynchronously, and
+missing data suppresses weather. The solid fade is authored rather than a physical
+scattering model. CPU cloud visibility and ground shadows remain coarse. The
+primary march can miss thin iso-features; exterior artistic acceptance and a
+manual continuous fly-through remain user review.
+
+Next reproduction: restart rebuilt Electron; compare both cloud appearances in
+Thunderstorm towers, enter a cloud, and toggle fog at 100/600 ft AGL near a hill.
+Rollback implementation with `git revert 3c04820` if desired.

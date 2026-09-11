@@ -212,19 +212,22 @@ exteriors and the separate experimental per-aircraft flight-data mode. [F-14 set
 
 Both the explorer and practice flight share an **Environment** section in the
 helper panel: a time-of-day slider showing HH:MM and sun elevation, and Weather,
-Wind and Cloud quality selectors. The clock runs in real time; time acceleration
+Wind, Cloud appearance and Cloud quality selectors, plus ground fog. The clock runs in real time; time acceleration
 is deferred. The same settings can be given on the URL as `time=14.5`,
 `date=07-15`, `weather=`, `wind=`, `clouds=off|quarter|half|full` and
-`cloudSteps=`; an invalid value fails the load with an explicit message rather
+`cloudSteps=`, `cloudAppearance=solid|volume` and `fog=ground|off`; an invalid value fails the load with an explicit message rather
 than silently defaulting.
 
 Wind is the only environment input the flight model reads. It shows on the HUD as
 `WIND ddd/ss` in knots, shortens or lengthens the takeoff roll, and produces the
 expected drift angle in a crosswind; the preserved assisted model is byte-for-byte
 unchanged at zero wind. Time of day, shadows and clouds are not flight-affecting.
-Volumetric clouds default to half resolution, which costs about 3.4 ms a frame on
-this Mac; see the [phase 3 baseline](Docs/baselines/phase-3.md) for the numbers at
-every quality.
+Clouds default to half resolution with a solid exterior derived from their density,
+blending to volumetric rendering inside. Low and storm clouds follow terrain;
+cirrus remains high and translucent. Ground fog is dense through 200 ft AGL and
+tapers clear by 600 ft. Both appearance and fog can be changed in the panel.
+See the [phase 3 baseline](Docs/baselines/phase-3.md) for current Linux evidence
+and historical Mac measurements; the old cost estimate predates these changes.
 
 The free terrain explorer keeps its existing controls. Flight physics run at
 120 Hz with render interpolation. The automated pilot exists only in test tools;
