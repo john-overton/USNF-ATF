@@ -933,10 +933,17 @@ export function startTerrainViewer(
       fogFar: scene.fog instanceof Fog ? scene.fog.far : 180000,
     });
     renderer.info.reset();
+    antialias.clouds.renderGroundShadows(renderer);
     antialias.render();
     if (mirrors && flight && d.flight?.cameraMode === 'cockpit') {
-      mirrors.render(renderer, scene, camera.position, flight.pose().attitude, now, (render) =>
-        flight!.withAircraftVisible(render),
+      mirrors.render(
+        renderer,
+        scene,
+        camera.position,
+        flight.pose().attitude,
+        now,
+        (render) => flight!.withAircraftVisible(render),
+        antialias.clouds,
       );
       d.mirrors = mirrors.diagnostics();
     }

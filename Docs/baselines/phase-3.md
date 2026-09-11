@@ -1442,3 +1442,82 @@ Verification results: `bun run check` passes types/lint/format and 476 tests,
 with 3 existing imported-mount skips (F14/A4E/X31), zero failures. No Python
 changes/tests. Fresh 2560×1440 desktop above/interior/tower captures report median
 16.7 ms and p95 16.7/16.8/16.7 ms with zero runtime errors; vsync-limited results.
+
+## 2026-09-11: Wisp timing, surface shade and rear-camera clouds
+
+Source: working tree based on `cc166b3` with the accompanying cloud/shadow/mirror
+changes. Linux Omarchy, RTX 4070 / NVIDIA 610.57.04, ANGLE OpenGL ES 3.2,
+Bun 1.4.2, Node 26.8.1. User explicitly clarifies that wisps are generated too
+frequently, not that display frame rate is low. Storm-cloud darkness was a
+misinterpretation of requested ground darkness; restore storm radiance to 1,
+retain overcast .75 and the accepted interior-lighting correction.
+
+Fine upward erosion: 3 → .25 source-scaled m/s. Primary dither remains within a
+15% step interval but its animation advances one 64³ noise slice per 4 seconds,
+rather than 15.111 texture volumes/second. Horizontal weather drift stays active.
+This slows wisp evolution; it does not promise elimination of motion sampling
+artifacts. Absolute frame-difference metrics cannot be directly compared with
+last session because restoring storm brightness approximately doubles radiance.
+
+Ground shadows: a 256² RGBA8 atlas covers 64 km square around the main camera,
+with a world-snapped 250 m grid and 4 Hz refresh. Each texel evaluates actual
+Sunshine density at 32 sunlight positions spanning the terrain-relative layer,
+using identical noise, coverage, shape offsets and erosion time. Integrated
+opacity controls up to .25 attenuation for overcast, .5 for other main clouds.
+The material patch scales direct diffuse/specular and indirect diffuse, so the
+hemisphere fill does not wash out the shade. Unknown terrain/low sun are lit;
+clear weather disables the atlas. The outer 5% fades to avoid a hard atlas edge.
+Shadows currently apply below local cloud base, not to arbitrary in-cloud objects.
+Distant terrain beyond this local region is not cloud-shadowed. Coarse density
+integration/atlas filtering are approximations, particularly over steep terrain.
+
+Mirror changes: existing 512×256, 10 Hz rear render gets a depth attachment and
+HDR color (byte fallback without float render support). A separate CloudPass
+uses the mirror camera and independent history, sharing source noise textures;
+no second noise allocation or ownership. Depth clips clouds against the airframe.
+The existing mirror mask/crops and tone mapping remain. Cloud-quality/fog changes
+resize the secondary pass; all additional targets/materials dispose with the view.
+Memory diagnostics include the atlas and secondary history targets.
+
+Commands:
+
+```sh
+bun run check
+bun tools/flight/sunshine-gpu-smoke.ts
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/cloud-smoke.ts ground-shadows above,overcast,tower-side
+bun tools/flight/cloud-flight-smoke.ts
+git diff --check
+```
+
+- GPU atlas minima .74901961 / .49803922. An actual MeshStandardMaterial ground
+  plane with hemisphere-equivalent ambient illumination renders shaded/unshaded
+  ratios .74901962 / .49803924, proving the surface receives the shade. RGBA8
+  rounding accounts for the slight difference from .75/.5. Clear resets readiness.
+- Equal main/secondary camera renders differ by zero bytes. Existing 128-point
+  upstream full-detail parity, fixed-world LOD invariance, uniform-cloud lighting
+  invariance, floating-origin, far-cloud/above-layer visibility and depth tests
+  pass. Cloud-radiance ratios now [1,.75000719,1]; GL error zero.
+- Frame differences reported for stationary/interior-moving/edge-moving are
+  .003678/.185127/.176783. These combine noise, movement and restored brightness,
+  not a perceptual wisp score or user acceptance.
+- Fresh 2560×1440 desktop above/overcast/tower scenes: median 16.7 ms, p95 16.8 ms,
+  no runtime errors. Vsync-limited, not isolated GPU cost or all-theater acceptance.
+- Imported F14/Salt Lake flight passes rear-cloud updates, pause freeze and resume.
+  `cockpit-cloud-mirrors.png` visibly shows clouds behind the airframe in the mirror.
+  The first attempt timed out because the older smoke fixture did not copy a
+  cockpit; it now supplies the existing local `cockpits/f14.json`. No retail bytes
+  are committed. A4E and non-float hardware were not visually tested.
+- Initial material shade assertion picked an atlas-border texel where the designed
+  boundary fade restores sunlight; the corrected fixture samples a dense interior
+  texel and passes. This was a test-fixture correction, not removal of the fade.
+- Artifacts remain ignored in `extracted/cloud-review/{sunshine-gpu,ground-shadows,flight}/`.
+
+Next: restart and compare Overcast/Thunderstorm towers over terrain, then approach
+cloud fringes while checking the cockpit mirror. Slower evolution still needs
+user acceptance; mirror refresh remains 10 Hz by design.
+
+Final checks: types/lint/format pass; 476 tests pass, 3 existing imported-mount
+skips (F14/A4E/X31), zero failures. Python unchanged/not rerun. Secondary history
+also stays valid on repeated mirror renders; avoid resetting quality/targets
+when the primary quality has not changed.

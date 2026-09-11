@@ -208,7 +208,10 @@ temporal reprojection and bicubic reconstruction. The solid/volume implementatio
 below remains a selectable comparison. Ground fog is now a dedicated Weather
 preset; all other weather selections disable it. Sunshine now samples out to
 180 km independently of layer thickness, fading over 150–180 km. Overcast and
-cumulonimbus cloud lighting receive .75/.5 multipliers before distance haze.
+cumulonimbus cloud lighting receive .75/1 multipliers before distance haze.
+Sunshine ground shadows now sample the cloud density in a local 64 km atlas,
+with up to 25%/50% ground-light reduction under dense overcast/storm cover.
+Cockpit mirrors include a separate rear-camera cloud pass.
 The following earlier
 implementation description is corrected accordingly.
 

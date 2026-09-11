@@ -7,6 +7,29 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-11
 
+## 2026-09-11: Slow wisps, shade the ground, and render mirror clouds
+
+User clarifies that fringe wisps evolve too frequently, and that the requested
+storm darkening was for the ground. Keep the interior lighting correction and
+camera-independent contours. Fine vertical erosion now moves at .25 source-scaled
+m/s (previously 3); animated jitter advances one noise slice per four seconds,
+still within its 15% interval. Restore storm-cloud radiance to 1; keep overcast .75.
+
+Sunshine now builds a 256² ground-shadow atlas from its actual density along 32
+sun-ray samples. A 64 km region follows the viewer on a 250 m grid, refreshed at
+4 Hz with a soft boundary fade. Dense overcast reduces surface direct/ambient
+diffuse light by up to 25%; other main clouds, including storms, by up to 50%.
+Unknown terrain and clear weather receive no cloud shadow. This is a finite
+sample approximation, not an exact infinite-range sunlight integral.
+
+Cockpit mirrors now composite a rear-camera cloud pass over a depth-textured HDR
+scene, with independent temporal history, shared noise textures and the existing
+10 Hz mirror refresh. Actual GPU tests check brightness restoration, ground shade
+and secondary-view equality; the imported F14/Salt Lake cockpit capture shows
+clouds in the mirror. See the phase 3 baseline for results and limits. Next:
+restart, compare terrain under Overcast/Thunderstorm towers, and check slower
+edge evolution plus cockpit mirrors during the user's flight.
+
 ## 2026-09-11: Keep cloud contours independent of camera distance
 
 User reports that `be4e89b` improves interiors but approaching cloud fringes still

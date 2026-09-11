@@ -256,7 +256,7 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
   vec3 largePos = extraPos * (100.0 / 140.0);
   vec3 mediumPos = extraPos * (40.0 / 140.0);
   vec3 smallPos = extraPos * (12.0 / 140.0);
-  smallPos.y = sunshineTime / 15.111 * 3.0 * scale;
+  smallPos.y = sunshineTime / 15.111 * 0.25 * scale;
   float extraScale = 320000.0 * scale;
   float largeScale = 120000.0 * scale;
   float mediumScale = 20000.0 * scale;
@@ -272,7 +272,7 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
   float marchRange = max(0.0, maxDistance - entry);
   // A narrow animated offset retains dithering without jumping across most
   // of a cloud-edge sample interval each frame. Do not lock it to the screen.
-  float traveled = entry + maxstep * (0.425 + 0.15 * texture(dither_small, vec3(vUv * 40.037, sunshineTime)).r);
+  float traveled = entry + maxstep * (0.425 + 0.15 * texture(dither_small, vec3(vUv * 40.037, sunshineTime / (15.111 * 64.0 * 4.0))).r);
   float initial = maxDistance;
   float weightedDistance = 0.0;
   float density = 0.0;

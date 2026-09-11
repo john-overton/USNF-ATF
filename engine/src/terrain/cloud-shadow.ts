@@ -30,6 +30,7 @@ export function patchCloudShadow(shader: Patchable): void {
       float cloudLight = cloudShadow(vCloudWorld);
       reflectedLight.directDiffuse *= cloudLight;
       reflectedLight.directSpecular *= cloudLight;
+      reflectedLight.indirectDiffuse *= cloudLight;
     }`,
   );
 }

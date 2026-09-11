@@ -5,13 +5,16 @@ import path from 'node:path';
 import { openDesktop } from './desktop';
 const data = process.argv[2] ?? path.join(homedir(), '.config/USNF-ATF/data');
 const s = await openDesktop({ binary:'shell/node_modules/electron/dist/electron', app:'shell',
-  terrain: 'extracted/terrain/salt-lake', aircraft:path.join(data,'aircraft/f14.json'),
+  terrain: 'extracted/terrain/salt-lake', cockpit:path.join(data,'cockpits/f14.json'), aircraft:path.join(data,'aircraft/f14.json'),
   flightProfile:path.join(data,'aircraft/f14-flight.json'), out:'extracted/cloud-review/flight',
   query:{mode:'flight',aircraft:'f14',flightStart:'airborne',altitude:'2000',weather:'broken',clouds:'half',wind:'calm',time:'12',date:'170'},
 });
 const tap = (code: string) => s.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{code:${JSON.stringify(code)},key:${JSON.stringify(code)},bubbles:true}));window.dispatchEvent(new KeyboardEvent('keyup',{code:${JSON.stringify(code)},bubbles:true}));`);
 try {
   await s.poll(async () => (await s.evaluate('window.__terrainDiagnostics?.()?.frames > 120')) ? true : undefined, 'flight rendered');
+  await tap('F1');
+  await s.poll(async () => (await s.evaluate('window.__terrainDiagnostics?.()?.mirrors?.cloudUpdates > 0')) ? true : undefined, 'mirror clouds rendered');
+  await s.capture('cockpit-cloud-mirrors');
   await tap('F3');
   await s.poll(async () => (await s.evaluate('window.__flightDiagnostics().cameraMode')) === 'world-up' ? true : undefined, 'chase');
   await s.capture('clouds-aircraft');

@@ -40,8 +40,12 @@ Update `caa22ba`: the viewing range is now 180 km regardless of cloud-layer
 thickness. Near adaptive spacing is preserved, with exponentially increasing
 minimum widths farther away and a 150–180 km fade based on first cloud density.
 Scene depth clips the ray without changing its sample schedule. Overcast and
-cumulonimbus cloud radiance are multiplied by .75 and .5 before haze and tone
+cumulonimbus cloud radiance were multiplied by .75 and .5 before haze and tone
 mapping; this is a lighting adjustment, not additional opacity or terrain shading.
+
+Current correction: storm cloud radiance is restored to 1; overcast stays .75.
+Ground shadows now use the actual Sunshine density field, with up to .25/.5
+reductions in surface lighting for dense overcast/storm columns respectively.
 
 Sunshine is the default Cloud appearance. Solid exterior and Volumetric remain
 selectable and their URL values keep parsing. In Sunshine, the legacy default
@@ -58,12 +62,13 @@ This is a port of the cloud renderer, not a pixel-identical Godot compositor.
 | World height | Main cloud bounds remain AGL using weather DEMs; unknown terrain remains unknown. |
 | Cloud sizes | Source 23.5 km layer proportions scale to selected layer thickness (minimum scale .05). Empty space is skipped before sampling, and distant intervals cover a thickness-independent 180 km range. |
 | Weather presets | Broken uses upstream coverage .874 and density .14. Scattered, overcast and storm map their coverage/density intent to Sunshine's threshold semantics. The source RGBA height profile is shared; the previous custom anvil silhouette is not preserved in this mode. |
-| Sampling stability | Animated primary jitter spans 15% of an interval around its midpoint. Fixed screen-space jitter remains rejected. Curl displacement is independent of view LOD so approach does not deform silhouettes. Primary opacity and lighting share partial-first and clamped-final weights; ambient occlusion and history depth use opacity weights. |
-| Wind | Existing weather drives horizontal drift and curl direction; source relative horizontal layer speeds are retained; upward detail evolution runs at one-quarter source speed. |
+| Sampling stability | Animated primary jitter spans 15% of an interval around its midpoint and advances one 3D noise slice per four seconds. Fixed screen-space jitter remains rejected. Curl displacement is independent of view LOD so approach does not deform silhouettes. Primary opacity and lighting share partial-first and clamped-final weights; ambient occlusion and history depth use opacity weights. |
+| Wind | Existing weather drives horizontal drift and curl direction; source relative horizontal layer speeds are retained; upward detail evolution is .25 source-scaled m/s, 1/48 of source speed. |
 | Lighting | Existing sun/moon, sky, exposure and distant haze remain. Linear sun color avoids a second gamma conversion; neutral ambient occlusion replaces the source test scene's red AO tint. |
 | Cirrus | Existing translucent high clouds remain. Mixed visible cirrus/cloud pixels bypass single-depth history to avoid incorrect parallax. |
 | Fog | Dedicated `weather=fog` only; dense below 200 ft AGL, fading to zero by 600 ft. Other weather selections clear fog. Legacy `fog=` URLs still parse but no longer enable fog outside that preset. |
-| Shadows | Sunshine upstream has no cloud-shadow implementation. Disable the unrelated legacy cloud shadow pattern in this mode; aircraft sun shadows remain. |
+| Shadows | A 256² atlas samples actual Sunshine density along 32 sunlight positions over a snapped 64 km region at 4 Hz. Surface direct/ambient diffuse lighting is attenuated by up to 25% under overcast, 50% under other main clouds. Atlas edges fade; unknown terrain stays unshadowed. Aircraft sun shadows remain. |
+| Mirrors | Rear scene depth plus an independent cloud/history pass at the existing 512×256 / 10 Hz mirror refresh. Noise textures are shared; the main-camera cloud image is not reused. |
 | Other upstream tools | Godot editor painting, local point lights/effectors, reflection output and its full atmospheric compositor are outside this cloud port. |
 
 Representative-depth reconstruction and selective history rejection remain

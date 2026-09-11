@@ -1,7 +1,8 @@
 /** Actual GL comparison of ported and upstream density on exact exported textures. */
-import {Color,DataUtils,FloatType,PerspectiveCamera,ShaderMaterial,Vector3,Vector4,WebGLRenderer,WebGLRenderTarget} from 'three';
+import {AmbientLight,Mesh,MeshStandardMaterial,OrthographicCamera,PlaneGeometry,Scene,Color,DataUtils,FloatType,PerspectiveCamera,ShaderMaterial,Vector3,Vector4,WebGLRenderer,WebGLRenderTarget} from 'three';
 import {FullScreenQuad} from 'three/addons/postprocessing/Pass.js';
 import {CloudPass,MARCH_FRAGMENT,type CloudUniformState} from '../../engine/src/terrain/cloud-pass';
+import {applyCloudShadow} from '../../engine/src/terrain/cloud-shadow';
 import {heightField} from '../../engine/src/terrain/weather-height';
 async function sunshineProbe(encoded:Record<string,string>, reference:string) {
  const renderer=new WebGLRenderer(); renderer.setSize(192,108);
@@ -84,6 +85,45 @@ async function sunshineProbe(encoded:Record<string,string>, reference:string) {
   brightnessSums.push(sum);
  }
  const brightnessRatios=brightnessSums.map(sum=>sum/brightnessSums[0]!);
+ let secondaryDifference=0,secondaryHistory=0,clearShadowReady=0;const groundShadowMinima:number[]=[];const groundLightingRatios:number[]=[];
+ if(typeof pass.renderGroundShadows==='function'){
+ for(const type of ['stratus','cumulonimbus'] as const){
+  state.layer={...state.layer!,type};pass.update(state);pass.renderGroundShadows(renderer);
+  const shadow=(pass as unknown as {groundShadowTarget:WebGLRenderTarget}).groundShadowTarget;
+  const data=new Uint8Array(256*256*4);renderer.readRenderTargetPixels(shadow,0,0,256,256,data);
+  let min=255;for(let i=0;i<data.length;i+=4)min=Math.min(min,data[i]!);
+  groundShadowMinima.push(min/255);
+  const strongest=data.findIndex((v,i)=>i%4===0&&v===min&&(i/4)%256>16&&(i/4)%256<239&&Math.floor(i/1024)>16&&Math.floor(i/1024)<239)/4;
+  const bounds=uniforms.cloudGroundShadowBounds!.value as Vector4;
+  const x=bounds.x+(strongest%256+.5)*250,z=bounds.y+(Math.floor(strongest/256)+.5)*250;
+  const groundScene=new Scene();groundScene.add(new AmbientLight(0xffffff,2));
+  const groundMaterial=new MeshStandardMaterial({color:0x808080});applyCloudShadow(groundMaterial,'gpu-ground-shadow');
+  const plane=new Mesh(new PlaneGeometry(100,100),groundMaterial);plane.rotation.x=-Math.PI/2;plane.position.set(x,0,z);groundScene.add(plane);
+  const groundCamera=new OrthographicCamera(-20,20,20,-20,1,1000);groundCamera.position.set(x,100,z);groundCamera.up.set(0,0,-1);groundCamera.lookAt(x,0,z);
+  const lightPixels=[];
+  for(const ready of [0,1]){
+   uniforms.cloudGroundShadowReady!.value=ready;renderer.setRenderTarget(target);renderer.render(groundScene,groundCamera);
+   const pixel=new Float32Array(4);renderer.readRenderTargetPixels(target,0,0,1,1,pixel);lightPixels.push(pixel[0]!);
+  }
+  groundLightingRatios.push(lightPixels[1]!/lightPixels[0]!);
+  plane.geometry.dispose();groundMaterial.dispose();
+
+ }
+ const layer=state.layer;state.layer=undefined;pass.update(state);pass.renderGroundShadows(renderer);
+ clearShadowReady=uniforms.cloudGroundShadowReady!.value;
+ state.layer=layer;
+ (pass as unknown as {historyValid:boolean}).historyValid=false;
+ const mainView=render(50000,28000,50000);
+ const secondary=new WebGLRenderTarget(192,108);
+ const mirrorCamera=camera.clone();
+ pass.renderSecondary(renderer,mirrorCamera,secondary,input);
+ const secondaryPixels=new Uint8Array(mainView.length);renderer.readRenderTargetPixels(secondary,0,0,192,108,secondaryPixels);
+ secondaryDifference=0;for(let i=0;i<mainView.length;i++)secondaryDifference=Math.max(secondaryDifference,Math.abs(mainView[i]!-secondaryPixels[i]!));
+ pass.renderSecondary(renderer,mirrorCamera,secondary,input);
+ const mirrorPass=(pass as unknown as {secondaryViews:Map<PerspectiveCamera,CloudPass>}).secondaryViews.get(mirrorCamera)!;
+ secondaryHistory=(mirrorPass as unknown as {historyMaterial:ShaderMaterial}).historyMaterial.uniforms.validHistory!.value;
+ secondary.dispose();
+ }
  const canvas=document.createElement('canvas');canvas.width=192;canvas.height=108;
  const ctx=canvas.getContext('2d')!;const flipped=new Uint8ClampedArray(first.length);
  for(let y=0;y<108;y++)flipped.set(first.subarray(y*192*4,(y+1)*192*4),(107-y)*192*4);
@@ -143,6 +183,6 @@ async function sunshineProbe(encoded:Record<string,string>, reference:string) {
  constantMaterial.dispose();
  const glError=renderer.getContext().getError();
  quad.dispose();material.dispose();target.dispose();output.dispose();input.dispose();pass.dispose();terrain.texture.dispose();renderer.dispose();
- return {geometryLodDifference,geometryNonzero,constantLightSpread,constantSamples,flicker,farClipHistory,fovHistory,samples,depthInvariant,brightnessRatios,distantMinimumTransmittance,lowLayerMinimumTransmittance,maxRebase,glError,png,nonzero:samples.filter(s=>s[0]!>.001).length};
+ return {secondaryHistory,groundLightingRatios,groundShadowMinima,clearShadowReady,secondaryDifference,geometryLodDifference,geometryNonzero,constantLightSpread,constantSamples,flicker,farClipHistory,fovHistory,samples,depthInvariant,brightnessRatios,distantMinimumTransmittance,lowLayerMinimumTransmittance,maxRebase,glError,png,nonzero:samples.filter(s=>s[0]!>.001).length};
 }
 Object.assign(window,{sunshineProbe});

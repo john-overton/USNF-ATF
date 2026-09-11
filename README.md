@@ -182,7 +182,7 @@ exteriors and the separate experimental per-aircraft flight-data mode. [F-14 set
 - **B** toggles speed brakes and wheel braking on the ground.
   Apply it when parked: tire grip resists sideways wind slip, but unbraked wheels can roll.
 - Cockpit view is the default; **F1** returns to the enlarged imported cockpit with a HUD fitted to its glass.
-  F-14/A-4E mirrors show live rear views. **Shift + arrows**
+  F-14/A-4E mirrors show live rear views including clouds. **Shift + arrows**
   look around or orbit externally; **Shift + /** centers the view.
 - Hold **Tab** to fire; **Shift + Tab** toggles safety (starts safe). Guns use
   matching imported samples. **Bullet mechanics** in the main menu and flight helper

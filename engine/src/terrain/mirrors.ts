@@ -1,5 +1,9 @@
 import {
   DoubleSide,
+  DepthTexture,
+  UnsignedIntType,
+  UnsignedByteType,
+  HalfFloatType,
   Mesh,
   OrthographicCamera,
   PerspectiveCamera,
@@ -15,6 +19,8 @@ import {
   type Texture,
   type WebGLRenderer,
 } from 'three';
+
+import type { CloudPass } from './cloud-pass';
 
 export interface CockpitMirrorRegion {
   id: string;
@@ -38,8 +44,16 @@ export function mirrorRearCrop(id: string): { offset: number; width: number } {
 
 /** One shared rear scene at 10 Hz; exact imported masks composite into the cockpit art. */
 export class CockpitMirrors {
-  readonly bytes = 512 * 256 * 8;
-  private target = new WebGLRenderTarget(512, 256);
+  readonly bytes = 512 * 256 * 20;
+  private target = new WebGLRenderTarget(512, 256, {
+    type: HalfFloatType,
+    depthTexture: new DepthTexture(512, 256, UnsignedIntType),
+  });
+  private cloudTarget = new WebGLRenderTarget(512, 256, {
+    type: HalfFloatType,
+    depthBuffer: false,
+  });
+  private cloudUpdates = 0;
   private camera = new PerspectiveCamera(70, 2, 0.5, 400000);
   private overlay = new Scene();
   private overlayCamera = new OrthographicCamera(0, 1, 0, 1, 0, 1);
@@ -126,6 +140,7 @@ export class CockpitMirrors {
     attitude: Quaternion,
     now: number,
     withAircraft: (render: () => void) => void,
+    clouds?: CloudPass,
   ): void {
     if (!this.layout.visible || this.layout.opacity <= 0 || !this.entries.size) return;
     const active = [...this.entries.values()].some(
@@ -135,6 +150,10 @@ export class CockpitMirrors {
         e.mesh.position.x - Math.abs(e.mesh.scale.x) / 2 < 1,
     );
     if (!active) return;
+    if (!renderer.extensions.has('EXT_color_buffer_float')) {
+      this.target.texture.type = UnsignedByteType;
+      this.cloudTarget.texture.type = UnsignedByteType;
+    }
     const target = renderer.getRenderTarget();
     const viewport = renderer.getViewport(new Vector4());
     const scissor = renderer.getScissor(new Vector4());
@@ -152,6 +171,14 @@ export class CockpitMirrors {
         renderer.setScissorTest(false);
         renderer.autoClear = true;
         withAircraft(() => renderer.render(scene, this.camera));
+        if (clouds?.enabled) {
+          clouds.renderSecondary(renderer, this.camera, this.cloudTarget, this.target);
+          this.cloudUpdates++;
+        }
+        for (const entry of this.entries.values())
+          entry.material.uniforms.rear!.value = clouds?.enabled
+            ? this.cloudTarget.texture
+            : this.target.texture;
         this.lastUpdate = now;
         this.lastCpuMs = performance.now() - start;
         this.updates++;
@@ -183,6 +210,7 @@ export class CockpitMirrors {
       width: 512,
       height: 256,
       refreshHz: 10,
+      cloudUpdates: this.cloudUpdates,
     };
   }
   dispose(): void {
@@ -193,6 +221,7 @@ export class CockpitMirrors {
     }
     this.entries.clear();
     this.target.dispose();
+    this.cloudTarget.dispose();
     this.geometry.dispose();
   }
 }
