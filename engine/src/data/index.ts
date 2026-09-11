@@ -1,6 +1,6 @@
 import type { LodLevel } from '../terrain';
 
-/** Projected east/north meters; renderer uses x east, z north, y up. */
+/** Stored projected east/north meters; runtime Utah input adapts X to world west. */
 export interface TheaterProjection {
   readonly crs: string;
   readonly originX: number;

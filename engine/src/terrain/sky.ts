@@ -20,6 +20,9 @@ import {
   RepeatWrapping,
   ShaderMaterial,
   SphereGeometry,
+  SRGBColorSpace,
+  TextureLoader,
+  type Texture,
   Vector3,
   DataUtils,
   PCFSoftShadowMap,
@@ -36,6 +39,8 @@ import {
   type SkyTable,
 } from '../render/sky-model';
 import type { Environment } from '../sim/environment';
+import moonTextureUrl from './assets/moon-nasa-galileo.png';
+import { MOON_PHASE_GLSL } from './moon-phase';
 
 /** Summer local noon at the theater latitude, the look everything is calibrated to. */
 const NOON_ELEVATION_RAD = (67 * Math.PI) / 180;
@@ -46,6 +51,19 @@ const NOON_AMBIENT_INTENSITY = 1.7;
 const NIGHT_AMBIENT = 0.04;
 const MOON_INTENSITY = 0.11;
 const MOON_COLOR = new Color(0x9fb4d8);
+/** Authored visual size only; astronomical positions, lighting and sun haze stay unchanged. */
+export const SKY_DISC_SCALE = 5;
+export const SUN_DISC_RADIUS = 0.00465 * SKY_DISC_SCALE;
+export const MOON_DISC_RADIUS = 0.00452 * SKY_DISC_SCALE;
+export const MOON_HALO_WIDTH = 0.035;
+/** NASA Galileo full-moon photograph, public domain; source and hash in ATTRIBUTIONS.md. */
+let loadedMoonTexture: Texture | undefined;
+/** Delayed because sky-model unit tests deliberately run without a DOM. */
+function moonTexture(): Texture {
+  loadedMoonTexture ??= new TextureLoader().load(moonTextureUrl);
+  loadedMoonTexture.colorSpace = SRGBColorSpace;
+  return loadedMoonTexture;
+}
 /** How far the hemisphere light is tinted toward the table; a full tint shifts ground colours. */
 const AMBIENT_TINT = 0.25;
 const AMBIENT_GROUND = new Color(0xc8a878);
@@ -53,6 +71,17 @@ const AMBIENT_GROUND = new Color(0xc8a878);
 const FOG_SMOOTHING = 6;
 
 const clamp01 = (n: number): number => Math.max(0, Math.min(1, n));
+
+/**
+ * Do not scale a directional light by the sun's height: Lambert shading already does
+ * that for level ground. Keeping a warm, attenuated key near the horizon lets ridges,
+ * tree lines and other faces aimed at sunrise/sunset actually catch the light.
+ */
+export function solarKeyIntensity(elevationRad: number): number {
+  if (elevationRad <= 0) return 0;
+  const noonFraction = clamp01(Math.sin(elevationRad) / Math.sin(NOON_ELEVATION_RAD));
+  return NOON_SUN_INTENSITY * (0.45 + 0.55 * noonFraction);
+}
 
 export class SkyLayer {
   readonly sun = new DirectionalLight(NOON_SUN_COLOR.clone(), NOON_SUN_INTENSITY);
@@ -80,6 +109,8 @@ export class SkyLayer {
       sunDiscColor: { value: new Color(1, 1, 1) },
       moonDirection: { value: new Vector3(0, -1, 0) },
       moonPhase: { value: 0.5 },
+      moonSide: { value: 1 },
+      moonTexture: { value: moonTexture() },
     };
     const material = new ShaderMaterial({
       uniforms: this.uniforms,
@@ -169,6 +200,7 @@ export class SkyLayer {
     this.uniforms.sunElevation.value = sun.elevationRad;
     this.uniforms.moonDirection.value.set(moon.direction.x, moon.direction.y, moon.direction.z);
     this.uniforms.moonPhase.value = moon.phase;
+    this.uniforms.moonSide.value = moon.waxing ? 1 : -1;
     const t = this.table.sunTransmittance;
     // Reddening comes from the model's own transmittance ratio, then the peak is
     // renormalised so elevation alone controls how bright the key light is.
@@ -176,14 +208,13 @@ export class SkyLayer {
     const noon = [NOON_SUN_COLOR.r, NOON_SUN_COLOR.g, NOON_SUN_COLOR.b];
     const scaled = [0, 1, 2].map((c) => noon[c]! * ratio[c]!);
     const peak = Math.max(scaled[0]!, scaled[1]!, scaled[2]!);
-    const day = clamp01(Math.sin(sun.elevationRad) / Math.sin(NOON_ELEVATION_RAD));
     // The disc is rolled off with the rest of the sky, so this only has to be bright
     // enough to saturate inside its own radius; 12 also bloomed the shoulder flat.
     this.uniforms.sunDiscColor.value.setRGB(t[0], t[1], t[2]).multiplyScalar(6);
     const key = sun.elevationRad > 0 && peak > 1e-4 ? sun.direction : moon.direction;
     if (sun.elevationRad > 0 && peak > 1e-4) {
       this.sun.color.setRGB(scaled[0]! / peak, scaled[1]! / peak, scaled[2]! / peak);
-      this.sun.intensity = NOON_SUN_INTENSITY * day;
+      this.sun.intensity = solarKeyIntensity(sun.elevationRad);
     } else {
       // Below the horizon the key light follows the moon: cool, dim, phase-scaled.
       this.sun.color.copy(MOON_COLOR);
@@ -276,11 +307,14 @@ uniform vec3 sunDiscColor;
 uniform float sunAzimuth;
 uniform float sunElevation;
 uniform float moonPhase;
+uniform float moonSide;
+uniform sampler2D moonTexture;
 varying vec3 vDirection;
 const float PI = 3.141592653589793;
-// Angular radii: the sun and the moon are both close to a quarter of a degree.
-const float SUN_RADIUS = 0.00465;
-const float MOON_RADIUS = 0.00452;
+// Exaggerated apparent discs, independent of the atmosphere's physical sun radius.
+const float SUN_RADIUS = ${SUN_DISC_RADIUS.toFixed(8)};
+const float MOON_RADIUS = ${MOON_DISC_RADIUS.toFixed(8)};
+${MOON_PHASE_GLSL}
 
 float hash13(vec3 p) {
   p = fract(p * 0.1031);
@@ -334,12 +368,39 @@ void main() {
   // would land within a hundredth of the sky right beside them and disappear.
   color = skyRolloff(color);
   float cosSun = dot(dir, sunDirection);
-  // Full brightness at the sun's true angular radius, fading over a third of it again
-  // rather than over a second whole radius: a crisp limb, not a soft ball.
-  color += sunDiscColor * smoothstep(cos(SUN_RADIUS * 1.35), cos(SUN_RADIUS), cosSun);
+  // Retain the original limb feather; enlarge the disc, not its glow shoulder.
+  color += sunDiscColor * smoothstep(cos(SUN_RADIUS + 0.0016275), cos(SUN_RADIUS), cosSun);
   float cosMoon = dot(dir, moonDirection);
-  float moonDisc = smoothstep(cos(MOON_RADIUS * 2.2), cos(MOON_RADIUS), cosMoon);
-  color += vec3(0.85, 0.88, 1.0) * moonDisc * (0.05 + 0.95 * moonPhase) * night;
+  // View-right and view-up basis: waxing illuminates the right, waning the left.
+  vec3 moonEast = cross(moonDirection, vec3(0.0, 1.0, 0.0));
+  if (dot(moonEast, moonEast) < 0.001) moonEast = cross(moonDirection, vec3(1.0, 0.0, 0.0));
+  moonEast = normalize(moonEast);
+  vec3 moonNorth = normalize(cross(moonEast, moonDirection));
+  vec2 moonUv = vec2(dot(dir, moonEast), dot(dir, moonNorth)) / sin(MOON_RADIUS) * 0.5 + 0.5;
+  // Work only near the visible moon, never on the opposite hemisphere. The glow
+  // convolves the SAME phase-masked photograph as the disc, not a circular halo.
+  if (night > 0.0 && cosMoon > cos(0.12) && moonPhase > 0.0) {
+    vec2 moonPlane = moonUv * 2.0 - 1.0;
+    float moonHalo = 0.0;
+    for (int sy = 0; sy < 12; sy++) {
+      for (int sx = 0; sx < 12; sx++) {
+        vec2 sampleUv = (vec2(float(sx), float(sy)) + 0.5) / 12.0;
+        vec2 p = sampleUv * 2.0 - 1.0;
+        vec3 photo = texture2D(moonTexture, sampleUv).rgb;
+        float emission = dot(photo, vec3(0.2126, 0.7152, 0.0722)) * moonVisibility(p);
+        vec2 delta = (moonPlane - p) * MOON_RADIUS;
+        float d2 = dot(delta, delta);
+        float blur = 0.65 * exp(-d2 / (0.012 * 0.012)) + 0.35 * exp(-d2 / (${MOON_HALO_WIDTH.toFixed(5)} * ${MOON_HALO_WIDTH.toFixed(5)}));
+        moonHalo += emission * blur * (2.0 / 144.0);
+      }
+    }
+    float moonAngle = acos(clamp(cosMoon, -1.0, 1.0));
+    float haloWeight = moonHalo * night * (1.0 - smoothstep(0.07, 0.12, moonAngle));
+    float haloDither = (hash13(vec3(gl_FragCoord.xy, 17.0)) - 0.5) / 255.0;
+    color += max(vec3(0.0), vec3(0.12, 0.16, 0.28) * haloWeight + vec3(haloDither) * min(1.0, haloWeight * 255.0));
+    vec3 moonPhoto = texture2D(moonTexture, clamp(moonUv, 0.0, 1.0)).rgb;
+    color += moonPhoto * moonVisibility(moonPlane) * night * 1.35;
+  }
 
   gl_FragColor = vec4(color, 1.0);
 }`;

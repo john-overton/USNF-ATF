@@ -68,6 +68,8 @@ try {
   assert.equal(reset.gun.safe, true);
   await tap('Escape');
   await s.poll(async () => await s.evaluate('!!document.querySelector("[data-menu-screen=paused]")') ? true : undefined, 'pause again');
+  await s.evaluate('document.querySelector("[data-escape-page=leave]").click()');
+  await s.poll(async()=>await s.evaluate('!!document.querySelector("[data-menu-command=main-menu]")')?true:undefined,'leave confirmation');
   await s.evaluate('document.querySelector("[data-menu-command=main-menu]").click()');
   await s.poll(async () => await s.evaluate('!!document.querySelector("[data-menu-screen=main-menu]")') ? true : undefined, 'main menu again');
   assert.equal(await s.evaluate(`document.querySelector('select[aria-label="Bullet mechanics"]').value`), 'retail');

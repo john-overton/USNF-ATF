@@ -25,6 +25,7 @@ import type { FsRoot } from '../../platform/Platform';
 import { parseContrastQuery } from '../../terrain/light-contrast';
 import { parseEnvironmentQuery, type EnvironmentQuery } from '../environment';
 import type { GunMode } from '../../data/retail-gun';
+import { DEFAULT_THEATER_ID, theaterById } from '../../terrain/theaters';
 
 export type GameMode = 'explorer' | 'free-flight' | 'quick-fight';
 export type FlightStart = 'runway' | 'approach' | 'airborne';
@@ -103,8 +104,8 @@ export interface MissionParams {
   seed: number;
 }
 
-export const DEFAULT_THEATER = 'ukraine';
-export const DEFAULT_MANIFEST_PATH = 'terrains/ukraine/manifest.json';
+export const DEFAULT_THEATER = DEFAULT_THEATER_ID;
+export const DEFAULT_MANIFEST_PATH = theaterById(DEFAULT_THEATER)!.manifestPath;
 /** A sanity bound only. The real limit needs the aircraft profile and stays in `FlightLayer`. */
 export const MAX_PAYLOAD_KG = 50000;
 export const MAX_OPPONENTS = 3;
@@ -170,6 +171,8 @@ export function parseMissionQuery(search: string): MissionParams {
     aircraft: aircraftId(params.get('opponentAircraft')),
     skill: Math.round(clamp(number('skill', 2), 0, 3)) as AiSkill,
   };
+  const theater = params.get('theater') ?? DEFAULT_THEATER;
+  const definition = theaterById(theater);
   return {
     mode:
       mode === 'flight' || mode === 'free-flight'
@@ -177,9 +180,9 @@ export function parseMissionQuery(search: string): MissionParams {
         : mode === 'quick-fight'
           ? 'quick-fight'
           : 'explorer',
-    theater: params.get('theater') ?? DEFAULT_THEATER,
+    theater,
     root: params.get('root') === 'assets' ? 'assets' : 'appData',
-    manifestPath: params.get('manifest') ?? DEFAULT_MANIFEST_PATH,
+    manifestPath: params.get('manifest') ?? definition?.manifestPath ?? DEFAULT_MANIFEST_PATH,
     aircraft: aircraftId(params.get('aircraft')),
     gunMode: params.get('gunMode') === 'retail' ? 'retail' : 'remake',
     flightModel:
@@ -286,8 +289,8 @@ export function missionQuery(mission: MissionParams): URLSearchParams {
  */
 export function validateMission(mission: MissionParams): string[] {
   const problems: string[] = [];
-  if (mission.theater !== DEFAULT_THEATER)
-    problems.push(`Theater “${mission.theater}” is not available; only Ukraine is built.`);
+  if (!theaterById(mission.theater))
+    problems.push(`Theater “${mission.theater}” is not available.`);
   if (!mission.manifestPath.trim()) problems.push('A theater manifest path is required.');
   if (!Object.hasOwn(AIRCRAFT, mission.aircraft))
     problems.push(`Unknown aircraft “${mission.aircraft}”.`);

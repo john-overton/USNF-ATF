@@ -15,15 +15,19 @@ from pathlib import Path
 from . import sh
 from .pal import load_pal, overlay
 from .pic import parse_pic
+from .sh_gear import merge_gear, gear_support_height
+from .sh_devices import merge_brakes, merge_afterburner
+from .sh_f14_atf import f14_atf_surfaces
 
 
-def _project(data: bytes, name: str = '') -> dict:
+def _project(data: bytes, name: str = '', state_words: dict[int, int] | None = None) -> dict:
     sections = sh._sections(data)
     va, size, offset, _ = sections['CODE']
     code = data[offset:offset + size]
     shape = sh.Shape(name)
     walker = sh._Walker(code, va, shape, sh._relocs(data, sections))
     slots = {}
+    slot_colors = {}
     polygons = []
     parts = {}
     stack = []
@@ -42,7 +46,9 @@ def _project(data: bytes, name: str = '') -> dict:
         if op == 0 or (op == 0x1e and (scope_end is None or off >= scope_end)):
             if not stack:
                 break
-            off, transform, part, texture, scope_end = stack.pop()
+            off, scope_end, frame = stack.pop()
+            if frame is not None:
+                transform, part, texture = frame
             continue
         if op == 0x38:
             target = off + 3 + walker.s16(off + 1)
@@ -51,11 +57,22 @@ def _project(data: bytes, name: str = '') -> dict:
             scope_end = max(scope_end or target, target)
             off += 3
             continue
+        if op == 0x12:
+            # Native ATF handler 0x4b6b98: signed end-relative call, saves
+            # only the return instruction pointer. Shared vertex/texture
+            # writes persist; our painter-order scope is local to the call.
+            target = off + 4 + walker.s16(off + 2)
+            if not 0 <= target < len(code):
+                raise sh.SHError('shape call target outside CODE section')
+            stack.append((off + 4, scope_end, None))
+            scope_end = None
+            off = target
+            continue
         if op == 0xc4:
             target = off + 16 + walker.s16(off + 14)
             # C4 fields are renderer XYZ; vertex payload is X/forward/up.
             pivot = (walker.s16(off + 2), walker.s16(off + 6), walker.s16(off + 4))
-            stack.append((off + 16, transform, part, texture, scope_end))
+            stack.append((off + 16, scope_end, (transform, part, texture)))
             scope_end = None
             transform = tuple(a + b for a, b in zip(transform, pivot))
             part = f'part-{target + va:04x}'
@@ -73,7 +90,9 @@ def _project(data: bytes, name: str = '') -> dict:
                 immediate, branch, delta = code[start + 7:start + 10]
                 if branch not in (0x74, 0x75):
                     raise sh.SHError('unsupported static state guard')
-                take = (immediate == 0) if branch == 0x74 else (immediate != 0)
+                state = (state_words or {}).get(walker.u32(start + 3), 0)
+                immediate = struct.unpack('b', bytes([immediate]))[0]
+                take = (state == immediate) if branch == 0x74 else (state != immediate)
                 if take:
                     start += 10 + struct.unpack('b', bytes([delta]))[0]
             found = None
@@ -107,6 +126,14 @@ def _project(data: bytes, name: str = '') -> dict:
             for i in range(count):
                 v = struct.unpack_from('<hhh', code, off + 6 + i * 6)
                 slots[destination // 8 + i] = tuple(a + b for a, b in zip(v, transform))
+        if op == 0xf6:
+            # Native per-vertex palette/shading record: slot u16 at +1,
+            # palette byte at +3; remaining signed bytes are lighting normal.
+            slot_colors[walker.u16(off + 1)] = code[off + 3]
+        if op == 0xe0:
+            # BrushFromIndex selects a mission/player decal. With no selected
+            # livery the native fallback BLANK.PIC is entirely index 255.
+            texture = f'@decal-{walker.u16(off + 2)}'
         if op == 0xe2:
             texture = code[off + 2:off + 16].split(b'\0')[0].decode('ascii')
         for primitive in shape.prims[before:]:
@@ -120,7 +147,9 @@ def _project(data: bytes, name: str = '') -> dict:
                 raise sh.SHError(f'unresolved static vertex at {primitive.addr:x}')
             polygons.append({'vertices': [slots[i] for i in primitive.indices],
                              'color': primitive.color, 'uvs': primitive.uvs,
-                             'texture': texture, 'part': part, 'addr': primitive.addr, 'subtype': primitive.subtype})
+                             'texture': texture, 'part': part, 'addr': primitive.addr, 'subtype': primitive.subtype,
+                             'normal': primitive.normal,
+                             'vertexColors': [slot_colors.get(i, primitive.color % 256) for i in primitive.indices]})
         # Nearest LOD: do not take distance/far-model links. Plane ordering and
         # state conditional links are not needed in a double-sided static mesh.
         off += length
@@ -131,9 +160,9 @@ def _project(data: bytes, name: str = '') -> dict:
     return {'polygons': polygons, 'parts': parts, 'instructions': instructions}
 
 
-def project(data: bytes, name: str = '') -> dict:
+def project(data: bytes, name: str = '', state_words: dict[int, int] | None = None) -> dict:
     try:
-        return _project(data, name)
+        return _project(data, name, state_words)
     except (IndexError, struct.error, KeyError) as exc:
         raise sh.SHError('truncated or missing SH container/record') from exc
 
@@ -152,7 +181,7 @@ def split_polygon(polygon: dict, plane: tuple) -> tuple:
         return None, polygon
     outputs = []
     for sign in (1, -1):
-        points, uvs = [], []
+        points, uvs, base_colors = [], [], []
         for i, v in enumerate(vertices):
             j = (i + 1) % len(vertices)
             a, b = distances[i], distances[j]
@@ -160,12 +189,16 @@ def split_polygon(polygon: dict, plane: tuple) -> tuple:
                 points.append(v)
                 if polygon['uvs']:
                     uvs.append(polygon['uvs'][i])
+                if polygon.get('baseColors'):
+                    base_colors.append(polygon['baseColors'][i])
             if a * b < -1e-18:
                 t = a / (a - b)
                 points.append(tuple(x + t * (y - x) for x, y in zip(v, vertices[j])))
                 if polygon['uvs']:
                     uvs.append(tuple(x + t * (y - x) for x, y in zip(polygon['uvs'][i], polygon['uvs'][j])))
-        outputs.append({**polygon, 'vertices': points, 'uvs': uvs or None} if len(points) >= 3 else None)
+                if polygon.get('baseColors'):
+                    base_colors.append(tuple(x + t * (y - x) for x, y in zip(polygon['baseColors'][i], polygon['baseColors'][j])))
+        outputs.append({**polygon, 'vertices': points, 'uvs': uvs or None, **({'baseColors': base_colors} if base_colors else {})} if len(points) >= 3 else None)
     return tuple(outputs)
 
 
@@ -176,8 +209,11 @@ def f14_surfaces(model: dict) -> dict:
     Coordinates/hinges are presentation choices fitted to the inspected model.
     The original polygons are replaced by their partition, never overlaid.
     """
-    polygons, pivots, rig = [], dict(model['parts']), {}
+    polygons, pivots, rig = [], dict(model['parts']), dict(model.get('rig', {}))
     for polygon in model['polygons']:
+        if polygon['part'].startswith(('gear-', 'airbrake-native-', 'afterburner-')):
+            polygons.append(polygon)
+            continue
         vertices = polygon['vertices']
         lo = [min(v[i] for v in vertices) for i in range(3)]
         hi = [max(v[i] for v in vertices) for i in range(3)]
@@ -185,14 +221,20 @@ def f14_surfaces(model: dict) -> dict:
         suffix = 'left' if side < 0 else 'right'
         name, planes, pivot, axis, parent = '', [], None, None, None
         if polygon['part'].startswith('part-'):
-            # Follow the aft quarter of the tapered wing, from the root break to
-            # the tip break. The old constant-chord cut stopped short of the tip
-            # and took disproportionately much of the narrow outer wing.
-            name = f'flap-{suffix}'
-            slope = .75 * (5 / 28) + .25 * (29 / 64)
-            intercept = .75 * (30 * 5 / 28 - 2) + .25 * (29 + 23 * 29 / 64)
-            planes = [(side, 0, 0, -30), (-side, 0, 0, 86), (-side * slope, -1, 0, intercept)]
-            pivot, axis = (side * 30, intercept - 30 * slope, 2), (1, 0, side * slope)
+            # Recovered neutral call faces supply the actual trailing panels.
+            # Do not cut forward fixed wing to manufacture substitute flaps.
+            if not (hi[1] <= -2 and
+                    all(v[1] + abs(v[0]) * 5 / 28 <= 3.36 for v in vertices)):
+                polygons.append(polygon)
+                continue
+            outer = max(abs(v[0]) for v in vertices) > 60
+            name = f'flap-{suffix}-' + ('outer' if outer else 'inner')
+            # Each original panel has its own straight leading/hinge edge.
+            edge = sorted(vertices, key=lambda v: v[1] + abs(v[0]) * 5 / 28, reverse=True)[:2]
+            edge.sort(key=lambda v: v[0])
+            pivot = edge[0]
+            delta = [edge[1][i] - edge[0][i] for i in range(3)]
+            axis = (delta[0], delta[2], -delta[1])
             parent = f'wing-{suffix}-color'
         elif lo[2] == hi[2] == -2 and hi[1] < -10 and min(abs(v[0]) for v in vertices) >= 18:
             name, pivot, axis = f'taileron-{suffix}', (side * 22, -30, -2), (1, 0, 0)
@@ -229,8 +271,11 @@ def fixed_wing_surfaces(model: dict, aircraft: str) -> dict:
     inspected native geometry; rotationAxis is in renderer X/up/aft coordinates.
     Native x86 control-surface schedules are not interpreted here.
     """
-    polygons, pivots, rig = [], dict(model['parts']), {}
+    polygons, pivots, rig = [], dict(model['parts']), dict(model.get('rig', {}))
     for polygon in model['polygons']:
+        if polygon['part'].startswith(('gear-', 'airbrake-native-', 'afterburner-')):
+            polygons.append(polygon)
+            continue
         vertices = polygon['vertices']
         lo = [min(v[i] for v in vertices) for i in range(3)]
         hi = [max(v[i] for v in vertices) for i in range(3)]
@@ -243,10 +288,10 @@ def fixed_wing_surfaces(model: dict, aircraft: str) -> dict:
                 candidates = [(f'elevator-{suffix}', [(side, 0, 0, -1.5), (0, -1, 0, -53)],
                                (side * 2, -53, 7), (1, 0, 0))]
             # Wings: inboard flaps and distinct outboard trailing ailerons.
-            elif lo[2] >= -8 and hi[2] <= -3 and lo[1] >= -25 and hi[1] <= 14 and hi[0] - lo[0] >= 8:
+            elif lo[2] >= -8 and hi[2] <= -3 and lo[1] >= -26 and hi[1] <= 14 and hi[0] - lo[0] >= 8:
                 candidates = [
-                    (f'flap-{suffix}', [(side, 0, 0, -6), (-side, 0, 0, 21), (0, -1, 0, -12)],
-                     (side * 6, -12, -7), (1, 0, 0)),
+                    (f'flap-{suffix}', [(side, 0, 0, -5), (-side, 0, 0, 21), (0, -1, 0, -18)],
+                     (side * 5, -18, -6), (1, 0, 0)),
                     (f'aileron-{suffix}', [(side, 0, 0, -21), (0, -1, 0, -18)],
                      (side * 21, -18, -7), (1, 0, 0)),
                 ]
@@ -254,19 +299,18 @@ def fixed_wing_surfaces(model: dict, aircraft: str) -> dict:
             elif lo[0] >= -1 and hi[0] <= 2 and lo[2] >= 11 and hi[1] <= -33:
                 candidates = [('rudder-center', [(0, -1, -.4, -40.6)],
                                (0, -47, 16), (0, 1, .4))]
-            # Rear fuselage speed-brake panels, ahead of the tailcone.
-            elif min(abs(v[0]) for v in vertices) >= 4 and max(abs(v[0]) for v in vertices) <= 6 and lo[1] >= -28 and hi[1] <= -11:
-                candidates = [(f'airbrake-{suffix}', [(0, 1, 0, 28), (0, -1, 0, -17),
-                               (0, 0, 1, 5), (0, 0, -1, 2)],
-                               (side * 5.5, -17, -1.5), (0, 1, 0))]
         elif aircraft == 'F31':
             if polygon['part'].startswith('part-') and lo[1] > 40:
                 candidates = [(f'canard-{suffix}', [], model['parts'][polygon['part']], (1, 0, 0))]
-            elif polygon['part'] == 'body' and lo[2] >= -6 and hi[2] <= -3 and hi[1] <= 10:
-                # Include the inboard trailing edge, not only the two small
-                # outboard tabs behind y=-17. Keep the fuselage center fixed.
-                candidates = [(f'elevon-{suffix}', [(side, 0, 0, -7), (0, -1, 0, -14)],
-                               (side * 7, -14, -5.5), (1, 0, 0))]
+            elif polygon['part'] == 'body' and lo[2] >= -6 and hi[2] <= -3 and lo[1] >= -21 and hi[1] <= 10:
+                # Restored call faces fill the inboard trailing panels.
+                # Split at the outer tab seam to preserve its different height.
+                candidates = [
+                    (f'elevon-{suffix}-inner', [(side, 0, 0, -4), (-side, 0, 0, 20), (0, -1, 0, -17)],
+                     (side * 5, -17, -5), (1, 0, 0)),
+                    (f'elevon-{suffix}-outer', [(side, 0, 0, -20), (0, -1, 0, -17)],
+                     (side * 20, -17, -5), (1, -side / 11, 0)),
+                ]
             elif lo[0] == hi[0] == 0 and lo[2] >= 8 and hi[1] <= -19:
                 candidates = [('rudder-center', [(0, -1, -.35, -28)],
                                (0, -32.2, 12), (0, 1, .35))]
@@ -275,7 +319,8 @@ def fixed_wing_surfaces(model: dict, aircraft: str) -> dict:
         remaining = [polygon]
         if candidates:
             remaining = [{**polygon, 'vertices': [vertices[j] for j in (0, i, i + 1)],
-                          'uvs': [polygon['uvs'][j] for j in (0, i, i + 1)] if polygon['uvs'] else None}
+                          'uvs': [polygon['uvs'][j] for j in (0, i, i + 1)] if polygon['uvs'] else None,
+                          **({'baseColors': [polygon['baseColors'][j] for j in (0, i, i + 1)]} if polygon.get('baseColors') else {})}
                          for i in range(1, len(vertices) - 1)]
         for name, planes, pivot, axis in candidates:
             outside_pieces = []
@@ -301,15 +346,33 @@ def texture_rgba(pixels, palette, masked: bool) -> list[int]:
     return [component for index in pixels for component in (*palette[index], 0 if masked and index == 255 else 255)]
 
 
-def export(source: Path, palette_path: Path, output: Path, length_metres: float = 19.1, name: str | None = None, wingspan_metres: float | None = None) -> dict:
+def export(source: Path, palette_path: Path, output: Path, length_metres: float = 19.1, name: str | None = None, wingspan_metres: float | None = None, rig_variant: str | None = None) -> dict:
     data = source.read_bytes()
     model = project(data, source.stem)
     source_polygons = len(model['polygons'])
-    if source.stem.upper() == 'F14':
+    reference_vertices = [v for p in model['polygons'] for v in p['vertices']]
+    variant = rig_variant or source.stem.upper()
+    gear_word = {'F14_ATF': 0x802c, 'F14': 0x570c, 'A4': 0x6d36, 'F31': 0x65b2}.get(variant)
+    if gear_word is not None:
+        deployed = project(data, source.stem, {gear_word: 1})
+        model = merge_gear(model, deployed, variant)
+    brake_word = {'F14_ATF': 0x8026, 'A4': 0x6d30, 'F31': 0x65a6}.get(variant)
+    if brake_word is not None:
+        model = merge_brakes(model, project(data, source.stem, {brake_word: 1}), variant)
+    burner_word = {'F14_ATF': 0x8020, 'F31': 0x65a0}.get(variant)
+    if burner_word is not None:
+        model = merge_afterburner(model, project(data, source.stem, {burner_word: 1}), variant)
+    palette = load_pal(str(palette_path))
+    for polygon in model['polygons']:
+        gouraud = bool(polygon['subtype'] & 0x02)
+        polygon['baseColors'] = [palette[c % 256] for c in polygon['vertexColors']] if gouraud else [palette[polygon['color'] % 256]] * len(polygon['vertices'])
+    if variant == 'F14_ATF':
+        model = f14_atf_surfaces(model)
+    elif source.stem.upper() == 'F14':
         model = f14_surfaces(model)
     elif source.stem.upper() in ('A4', 'F31'):
         model = fixed_wing_surfaces(model, source.stem.upper())
-    vertices = [v for p in model['polygons'] for v in p['vertices']]
+    vertices = reference_vertices
     lo = [min(v[i] for v in vertices) for i in range(3)]
     hi = [max(v[i] for v in vertices) for i in range(3)]
     if not math.isfinite(length_metres) or length_metres <= 0 or hi[1] <= lo[1]:
@@ -325,19 +388,25 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
     # the fuselage because the twin fins extend far above its centerline.
     def convert(v):
         return [(v[0] - center[0]) * scale, (v[2] - center[2]) * scale, -(v[1] - center[1]) * scale]
-    palette = load_pal(str(palette_path))
     groups = {}
     for polygon in model['polygons']:
+        # No mission/player livery selection is supplied by this development
+        # exporter. Native BLANK.PIC contributes no visible decal pixels.
+        if polygon['texture'].startswith('@decal-'):
+            continue
         component = polygon['part']
-        if source.stem.upper() == 'F14' and polygon['subtype'] == 0x44:
+        if (variant == 'F14' and polygon['subtype'] == 0x44) or (variant == 'F14_ATF' and polygon['addr'] in (0x4884, 0x48b3, 0x48e2, 0x4901)) or (variant == 'F31' and polygon['addr'] == 0x29f7):
             # Observed neutral F-14: the two special textured rear nozzle disks.
             # Keep them separate so authored engine state can darken an idle nozzle.
             x = sum(v[0] for v in polygon['vertices']) / len(polygon['vertices'])
             component = 'exhaust-left' if x < 0 else 'exhaust-right'
-        # Inspected 4c/6c frame/pilot billboards use palette-index-255 cutouts.
-        # Other textured opcodes have opaque skin/fallback-color semantics.
-        masked = polygon['subtype'] in (0x4c, 0x6c) and bool(polygon['uvs'])
-        key = (component, polygon['texture'] if polygon['uvs'] else '', masked)
+        # Native subtype bit 8 enables index-255 keyed drawing; bit 0x40
+        # uses the stored normal for one-sided visibility.
+        masked = bool(polygon['subtype'] & 0x08) and bool(polygon['uvs'])
+        cull = bool(polygon.get('normal'))
+        decal = polygon['subtype'] in (0x4c, 0x5c, 0x6c, 0x7c) and bool(polygon['uvs'])
+        base_fill = bool(polygon['subtype'] & 0x80 and polygon['subtype'] & 0x03 and polygon['uvs'])
+        key = (component, polygon['texture'] if polygon['uvs'] else '', masked, cull, decal, base_fill)
         if key not in groups:
             groups[key] = {'name': key[0], 'positions': [], 'colors': [], 'pivot': convert(model['parts'].get(key[0], center))}
             if key[0].startswith('part-') and source.stem.upper() == 'F14':
@@ -345,6 +414,11 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
             groups[key]['name'] += '-textured' if key[1] else '-color'
             if masked:
                 groups[key]['name'] += '-cutout'
+            if decal:
+                groups[key]['name'] += '-overlay'
+            groups[key]['cullBackfaces'] = cull
+            groups[key]['decal'] = decal
+            groups[key]['textureBase'] = base_fill
             if key[0] in model.get('rig', {}):
                 groups[key].update(model['rig'][key[0]])
             if key[1]:
@@ -356,21 +430,32 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
         group = groups[key]
         n = len(polygon['vertices'])
         for i in range(1, n - 1):
-            for index in (0, i, i + 1):
+            indices = [0, i, i + 1]
+            if cull:
+                # Header normal is X/up/forward; source vertices X/forward/up.
+                # Orient every triangle toward the native visibility normal.
+                v = [polygon['vertices'][j] for j in indices]
+                a = [v[1][j] - v[0][j] for j in range(3)]
+                b = [v[2][j] - v[0][j] for j in range(3)]
+                cross = [a[(j+1)%3]*b[(j+2)%3] - a[(j+2)%3]*b[(j+1)%3] for j in range(3)]
+                nx, nz, ny = polygon['normal']
+                if sum(x*y for x, y in zip(cross, (nx, ny, nz))) < 0:
+                    indices[1], indices[2] = indices[2], indices[1]
+            for index in indices:
                 group['positions'].extend(convert(polygon['vertices'][index]))
-                rgb = (255, 255, 255) if key[1] else palette[polygon['color'] % 256]
+                rgb = (255, 255, 255) if key[1] and not base_fill else polygon['baseColors'][index]
                 group['colors'].extend(c / 255 for c in rgb)
                 if key[1]:
                     u, v = polygon['uvs'][index]
-                    # Preserve the projection's V convention. The loader uses DataTexture
-                    # flipY=false; special 0x44 exhaust material is separately named.
-                    # Original material/UV dispatch beyond this projection is unproven.
-                    group['uvs'].extend((u / group['texture']['width'], 1 - v / group['texture']['height']))
+                    # Native G_TextureFlip maps V to height-1-V. Address texel
+                    # centers so filtered sampling stays inside the intended atlas patch.
+                    group['uvs'].extend(((u + 0.5) / group['texture']['width'],
+                                        (group['texture']['height'] - 0.5 - v) / group['texture']['height']))
     result = {'version': 1, 'name': name or ('F-14 Tomcat' if source.stem.upper() == 'F14' else source.stem), 'positions': [], 'colors': [],
               'parts': list(groups.values()),
               'source': {'file': source.name, 'sha256': hashlib.sha256(data).hexdigest(),
                          'paletteSha256': hashlib.sha256(palette_path.read_bytes()).hexdigest(),
-                         'projection': 'nearest LOD, neutral static state', 'lengthMetres': length_metres,
+                         'projection': 'nearest LOD, neutral plus selected native device states', 'rigVariant': variant, 'lengthMetres': length_metres,
                          'scaleReference': 'wingspan' if wingspan_metres is not None else 'length',
                          'wingspanMetres': (hi[0] - lo[0]) * scale,
                          'polygons': source_polygons, 'partitionPolygons': len(model['polygons']), 'instructions': model['instructions']},
@@ -378,15 +463,21 @@ def export(source: Path, palette_path: Path, output: Path, length_metres: float 
                               'Static neutral pose; original x86 animation and renderer are not executed.',
                               f'{length_metres} m length is a presentation scale, not decoded retail units.',
                               'Retail faces are partitioned into authored taileron/rudder/flap/airbrake rig; hinges and motion are not decoded retail semantics.',
-                              'Neutral projection includes wings; gear and hook animation are not recovered.',
+                              'Native deployed gear geometry and UVs use authored retraction; native hook animation is not recovered.',
                               'Special exhaust disks are separated for authored engine-state presentation.',
-                              'Original texture dispatch is partial; DataTexture uses flipY=false.']}
+                              'Native keyed texture/facing and blank dynamic-decal fallback exported; mission livery selection is not imported.']}
     if source.stem.upper() != 'F14':
         result['limitations'] = [result['limitations'][i] for i in (0, 1, 2, 6)] + [
             'Static exterior only; control surfaces, gear and engine animation are not recovered.']
     if source.stem.upper() in ('A4', 'F31'):
         result['limitations'][-1] = 'Retail faces use authored control-surface hinges/mixing; native animation and thrust vectoring are not recovered.'
-    result['limitations'].append('Reviewed 4c/6c cockpit/frame/pilot faces use index-255 alpha cutouts; native material dispatch remains partial.')
+    result['limitations'].append('Textured subtype bit 8 keys index 255; stored normals select front faces. Filtering/overlay depth bias are authored renderer settings.')
+    if gear_word is not None:
+        result['limitations'].append('Native gear strut/wheel cutout geometry is reused; grouping/retraction timing is authored.')
+    if gear_word is not None:
+        support = gear_support_height(model, lambda texture: parse_pic((source.parent / texture.upper()).read_bytes()))
+        if support > 0:
+            result['gearHeightM'] = support * scale
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, separators=(',', ':')) + '\n')
     return result
@@ -398,11 +489,12 @@ def main():
     parser.add_argument('--pal', required=True, type=Path)
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--name')
+    parser.add_argument('--rig-variant', choices=['F14_ATF'])
     scale = parser.add_mutually_exclusive_group()
     scale.add_argument('--length-metres', type=float, default=19.1)
     scale.add_argument('--wingspan-metres', type=float)
     args = parser.parse_args()
-    result = export(args.source, args.pal, args.out, args.length_metres, args.name, args.wingspan_metres)
+    result = export(args.source, args.pal, args.out, args.length_metres, args.name, args.wingspan_metres, args.rig_variant)
     print(json.dumps({'source': result['source'], 'parts': [(p['name'], len(p['positions']) // 9) for p in result['parts']]}))
 
 

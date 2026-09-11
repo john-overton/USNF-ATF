@@ -1,3 +1,4 @@
+import { connectMixer } from './AudioMixer';
 import {
   AdditiveBlending,
   BufferAttribute,
@@ -22,6 +23,7 @@ import type { AircraftId } from './aircraft-catalog';
 import { flightPcm, resampleFlightPcm } from './FlightAudio';
 
 export class FlightGun {
+  private disconnectMixer?: () => void;
   readonly state;
   private geometry = new BufferGeometry();
   private positions = new Float32Array(MAX_GUN_ROUNDS * 6);
@@ -133,7 +135,7 @@ export class FlightGun {
       this.gain = this.context.createGain();
       this.gain.gain.value = 0;
       this.source.connect(this.gain);
-      this.gain.connect(this.context.destination);
+      this.disconnectMixer = connectMixer(this.context, this.gain, 'weapons');
       this.source.start();
       window.addEventListener('keydown', this.wake);
       window.addEventListener('pointerdown', this.wake);
@@ -253,6 +255,7 @@ export class FlightGun {
     };
   }
   dispose(): void {
+    this.disconnectMixer?.();
     this.disposed = true;
     window.removeEventListener('keydown', this.wake);
     window.removeEventListener('pointerdown', this.wake);

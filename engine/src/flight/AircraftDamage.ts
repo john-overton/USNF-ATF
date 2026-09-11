@@ -18,6 +18,8 @@ export class AircraftDamage {
       if (!(object instanceof Mesh) || !(object.material instanceof MeshStandardMaterial)) return;
       const original = object.material;
       const material = original.clone();
+      material.onBeforeCompile = original.onBeforeCompile.bind(material);
+      material.customProgramCacheKey = original.customProgramCacheKey.bind(material);
       object.material = material;
       // Three's userData clone serializes textures; afterburner toggles need the actual map.
       material.userData.originalMap = original.userData.originalMap as unknown;
@@ -76,6 +78,8 @@ export function splitAirframe(root: Group): AirframeFragment[] {
         geometry.setAttribute(name, new Float32BufferAttribute(values, attribute.itemSize));
       }
       const material = object.material.clone();
+      material.onBeforeCompile = object.material.onBeforeCompile.bind(material);
+      material.customProgramCacheKey = object.material.customProgramCacheKey.bind(material);
       material.color.multiplyScalar(0.35);
       material.roughness = 1;
       const mesh = new Mesh(geometry, material);

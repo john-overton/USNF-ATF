@@ -1,5 +1,6 @@
 import type { TheaterManifest, WaterBody } from '../data';
-import { UKRAINE_PRACTICE } from '../flight/practice';
+import { theaterForManifest } from './theaters';
+import { orientManifest, reflectedWidth } from './world-orientation';
 import type { FsRoot, Platform } from '../platform/Platform';
 import { decodeChunk, sampleHeight } from './chunk';
 import { parseManifest, safeRelativePath } from './manifest';
@@ -115,6 +116,8 @@ export function colorNavigationMap(
   heights: Float32Array,
   water: Uint8Array,
   coastWater: Uint8Array,
+  theaterId?: string,
+  reflectionWidth?: number,
 ): Pick<
   NavigationMapData,
   'rgba' | 'waypoints' | 'minLandElevation' | 'whiteElevation' | 'maxLandElevation'
@@ -147,24 +150,45 @@ export function colorNavigationMap(
     elevationM: heights[index]!,
   });
   const waypoints: MapWaypoint[] = [];
-  const strip = { x: UKRAINE_PRACTICE.x, z: UKRAINE_PRACTICE.z };
-  const stripPixel = worldToMap(grid, strip.x, strip.z);
-  const stripIndex = Math.floor(stripPixel.y) * grid.width + Math.floor(stripPixel.x);
-  if (
-    stripPixel.x >= 0 &&
-    stripPixel.x < grid.width &&
-    stripPixel.y >= 0 &&
-    stripPixel.y < grid.height &&
-    Number.isFinite(heights[stripIndex])
-  ) {
-    waypoints.push({
-      id: 1,
-      name: 'Practice strip',
-      ...strip,
-      elevationM: UKRAINE_PRACTICE.elevation,
-    });
+  const theater = theaterId ? theaterForManifest(theaterId) : undefined;
+  const strip = theater?.strip;
+  if (theater?.waypoints) {
+    for (const authored of theater.waypoints) {
+      const point =
+        reflectionWidth === undefined ? authored : { ...authored, x: reflectionWidth - authored.x };
+      const pixel = worldToMap(grid, point.x, point.z);
+      const index = Math.floor(pixel.y) * grid.width + Math.floor(pixel.x);
+      if (
+        pixel.x >= 0 &&
+        pixel.x < grid.width &&
+        pixel.y >= 0 &&
+        pixel.y < grid.height &&
+        Number.isFinite(heights[index])
+      )
+        waypoints.push({ ...point, elevationM: heights[index]! });
+    }
+    return { rgba, waypoints, minLandElevation, whiteElevation, maxLandElevation };
+  }
+  if (strip) {
+    const stripPixel = worldToMap(grid, strip.x, strip.z);
+    const stripIndex = Math.floor(stripPixel.y) * grid.width + Math.floor(stripPixel.x);
+    if (
+      stripPixel.x >= 0 &&
+      stripPixel.x < grid.width &&
+      stripPixel.y >= 0 &&
+      stripPixel.y < grid.height &&
+      Number.isFinite(heights[stripIndex])
+    ) {
+      waypoints.push({
+        id: 1,
+        name: 'Practice strip',
+        ...strip,
+        elevationM: strip.elevation,
+      });
+    }
   }
   if (peak >= 0) waypoints.push(waypoint(2, 'Mountains', peak));
+  const coastReference = strip ?? { x: grid.extents.width / 2, z: grid.extents.height / 2 };
   let nearest = Infinity;
   let coast = -1;
   for (let y = 1; y < grid.height - 1; y++) {
@@ -173,7 +197,7 @@ export function colorNavigationMap(
       if (water[i] || !Number.isFinite(heights[i])) continue;
       if (![i - 1, i + 1, i - grid.width, i + grid.width].some((j) => coastWater[j])) continue;
       const position = mapPixelWorld(grid, x, y);
-      const distance = Math.hypot(position.x - strip.x, position.z - strip.z);
+      const distance = Math.hypot(position.x - coastReference.x, position.z - coastReference.z);
       if (distance < nearest) {
         nearest = distance;
         coast = i;
@@ -192,7 +216,7 @@ export async function loadNavigationMap(
   signal?: AbortSignal,
 ): Promise<NavigationMapData> {
   safeRelativePath(path);
-  const manifest = parseManifest(await platform.fs.readText(root, path));
+  const manifest = orientManifest(parseManifest(await platform.fs.readText(root, path)));
   signal?.throwIfAborted();
   return buildNavigationMap(
     manifest,
@@ -274,15 +298,25 @@ export async function buildNavigationMap(
     }
   }
   const coastWater = rasterizeWater(grid, largest ? [largest] : []);
-  const colored = colorNavigationMap(grid, heights, water, coastWater);
-  if (manifest.id !== 'ukraine')
-    colored.waypoints = colored.waypoints.filter((point) => point.id !== 1);
+  const colored = colorNavigationMap(
+    grid,
+    heights,
+    water,
+    coastWater,
+    manifest.id,
+    reflectedWidth(manifest),
+  );
   return {
     ...grid,
     ...colored,
     sourceLod,
     name: manifest.name,
   };
+}
+
+/** Start large theaters at about 400 statute miles across; small theaters fit. */
+export function initialNavigationZoom(grid: MapGrid): number {
+  return Math.max(1, Math.min(16, grid.extents.width / (400 * 1609.344)));
 }
 
 /** North-up viewport follows aircraft at zoom > 1 and clamps at the theater edges. */

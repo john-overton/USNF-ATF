@@ -12,6 +12,7 @@ import {
   type FlightMusicInput,
 } from './FlightMusic';
 import { muteControl } from './mute';
+import type { Platform } from '../platform/Platform';
 
 const input = (steps: number, patch: Partial<FlightMusicInput> = {}): FlightMusicInput => ({
   steps,
@@ -114,12 +115,28 @@ function fixture(imported = true) {
   });
   const node = () => ({ connect: (next: unknown) => next, disconnect: () => undefined });
   const sources: { stops: number[]; onended: (() => void) | null }[] = [];
+  const bufferStarts: number[] = [];
   const context = {
     state: 'running',
     currentTime: 0,
     destination: {},
     createGain: () => ({ ...node(), gain: param() }),
     createStereoPanner: () => ({ ...node(), pan: param() }),
+    decodeAudioData: () => Promise.resolve({ duration: 3, numberOfChannels: 2 }),
+    createBufferSource: () => {
+      const source = {
+        ...node(),
+        buffer: undefined,
+        onended: null as (() => void) | null,
+        stops: [] as number[],
+        start: (_at: number, offset: number) => bufferStarts.push(offset),
+        stop: (at: number) => {
+          source.stops.push(at);
+        },
+      };
+      sources.push(source);
+      return source;
+    },
     createOscillator: () => {
       const source = {
         ...node(),
@@ -166,6 +183,7 @@ function fixture(imported = true) {
   return {
     music,
     sources,
+    bufferStarts,
     context,
     listeners,
     gesture: (isTrusted = true) => {
@@ -174,6 +192,77 @@ function fixture(imported = true) {
     },
   };
 }
+
+test('baked playback seeks on unmute, pauses, loops, resets and transitions without layering oscillators', async () => {
+  const f = fixture();
+  f.music.dispose();
+  const bytes = new Uint8Array(44).fill(1);
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (v) =>
+    v.toString(16).padStart(2, '0'),
+  ).join('');
+  const baked = {
+    version: 1,
+    rendering: 'fluidsynth-user-bank',
+    tracks: {
+      ['a'.repeat(64)]: {
+        name: 'AIR01.XMI',
+        wavSha256: hash,
+        bankSha256: 'b'.repeat(64),
+        bytes: 44,
+        durationSeconds: 2,
+        renderedSeconds: 3,
+        limitations: [],
+      },
+    },
+  };
+  const platform = {
+    fs: {
+      exists: () => Promise.resolve(true),
+      readText: (_r: unknown, p: string) =>
+        Promise.resolve(JSON.stringify(p.endsWith('flight-music.json') ? manifest() : baked)),
+      readBytes: () => Promise.resolve(bytes),
+    },
+  } as unknown as Platform;
+  const music = await FlightMusic.load(platform);
+  owners.push(music);
+  f.gesture();
+  music.update(input(0));
+  expect(music.diagnostics().played).toBe(0);
+  music.update(input(36));
+  expect(music.diagnostics().playheadSeconds).toBe(0);
+  for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
+  music.update(input(36));
+  expect(f.bufferStarts).toEqual([0]);
+  expect(music.diagnostics().voices).toBe(1);
+  expect(music.diagnostics().rendering).toBe('FluidSynth user-bank baked audio');
+  music.update(input(48));
+  expect(f.bufferStarts).toHaveLength(1);
+  music.setPaused(true);
+  music.update(input(48));
+  expect(f.context.state).toBe('suspended');
+  music.setPaused(false);
+  expect(f.bufferStarts).toHaveLength(1);
+  muteControl.toggle();
+  expect(music.diagnostics().voices).toBe(0);
+  music.update(input(120));
+  muteControl.toggle();
+  music.update(input(120));
+  expect(f.bufferStarts.at(-1)).toBeCloseTo(0.7);
+  music.update(input(288));
+  expect(f.bufferStarts.at(-1)).toBeCloseTo(0.1);
+  music.update(input(300, { outcome: 'defeat' }));
+  expect(f.bufferStarts.at(-1)).toBe(0);
+  music.setEnabled(false);
+  expect(music.diagnostics().voices).toBe(0);
+  music.setEnabled(true);
+  music.update(input(312, { outcome: 'defeat' }));
+  expect(f.bufferStarts.at(-1)).toBeCloseTo(0.1);
+  music.reset();
+  music.update(input(0));
+  expect(f.bufferStarts.at(-1)).toBe(0);
+  music.dispose();
+  expect(music.diagnostics().voices).toBe(0);
+});
 
 test('trusted unlock, bounded lookahead, deduplication and pause preserve the music playhead', () => {
   const { music, gesture, sources, context } = fixture();

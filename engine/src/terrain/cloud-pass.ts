@@ -43,8 +43,12 @@ export interface CloudUniformState {
   /** Unit, world space, pointing at the sun. */
   sunDirection: Vector3;
   sunColor: Color;
+  /** Direct-light strength relative to the calibrated noon key. */
+  sunIntensity: number;
   zenithColor: Color;
   groundColor: Color;
+  /** Hemisphere-light strength relative to the calibrated noon fill. */
+  ambientIntensity: number;
   /** Floating-origin offset: world = renderPosition + origin. */
   origin: { x: number; z: number };
   fogColor: Color;
@@ -63,6 +67,17 @@ export function cloudScaleFor(quality: CloudQuality): number {
     default:
       return 0;
   }
+}
+
+/** Keep the cloud pass in the same noon-relative exposure space as SkyLayer. */
+export function cloudLightingFactors(
+  sunIntensity: number,
+  ambientIntensity: number,
+): { direct: number; ambient: number } {
+  return {
+    direct: Math.max(0, Math.min(1, sunIntensity / 2.4)),
+    ambient: Math.max(0, Math.min(1, ambientIntensity / 1.7)),
+  };
 }
 
 let coverageSingleton: DataTexture | undefined;
@@ -214,6 +229,8 @@ uniform float cirrusDensity;
 uniform vec3 cloudSunColor;
 uniform vec3 cloudZenithColor;
 uniform vec3 cloudGroundColor;
+uniform float cloudSunStrength;
+uniform float cloudAmbientStrength;
 uniform vec3 cloudFogColor;
 uniform float cloudFogNear;
 uniform float cloudFogFar;
@@ -300,7 +317,9 @@ void main() {
       // Grazing rays cross more of the sheet, so it thickens toward the horizon.
       float slant = 1.0 / max(0.08, abs(dir.y));
       float alpha = 1.0 - exp(-shaped * cirrusDensity * 6.0 * slant);
-      vec3 lit = mix(cloudZenithColor, cloudSunColor, 0.5) * (0.7 + 0.3 * min(phase, 2.0));
+      vec3 lit =
+        mix(cloudZenithColor * cloudAmbientStrength, cloudSunColor * cloudSunStrength, 0.65) *
+        (0.7 + 0.3 * min(phase, 2.0));
       cirrus = vec4(mix(lit, cloudFogColor, fogAmount(t)), alpha);
       cirrusT = t;
     }
@@ -340,8 +359,9 @@ void main() {
         // Powder: multiple scattering darkens the lit side of a dense edge.
         float powder = 1.0 - exp(-sigma * stepM * 2.0);
         float hFrac = clamp((p.y - cloudBaseM) / max(1.0, cloudTopM - cloudBaseM), 0.0, 1.0);
-        vec3 ambient = mix(cloudGroundColor, cloudZenithColor, hFrac);
-        vec3 lum = cloudSunColor * lightTransmittance(p) * phase * powder + ambient;
+        vec3 ambient = mix(cloudGroundColor, cloudZenithColor, hFrac) * cloudAmbientStrength;
+        vec3 lum =
+          cloudSunColor * cloudSunStrength * lightTransmittance(p) * phase * powder + ambient;
         // Distant clouds sit in the same haze as the terrain behind them.
         lum = mix(lum, cloudFogColor, fogAmount(t));
         scatter += transmittance * (1.0 - sampleT) * lum;
@@ -460,6 +480,8 @@ export class CloudPass extends Pass {
         cloudSunColor: { value: new Color(1, 1, 1) },
         cloudZenithColor: { value: new Color(0.3, 0.45, 0.7) },
         cloudGroundColor: { value: new Color(0.25, 0.25, 0.24) },
+        cloudSunStrength: { value: 1 },
+        cloudAmbientStrength: { value: 1 },
         cloudFogColor: { value: new Color(0x91b1c8) },
         cloudFogNear: { value: 80000 },
         cloudFogFar: { value: 180000 },
@@ -553,6 +575,9 @@ export class CloudPass extends Pass {
     (u.cloudSunColor!.value as Color).copy(state.sunColor);
     (u.cloudZenithColor!.value as Color).copy(state.zenithColor);
     (u.cloudGroundColor!.value as Color).copy(state.groundColor);
+    const lighting = cloudLightingFactors(state.sunIntensity, state.ambientIntensity);
+    u.cloudSunStrength!.value = lighting.direct;
+    u.cloudAmbientStrength!.value = lighting.ambient;
     (u.cloudFogColor!.value as Color).copy(state.fogColor);
     u.cloudFogNear!.value = state.fogNear;
     u.cloudFogFar!.value = state.fogFar;

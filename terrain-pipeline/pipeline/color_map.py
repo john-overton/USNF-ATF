@@ -38,11 +38,62 @@ def palette_rgb(weights, colors):
     return np.rint(weights @ palette).clip(0,255).astype('uint8')
 
 
-def bake_color_maps(manifest_path, size=1024, palette_path=None, weights_path=None):
+def validate_snow(rules):
+    if (not isinstance(rules, dict) or set(rules) != {'color', 'seasons', 'permanent'}
+            or not isinstance(rules['seasons'], dict) or set(rules['seasons']) != set(PALETTES)
+            or not isinstance(rules['color'], str)):
+        raise ValueError('snow rules require color, all four seasons and permanent band')
+    palette_rgb(np.ones((1,4))/4, [rules['color']]*4)
+    for band in [rules['permanent'], *rules['seasons'].values()]:
+        if (not isinstance(band, list) or len(band) != 2
+                or any(type(v) not in (int, float) or not np.isfinite(v) for v in band)
+                or not -500 <= band[0] < band[1] <= 10000):
+            raise ValueError('snow bands require finite increasing elevations in meters (-500..10000)')
+
+
+def snow_amount(elevation, season, rules):
+    def ramp(band):
+        t = np.clip((elevation-band[0])/(band[1]-band[0]), 0, 1)
+        return t*t*(3-2*t)
+    return np.maximum(ramp(rules['seasons'][season]), ramp(rules['permanent']))
+
+
+def elevation_grid(m, root, w, h):
+    """Bilinear DEM height at atlas texel centers; no invented missing heights."""
+    x = (np.arange(w)+.5)*m['extents']['width']/w
+    z = (np.arange(h)+.5)*m['extents']['height']/h
+    result = np.full((h,w), np.nan, dtype='float32')
+    sources = []
+    for c in m['chunks']:
+        if c['lod'] != 1: continue
+        # Contract v1: base tiles contain 256 nodes at 100 m spacing.
+        cols = np.flatnonzero((x >= c['originX']) & (x < c['originX']+25500))
+        rows = np.flatnonzero((z >= c['originZ']) & (z < c['originZ']+25500))
+        if not len(cols) or not len(rows): continue
+        path = root/c['path']
+        if not path.resolve().is_relative_to(root.resolve()): raise ValueError('height path escapes theater')
+        packed = path.read_bytes()
+        if len(packed) != c['byteLength'] or hashlib.sha256(packed).hexdigest() != c['sha256']:
+            raise ValueError('height checksum/length mismatch')
+        a = np.frombuffer(gzip.decompress(packed), dtype='<u2').reshape(256,256)*c['scale']+c['offset']
+        sx = (x[cols]-c['originX'])/100; sz = (z[rows]-c['originZ'])/100
+        ix = sx.astype(int); iz = sz.astype(int)
+        fx = sx-ix; fz = (sz-iz)[:,None]
+        lower = a[iz[:,None],ix]*(1-fx)+a[iz[:,None],ix+1]*fx
+        upper = a[iz[:,None]+1,ix]*(1-fx)+a[iz[:,None]+1,ix+1]*fx
+        result[np.ix_(rows,cols)] = lower*(1-fz)+upper*fz
+        sources.append({k:c[k] for k in ('path','sha256','originX','originZ','scale','offset')})
+    if not np.isfinite(result).all(): raise ValueError('snow bake has missing/nonfinite DEM coverage')
+    return result, hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest()
+
+
+def bake_color_maps(manifest_path, size=1024, palette_path=None, weights_path=None, snow_path=None):
     if not 2 <= size <= 2048:
         raise ValueError('color map size must be 2..2048')
     m = json.loads(manifest_path.read_text()); e = m['extents']; image = m['imagery']
     root = manifest_path.parent
+    snow = json.loads(snow_path.read_text()) if snow_path else None
+    if snow is not None: validate_snow(snow)
     palettes = json.loads(palette_path.read_text()) if palette_path else PALETTES
     if set(palettes) != set(PALETTES):
         raise ValueError('palettes must contain summer, spring, autumn and winter')
@@ -86,6 +137,7 @@ def bake_color_maps(manifest_path, size=1024, palette_path=None, weights_path=No
         samples[~valid]=samples[nearest[0][~valid],nearest[1][~valid]]
         weights=appearance_weights(samples)
         quantized=np.rint(weights*255).astype('uint8')
+    heights, dem_hash = elevation_grid(m, root, w, h) if snow is not None else (None, None)
     np.savez_compressed(output/'weights.npz',weights=quantized,classes=np.array(CLASSES),
                         extents=json.dumps(e),projection=json.dumps(m['projection']))
     # Bake from the saved quantized weights, so palette-only rebakes are identical.
@@ -93,6 +145,10 @@ def bake_color_maps(manifest_path, size=1024, palette_path=None, weights_path=No
     maps={}
     for season,colors in palettes.items():
         rgba=np.full((h,w,4),255,dtype='uint8');rgba[:,:,:3]=palette_rgb(weights,colors)
+        if snow is not None:
+            amount = snow_amount(heights, season, snow)[...,None]
+            snow_rgb = palette_rgb(np.ones((1,4))/4, [snow['color']]*4)[0]
+            rgba[:,:,:3] = np.rint(rgba[:,:,:3]*(1-amount)+snow_rgb*amount).astype('uint8')
         data=gzip.compress(rgba.tobytes(),compresslevel=9,mtime=0)
         path=f'color-maps/{season}.rgba.gz'; (root/path).write_bytes(data)
         maps[season]=dict(path=path,width=w,height=h,byteLength=len(data),sha256=hashlib.sha256(data).hexdigest(),
@@ -101,6 +157,9 @@ def bake_color_maps(manifest_path, size=1024, palette_path=None, weights_path=No
     record=dict(method='RGB appearance weights v1; not land-cover classification',classes=CLASSES,
                 inputSha256=source_hash,weightsSha256=hashlib.sha256((output/'weights.npz').read_bytes()).hexdigest(),
                 metersPerPixel=[e['width']/w,e['height']/h],palettes=palettes)
+    if snow is not None:
+        record['snow'] = dict(rules=snow, demSha256=dem_hash,
+                              method='DEM texel-center smoothstep v1; artistic snow, not observed coverage')
     (output/'provenance.json').write_text(json.dumps(record,indent=2)+'\n')
     m['colorMaps']=maps
     manifest_path.write_text(json.dumps(m,separators=(',',':'))+'\n')

@@ -13,6 +13,7 @@ export interface DesktopOptions {
   aircraftDirectory?: string;
   audio?: string;
   music?: string;
+  bakedMusic?: string;
   combatAudio?: string;
   environmentAudio?: string;
   flightProfile?: string;
@@ -34,10 +35,12 @@ export interface DesktopOptions {
 
 export async function openDesktop(options: DesktopOptions) {
   const id = aircraftId(options.query?.aircraft ?? null);
+  const terrainId = (await Bun.file(path.join(options.terrain, 'manifest.json')).json()).id;
+  if (!/^[a-zA-Z0-9_-]+$/.test(terrainId)) throw new Error('Unsafe terrain id');
   const out = path.resolve(options.out);
   const profile = await mkdtemp(path.join(tmpdir(), 'usnf-flight-smoke-'));
   await mkdir(out, { recursive: true });
-  await cp(path.resolve(options.terrain), path.join(profile, 'data/terrains/ukraine'), {
+  await cp(path.resolve(options.terrain), path.join(profile, `data/terrains/${terrainId}`), {
     recursive: true,
   });
   if (options.aircraftDirectory)
@@ -61,6 +64,11 @@ export async function openDesktop(options: DesktopOptions) {
   if (options.music) {
     await mkdir(path.join(profile, 'data/audio'), { recursive: true });
     await cp(path.resolve(options.music), path.join(profile, 'data/audio/flight-music.json'));
+  }
+  if (options.bakedMusic) {
+    await mkdir(path.join(profile, 'data/audio'), { recursive: true });
+    await cp(path.join(options.bakedMusic, 'flight-music-baked.json'), path.join(profile, 'data/audio/flight-music-baked.json'));
+    await cp(path.join(options.bakedMusic, 'music-baked'), path.join(profile, 'data/audio/music-baked'), { recursive: true });
   }
   if (options.menu) {
     await cp(path.resolve(options.menu), path.join(profile, 'data/menu'), { recursive: true });
@@ -237,7 +245,7 @@ export async function openDesktop(options: DesktopOptions) {
     for (const [key, value] of Object.entries({
       ...(options.bareLaunch
         ? {}
-        : { view: 'terrain', root: 'appData', manifest: 'terrains/ukraine/manifest.json' }),
+        : { view: 'terrain', root: 'appData', theater: terrainId, manifest: `terrains/${terrainId}/manifest.json` }),
       ...options.query,
     }))
       url.searchParams.set(key, value);

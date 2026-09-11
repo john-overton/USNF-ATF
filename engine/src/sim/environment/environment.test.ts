@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   dayOfYearFor,
   daysSinceJ2000,
+  monthDayFor,
   monthOfYear,
   moonPosition,
   seasonFor,
@@ -59,6 +60,7 @@ test('J2000 epoch and calendar helpers agree with the Julian day standard', () =
   expect(monthOfYear(dayOfYearFor(7, 15))).toBe(7);
   expect(dayOfYearFor(1, 1)).toBe(1);
   expect(dayOfYearFor(12, 31)).toBe(366);
+  expect(monthDayFor(dayOfYearFor(9, 11))).toEqual({ month: 9, day: 11 });
 });
 
 test('moon position is finite, unit length and phased between new and full', () => {
@@ -69,6 +71,7 @@ test('moon position is finite, unit length and phased between new and full', () 
       expect(Math.hypot(moon.direction.x, moon.direction.y, moon.direction.z)).toBeCloseTo(1, 12);
       expect(moon.phase).toBeGreaterThanOrEqual(0);
       expect(moon.phase).toBeLessThanOrEqual(1);
+      expect(typeof moon.waxing).toBe('boolean');
     }
   // A synodic month of phases must span nearly new to nearly full.
   const phases = Array.from(

@@ -1,13 +1,6 @@
 import type { GroundSampler, PracticeStrip } from './GroundSampler';
+import { runtimeTheater } from '../terrain/world-orientation';
 
-/** Original fictional practice deck, not a reconstructed retail or real airfield. */
-export const UKRAINE_PRACTICE: PracticeStrip = {
-  x: 289000,
-  z: 392000,
-  width: 100,
-  length: 2800,
-  elevation: 111,
-};
 export async function validatePractice(ground: GroundSampler, strip: PracticeStrip): Promise<void> {
   const points: [number, number][] = [];
   for (let dz = -strip.length / 2; dz <= strip.length / 2; dz += 50)
@@ -27,11 +20,9 @@ export async function validatePractice(ground: GroundSampler, strip: PracticeStr
   }
 }
 export async function preparePractice(ground: GroundSampler): Promise<PracticeStrip> {
-  if (ground.manifest.id !== 'ukraine')
-    throw new Error(
-      'Practice flight currently requires the validated Ukraine theater; this dataset has no practice strip',
-    );
-  const strip = { ...UKRAINE_PRACTICE };
+  const theater = runtimeTheater(ground.manifest);
+  if (!theater) throw new Error('This terrain has no configured practice strip');
+  const strip = { ...theater.strip };
   await validatePractice(ground, strip);
   ground.strip = strip;
   return strip;

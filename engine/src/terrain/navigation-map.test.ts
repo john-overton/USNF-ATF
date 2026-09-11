@@ -4,11 +4,17 @@ import {
   elevationColor,
   mapPixelWorld,
   navigationViewport,
+  initialNavigationZoom,
   rasterizeWater,
   worldToMap,
 } from './navigation-map';
 
 const grid = { width: 10, height: 10, extents: { width: 1000, height: 1000 } };
+test('initial map range caps large theaters at 400 miles and fits smaller theaters', () => {
+  const region = { ...grid, extents: { width: 863257.4857, height: 344929 } };
+  expect(region.extents.width / initialNavigationZoom(region)).toBeCloseTo(400 * 1609.344);
+  expect(initialNavigationZoom(grid)).toBe(1);
+});
 test('north-up map coordinate round trips use pixel centres, independently of floating origin', () => {
   // The map is north up and east right, and east is -X, so theater x runs right to left.
   expect(worldToMap(grid, 0, 1000)).toEqual({ x: 10, y: 0 });
@@ -76,6 +82,22 @@ test('fixed elevation colors are consistent across lowland and mountain regions'
   expect(elevationColor(2500)).toEqual([102, 69, 46]);
   expect(elevationColor(3500)).toEqual([238, 238, 224]);
   expect(elevationColor(3000)).toEqual([170, 154, 135]);
+});
+test('Salt Lake theater keeps its authored airport, salt-flat and Denver teleport targets', () => {
+  const saltLakeGrid = { width: 10, height: 10, extents: { width: 900000, height: 400000 } };
+  const result = colorNavigationMap(
+    saltLakeGrid,
+    new Float32Array(100).fill(1200),
+    new Uint8Array(100),
+    new Uint8Array(100),
+    'salt-lake',
+  );
+  expect(result.waypoints.map((point) => point.name)).toEqual([
+    'Salt Lake Intl',
+    'Bonneville Salt Flats',
+    'Denver',
+  ]);
+  expect(result.waypoints.map((point) => point.id)).toEqual([1, 2, 3]);
 });
 test('zoom tracks the aircraft, clamps every edge, and preserves a meaningful NM distance scale', () => {
   const map = { width: 512, height: 256, extents: { width: 185200, height: 92600 } };

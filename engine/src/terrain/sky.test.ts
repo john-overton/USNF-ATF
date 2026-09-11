@@ -6,7 +6,14 @@ import {
   skyHighlightRolloff,
   SKY_HIGHLIGHT_KNEE,
 } from '../render/sky-model';
-import { SKY_FRAGMENT } from './sky';
+import {
+  SKY_FRAGMENT,
+  solarKeyIntensity,
+  SKY_DISC_SCALE,
+  SUN_DISC_RADIUS,
+  MOON_DISC_RADIUS,
+  MOON_HALO_WIDTH,
+} from './sky';
 
 /**
  * The sky shader looks the table up itself, so the uv math in sky.ts's FRAGMENT
@@ -111,4 +118,34 @@ test('the highlight transfer is identity below the knee and compresses without c
   const rolled = skyHighlightRolloff([0.994, 1.058, 1.238]);
   expect(rolled[2] - rolled[0]).toBeGreaterThan(0.05);
   expect(skyHighlightRolloff([40, 40, 40])[0]).toBeLessThanOrEqual(1);
+});
+
+test('a low sun remains a useful directional key so facing terrain catches sunrise light', () => {
+  const low = solarKeyIntensity((2 * Math.PI) / 180);
+  expect(low).toBeGreaterThan(1);
+  expect(low).toBeLessThan(solarKeyIntensity((67 * Math.PI) / 180));
+  expect(solarKeyIntensity(0)).toBe(0);
+});
+
+test('the moon uses the bundled texture, phase terminator and a restrained halo', () => {
+  expect(SKY_FRAGMENT).toContain('uniform sampler2D moonTexture;');
+  expect(SKY_FRAGMENT).toContain('texture2D(moonTexture, clamp(moonUv, 0.0, 1.0))');
+  expect(SKY_FRAGMENT).toContain('float moonHalo');
+  expect(SKY_FRAGMENT).toContain('moonSide * p.x - curve');
+  expect(SKY_FRAGMENT).toContain('moonVisibility(p)');
+  expect(SKY_FRAGMENT).toContain('moonVisibility(moonPlane)');
+});
+
+test('visual discs are 5x with independent sun feather and soft moon halo', () => {
+  expect(SKY_DISC_SCALE).toBe(5);
+  expect(SUN_DISC_RADIUS / 0.00465).toBeCloseTo(5);
+  expect(MOON_DISC_RADIUS / 0.00452).toBeCloseTo(5);
+  expect(SKY_FRAGMENT).toContain(`const float SUN_RADIUS = ${SUN_DISC_RADIUS.toFixed(8)};`);
+  expect(SKY_FRAGMENT).toContain(`const float MOON_RADIUS = ${MOON_DISC_RADIUS.toFixed(8)};`);
+  expect(SKY_FRAGMENT).toContain('SUN_RADIUS + 0.0016275');
+  expect(SKY_FRAGMENT).toContain(
+    `exp(-d2 / (${MOON_HALO_WIDTH.toFixed(5)} * ${MOON_HALO_WIDTH.toFixed(5)}))`,
+  );
+  expect(SKY_FRAGMENT).toContain('/ sin(MOON_RADIUS)');
+  expect(SKY_FRAGMENT).not.toContain('MOON_RADIUS * 15.0');
 });

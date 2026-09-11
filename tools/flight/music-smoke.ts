@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { openDesktop } from './desktop';
 const data = process.argv[2];
+const bakedMusic = process.argv[3];
 if (!data) throw new Error('Pass local app data directory');
 const s=await openDesktop({binary:'shell/node_modules/electron/dist/electron',app:'shell',terrain:'extracted/terrain/ukraine',
   aircraftDirectory:path.join(data,'aircraft'), music:path.join(data,'audio/flight-music.json'),
-  interactiveTest:true,out:'extracted/music-smoke',
+  bakedMusic,
+  interactiveTest:true,out:bakedMusic?'extracted/music-baked-smoke':'extracted/music-smoke',
   query:{mode:'quick-fight',flightStart:'runway',opponents:'1',wind:'calm',clouds:'off',time:'12'},
   initialization:`
     window.__audioProbes=[];
@@ -25,6 +27,7 @@ try {
   await tap('KeyT'); // Engine off, no guns or combat events during protected departure.
   await s.poll(async()=>{const d=await read();return d.music.played>0&&d.systems.engineSpool<0.01?true:undefined},'music alone');
   assert.equal((await read()).music.source,'retail-xmi');
+  if (bakedMusic) await s.poll(async()=> (await read()).music.rendering==='FluidSynth user-bank baked audio'?true:undefined,'baked playback');
   evidence.playing=await read();
   evidence.rms=await s.poll(async()=>{const r=await rms();return r>0.00001?r:undefined},'audible music signal');
   await tap('KeyN');
@@ -33,6 +36,7 @@ try {
   evidence.disabled=await read();
   await tap('KeyN');
   await s.poll(async()=>(await read()).music.enabled?true:undefined,'music on');
+  if (bakedMusic) await s.poll(async()=> (await read()).music.rendering==='FluidSynth user-bank baked audio'?true:undefined,'baked resume after N');
   await tap('Escape');
   await s.poll(async()=>await s.evaluate('!!document.querySelector("[data-menu-screen=paused]")')?true:undefined,'pause');
   const frozen=(await read()).music.playheadSeconds;await Bun.sleep(300);
@@ -44,6 +48,11 @@ try {
   await tap('KeyM');await tap('KeyG');
   const defeat=await s.poll(async()=>{const d=await read();return d.music.situation==='defeat'?d:undefined},'ground crash music transition');
   evidence.defeat=defeat;
+  if (bakedMusic) {
+    await s.poll(async()=> (await read()).music.rendering==='FluidSynth user-bank baked audio'?true:undefined,'baked defeat');
+    assert.equal((await read()).music.bakedError, undefined);
+    evidence.bakedDefeat=await read();
+  }
   assert.ok(['AIR10.XMI','AIR19.XMI'].includes(defeat.music.track));
   assert.equal(defeat.music.selection, 'recovered MUS VM; authored situation adapter/RNG');
   assert.equal(defeat.music.error, undefined);

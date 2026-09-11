@@ -1,5 +1,14 @@
 # Build Plan
 
+**2026-09-10 Escape/mixer:** authored classic-style pause bar, retained-session
+settings and persistent six-group mixer are implemented ahead of phase9 settings
+polish. No original bar artwork/geometry recovery claimed. [Evidence](baselines/escape-mixer.md).
+
+**2026-09-10 music resumed:** user approved FluidR3 auditions. All recovered XMI
+files baked; optional local WAV playback now serves matching USNF score tracks.
+In-app conversion/private converter packaging still belongs to phase5; no new
+retail bytes or bank bundled. [Evidence](baselines/fluidr3-audition.md).
+
 **2026-09-10 gun follow-up:** selectable retail-derived projectile behavior and
 original local yellow bullet geometry; shared aircraft-history pipper in both
 modes, with programmed velocity and authored drop correction. See

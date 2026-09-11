@@ -71,8 +71,10 @@ bytes may be committed or bundled.
 
 Prefer ATF-GOLD art, but compare actual variants rather than assuming every newer
 asset is better. Model, PT, cockpit and audio may legitimately come from different
-games; record the origin and reason separately for each. Keep the established
-USNF97 F-14 baseline unless changing it is explicitly intended.
+games; record the origin and reason separately for each. The reviewed F-14 now
+uses ATF-GOLD F14.SH/PALETTE.PAL with explicit `--rig-variant F14_ATF`; its
+USNF97 F14.PT flight/audio profile remains the comparison source. Do not apply
+USNF wing pivots, gear words or exhaust-subtype assumptions to the ATF exterior.
 
 Check the PT's aircraft name, shape reference, sound references and game variant.
 Filenames need not match the user-facing aircraft: ATF-GOLD's X-31 uses `F31.SH`
@@ -171,6 +173,124 @@ thrust/drag and loading callers, coefficient meanings and exact x86-oracle
 commands. Keep new ports within that verified scope; do not copy the F-14's
 native metadata into another aircraft to enable the selector.
 
+## Texture pages, decals and surface facing (2026-09-11)
+
+Resolve the active texture binding before applying UVs. `E2` names the aircraft
+atlas; `E0` selects a separate mission/player decal by index. It does **not**
+reuse the preceding atlas. Without a selected livery, native `BrushFromIndex`
+uses all-transparent `BLANK.PIC`; our default export omits those invisible faces.
+Squadron/nose customization remains unselected until a livery input is supported.
+Do not substitute the full skin page, or invent a crop from unrelated atlas art.
+`D0` draws condensation streamers, not textures.
+
+Source V is bottom-origin. Native `G_TextureFlip` applies `height-1-V`; the
+export addresses texel centers as `(U+0.5)/width, (height-0.5-V)/height`, with
+`DataTexture.flipY=false`. Retain per-face UV order when reversing winding.
+Mipmaps, linear filtering and anisotropy reduce distant oblique shimmer; this
+filter choice is a modern presentation setting, not the native rasterizer.
+
+Keyed texture drawing and a transparent airframe are different operations:
+
+| Face type | Correct composition |
+|---|---|
+| Texture-only `4C/5C/6C/7C` | Index 255 is transparent; other palette indices remain opaque. |
+| `EE` | Opaque base from captured `F6` per-vertex palette colors, then keyed texture paint. |
+| `ED/CD` | Opaque base from the header palette color, then keyed texture paint. |
+
+The native subtype bit `0x08` keys index 255 in the texture pass; bit `0x80`
+preserves the base fill selected by low bits. Export base colors with each face
+and interpolate them alongside UVs when partitioning. The renderer combines base
+and paint in one material draw; two coplanar meshes would add depth competition.
+Preserve this shader when cloning damage/debris materials and composing cloud
+shadows. Do not globally discard white RGB or make keyed skin transparent.
+
+Use the stored native face normal (X/up/forward) to orient exported triangles,
+then cull their backs. Drawing both sides exposes opposite-facing skin/decals
+that occupy the same plane. Texture-only overlays use a small depth bias while
+retaining depth tests; do not disable depth testing to hide clipping.
+
+### Textured landing gear
+
+The reviewed gear-state projections select ATF F14 word `0x802c` (USNF F14
+uses `0x570c`), A4 `0x6d36`, or
+F31 `0x65b2` as 1, leaving other words neutral. Compare with the neutral model
+by source face address and coordinates, retain all common skin, and group only
+the gear-state differences at the inspected native mounts. Preserve original
+UVs and keyed wheel/strut artwork. These are retail flat textured panels and
+doors, not newly modeled volumetric wheels. Rig functions must preserve gear
+metadata and must not classify F14 gear `part-*` branches as wings.
+
+`gearPose` marks deployed/stowed groups; imported gear replaces the procedural
+fallback. Grouped rotation and the existing three-second actuator remain authored.
+Fit `gearHeightM` to the visible opaque texel footprint, excluding transparent
+billboard borders. Current level-pose support heights are ATF F14 2.557155 m (older USNF 1.877799 m),
+A4 2.600300 m, X31 1.826424 m at their reviewed scales. Keep scale calibration
+based on neutral exterior bounds. Nose/main bottoms differ slightly in these
+source models; simultaneous wheel contact would need a separate ground-pitch
+model, which is not part of this texture pass.
+
+Rebuild the runtime **and** regenerate model JSONs for these material changes:
+
+```sh
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/port-aircraft.ts --aircraft a4e --install "$HOME/.config/USNF-ATF/data"
+# Repeat f14 and x31, then fully restart the application.
+bun tools/flight/aircraft-texture-smoke.ts "$HOME/.config/USNF-ATF/data/aircraft" extracted/aircraft-textures/views
+bun tools/flight/aircraft-texture-smoke.ts "$HOME/.config/USNF-ATF/data/aircraft" extracted/aircraft-textures/ground-views runway
+```
+
+Inspect both sides, upper/lower wings, fins and gear up/down. The script checks
+actual G-key actuator endpoints in the flight renderer and captures five close-up
+views. See [texture evidence](baselines/aircraft-textures.md) and
+[native material findings](formats/sh.md).
+
+### Native speedbrakes and afterburner mapping (2026-09-11 correction)
+
+The earlier A-4 brake rig removed fixed fuselage skin too far forward, leaving a
+hole when deployed. Recover the selected native state **before** authoring cuts:
+
+| Exterior | Brake word = 1 | Burner word = 1 | Added brake / flame faces |
+|---|---|---|---|
+| ATF A4 | `0x6d30` | None | 12 / 0 |
+| ATF F14 | `0x8026` | `0x8020` | 4 / 8 |
+| ATF F31 | `0x65a6` | `0x65a0` | 4 / 4 |
+
+Compare `(source address, vertices)` against the unpartitioned neutral projection.
+These branches add faces and remove **no** neutral fuselage faces. Preserve the
+fixed backing. Keep A4 panel pairs separate from their recessed strips/braces.
+`sh_devices.py` appends the reviewed state deltas after gear extraction and before
+surface partitioning; rig functions must pass all device groups through intact.
+Never compare against already-clipped surface triangles, which would make common
+skin look like newly added device geometry.
+
+Brake vertices are already fully open. `nativeBrakeAngle` records a signed measured
+opening angle; runtime retracts by `-angle * (1 - fraction)` about the supplied
+axis and hides panels at zero to avoid closed-pose coplanar jitter. A4 and X31
+use fitted yaw rotations. A4 support geometry is visibility-only. ATF F14's brake
+attachment edges are not collinear, so its exact native raised pose is selected
+by visibility rather than imposing an unsupported single hinge. Continuous native
+animation/timing is not recovered.
+
+Afterburner branches supply crossed textured flame faces and original atlas UVs.
+Separate these as `afterburner-*`, preserve nozzle texture in every engine state,
+and use emissive rendering while the engine/burner state is active. Do not replace
+nozzle maps with flat gray or retain procedural cones when native flames exist.
+Exclude flames from airframe length calibration and preserve neutral nozzle paint:
+ATF F14 uses subtype `0x74`, F31 `0x64`, while the older USNF F14 uses `0x44`.
+Texture-only keyed overlays also include ATF subtypes `0x5c/0x7c`; opcode matching
+must not assume only USNF `0x4c/0x6c` occur.
+
+Rebuild, re-port all three aircraft, then run:
+
+```sh
+bun tools/flight/aircraft-devices-smoke.ts "$HOME/.config/USNF-ATF/data/aircraft" extracted/aircraft-devices/views
+```
+
+Inspect closed/half/open brakes, intact backing, rear paint, both engine states,
+and burner alignment from both sides and below. The script exercises B, 6 and T
+in live flight and records isolated views through the production renderer. See
+[device acceptance](baselines/aircraft-devices.md) for results and limitations.
+
 ## Moving surfaces, gear, hook and engine presentation
 
 Map each control to an actual visible surface: elevator/taileron, aileron/elevon,
@@ -189,6 +309,59 @@ Author hinges in the correct coordinate space. Export pivots in metres;
 on the intended hinge, survives scale conversion, and moves both textured and
 colored parts together. Preserve nested hierarchy for swept wings and attached
 flaps. Do not name a fixed X-31 wing `wing-left` if that triggers F-14 sweep.
+
+### Recover the complete wing before fitting hinges (corrected 2026-09-11)
+
+**Correction:** the earlier explanation that the A-4 had a stepped inboard
+trailing edge was wrong. The rectangular gaps were omitted neutral flap panels.
+Moving a cut on the incomplete fixed wing could not fix that silhouette.
+
+Before authoring any surface, compare the neutral projection with a reference
+and inspect SH calls/state branches for missing panels. The original file can
+store fixed wing and moving surfaces in separate out-of-line vertex tables.
+`0x12` is a signed relative subroutine call: target = opcode address + 4 + rel16;
+return resumes immediately after the four-byte call. The native handler saves
+only the instruction pointer; shared vertex and texture writes persist. Our
+previous exporter skipped these calls, omitting flap faces on **all three**
+reviewed aircraft. See [decoder evidence](formats/sh.md#2026-09-11-relative-shape-calls-restore-missing-flap-panels).
+
+The corrected recipes reuse the recovered neutral panels and their original UVs:
+
+| Aircraft | Moving region and hinge |
+|---|---|
+| A-4E | Complete inboard upper/lower flap panels fill the former rectangular gaps. Hinge sits on their forward upper edge, adjoining fixed wing; outboard ailerons remain separate. |
+| F-14 (ATF) | Whole native aft-strip panels follow the swept seam and their respective textured wing anchor. The older USNF variant has different inner/outer panels and its own rig. |
+| X-31 | Recovered inboard panels plus existing outboard tabs. Separate inner/outer hinges follow the different spanwise heights; both retain the elevon pitch/roll/flap mix. |
+
+Source coordinates are X/right, Y/forward, Z/up: **aft is decreasing source Y**,
+while aft is increasing renderer Z. For two source hinge endpoints `a` and `b`,
+use the same centered/metre conversion as the mesh for the pivot; the renderer
+axis direction is `(b.x-a.x, b.z-a.z, -(b.y-a.y))`. Choose endpoint ordering with
+positive renderer X so positive flap rotation lowers the trailing edge on both
+sides. Keep upper/lower faces on the same hinge and preserve material/UV identity.
+Do not mirror panels or translate them by guessed flap widths to hide a gap.
+
+Test **completeness before conservation**: known neutral panel subroutines must
+appear in the projected model, then their full area must belong to moving groups.
+Conserving an incomplete projection simply preserves its holes. Check neutral
+silhouette and full deployment from top, side and rear-oblique views. Angle-only
+tests do not establish placement. The restored geometry/call semantics are
+retail-derived; runtime deflection angles, schedules and control mixing remain
+authored approximations.
+
+Regenerate installed JSON after exporter changes. On Linux:
+
+```sh
+bun tools/flight/port-aircraft.ts --aircraft a4e --install "$HOME/.config/USNF-ATF/data"
+# Repeat for f14 and x31.
+python3 -m unittest discover -s tools/retail/tests -p 'test_sh*.py'
+bun tools/flight/flap-placement-smoke.ts "$HOME/.config/USNF-ATF/data/aircraft" extracted/flap-recovery/views
+```
+
+The inspection script uses development Electron bundles and the local
+`extracted/terrain/ukraine` fixture. Rebuild the shell if runtime code changed.
+It bundles the current model inspector and loads the specified JSONs through
+`RetailAircraft`. Restart the app or start a new flight to reload installed models.
 
 Check deflection signs with visible trailing-edge motion: conventional elevator
 trailing edge up for pitch-up, canard trailing edge down for pitch-up, opposing

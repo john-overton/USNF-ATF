@@ -1,5 +1,37 @@
 # Development handoff — 2026-09-10
 
+## Latest: classic-style Escape bar and persistent volume mixer
+
+Escape now offers resume, live settings, mixer, existing mission brief/debrief,
+confirmed main-menu exit and quit. Session stays paused/retained. Six real mixer
+groups save through the platform boundary; existing mute/envelopes and default
+levels preserved. Review-fixed paused music checkbox diagnostics; no flight physics
+changes. 438 Bun pass/3 existing skips, 25 targeted music Python pass. Fresh build
+`index-r-CIhpVI.js`; [scope and desktop checks](baselines/escape-mixer.md).
+Audio baking below remains installed. No new third-party package removal, commit
+or push. Classic-style UI is authored, not recovered retail bar artwork.
+
+## Latest: approved FluidR3 bake and flight playback
+
+All 52 USNF and 102 ATF XMI files rendered with the user-approved audition process.
+Optional hash-verified baked playback now replaces oscillators for matching local
+tracks, retaining existing MUS sequencing and fallback. USNF renders installed into
+local appData; all 41 active library tracks covered. ATF renders remain staged, not
+invented score dispatch. 433 Bun pass/3 existing skips, 25 targeted Python pass;
+baked and legacy live audio checks pass. See [full evidence](baselines/fluidr3-audition.md).
+In-app converter packaging remains future work; runtime does not need FluidSynth
+or the bank after conversion. Do not uninstall the user's system tools. No commit
+or push performed for this audio follow-up; unrelated Docs/synths.md untouched.
+
+## Latest: FluidSynth installed; first instrument auditions rendered
+
+User resumed music work and installed FluidSynth 2.6.0 / FluidR3. Existing offline
+exporter successfully rendered AIR02/AIR04/AIR01 with original program assignments;
+22 targeted music tests pass. Local WAVs/provenance are ignored. Listening acceptance
+and arrangement choices pending; live engine remains oscillators. This supersedes
+earlier missing-FluidSynth/selected-bank and music-deferred status, not the unknown
+native-bank boundary. See [listening baseline](baselines/fluidr3-audition.md).
+
 ## Latest: selectable retail-derived guns and shared trailing pipper
 
 Implemented against main `1805187300a067bfc2130e0a7c48f0c7034693d8`.

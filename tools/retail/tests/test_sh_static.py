@@ -46,13 +46,18 @@ class CutoutTest(unittest.TestCase):
         rig = fixed_wing_surfaces({'polygons': [face], 'parts': {}}, 'A4')
         self.assertTrue(all(not p['part'].startswith('flap') for p in rig['polygons']))
 
-    def test_x31_inboard_trailing_surface_moves_with_elevon(self):
+    def test_x31_inboard_wing_stays_fixed_ahead_of_tab_seam(self):
         face = {'vertices': [(8, -10, -5), (18, -10, -5), (18, -17, -5), (8, -17, -5)],
                 'uvs': None, 'part': 'body', 'color': 12}
         rig = fixed_wing_surfaces({'polygons': [face], 'parts': {}}, 'F31')
         moving = [p for p in rig['polygons'] if p['part'].startswith('elevon')]
-        self.assertTrue(moving)
-        self.assertTrue(all(v[1] <= -14 for p in moving for v in p['vertices']))
+        self.assertFalse(moving)
+
+    def test_a4_forward_wing_skin_is_not_part_of_flap(self):
+        face = {'vertices': [(8, -11, -6), (19, -11, -6), (19, -14, -6), (8, -14, -6)],
+                'uvs': None, 'part': 'body', 'color': 12}
+        rig = fixed_wing_surfaces({'polygons': [face], 'parts': {}}, 'A4')
+        self.assertTrue(all(not p['part'].startswith('flap') for p in rig['polygons']))
 
 
 class StaticShapeTest(unittest.TestCase):
@@ -131,7 +136,7 @@ class StaticShapeTest(unittest.TestCase):
                 result = export(source, palette, root / 'mesh.json')
             part = result['parts'][0]
             self.assertEqual(part['name'], 'exhaust-left-textured')
-            self.assertEqual(part['uvs'][:2], [1 / 32, 1 - 2 / 64])
+            self.assertEqual(part['uvs'][:2], [1.5 / 32, (64 - 2.5) / 64])
             self.assertEqual(len(part['texture']['rgba']), 32 * 64 * 4)
 
     def test_surface_split_preserves_area_uv_and_coplanar_ownership(self):
@@ -165,7 +170,7 @@ class StaticShapeTest(unittest.TestCase):
         model = project((Path(REPO) / 'extracted/usnf97/USNF_2.LIB/F14.SH').read_bytes())
         rigged = f14_surfaces(model)
         expected = {'taileron-left', 'taileron-right', 'rudder-left', 'rudder-right',
-                    'flap-left', 'flap-right', 'airbrake-upper', 'airbrake-lower'}
+                    'flap-left-inner', 'flap-left-outer', 'flap-right-inner', 'flap-right-outer', 'airbrake-upper', 'airbrake-lower'}
         self.assertEqual(set(rigged['rig']), expected)
         def area_vector(face):
             v = face['vertices']
@@ -178,7 +183,7 @@ class StaticShapeTest(unittest.TestCase):
             for axis in range(3):
                 self.assertAlmostEqual(sum(area_vector(p)[axis] for p in pieces), area_vector(face)[axis], places=7)
         for side in ('left', 'right'):
-            self.assertEqual(rigged['rig'][f'flap-{side}']['parent'], f'wing-{side}-color')
+            self.assertEqual(rigged['rig'][f'flap-{side}-inner']['parent'], f'wing-{side}-color')
 
     def test_local_fixed_wing_rigs_preserve_neutral_faces_and_uvs(self):
         sources = ['A4', 'F31']
@@ -187,8 +192,8 @@ class StaticShapeTest(unittest.TestCase):
             self.skipTest('local ATF-GOLD A4/F31 shapes unavailable')
         expected = {
             'A4': {'elevator-left', 'elevator-right', 'aileron-left', 'aileron-right',
-                   'flap-left', 'flap-right', 'rudder-center', 'airbrake-left', 'airbrake-right'},
-            'F31': {'canard-left', 'canard-right', 'elevon-left', 'elevon-right', 'rudder-center'},
+                   'flap-left', 'flap-right', 'rudder-center'},
+            'F31': {'canard-left', 'canard-right', 'elevon-left-inner', 'elevon-left-outer', 'elevon-right-inner', 'elevon-right-outer', 'rudder-center'},
         }
         def area_vector(face, field):
             points = face[field]
@@ -225,6 +230,100 @@ class StaticShapeTest(unittest.TestCase):
                 for fn in (min, max):
                     self.assertEqual(fn(v[axis] for p in original['polygons'] for v in p['vertices']),
                                      fn(v[axis] for p in rigged['polygons'] for v in p['vertices']))
+
+    def test_local_neutral_flap_calls_fill_gaps_and_are_rigged(self):
+        # Read actual subroutine faces from local media, never embed assets.
+        cases = [('A4', 'atf-gold/ATF_2.LIB', 'flap-', {0x4fde, 0x5007, 0x51c6, 0x51ef}),
+                 ('F31', 'atf-gold/ATF_2.LIB', 'elevon-', {0x4773, 0x4792, 0x468c, 0x46ab}),
+                 ('F14', 'usnf97/USNF_2.LIB', 'flap-', {0x37b7, 0x37ce, 0x389e, 0x38b5, 0x33cc, 0x33df, 0x34a3, 0x34ba})]
+        for name, directory, prefix, addresses in cases:
+            path = Path(REPO) / 'extracted' / directory / f'{name}.SH'
+            if not path.is_file():
+                self.skipTest(f'local {name} unavailable')
+            source = project(path.read_bytes())
+            recovered = [p for p in source['polygons'] if p['addr'] in addresses]
+            self.assertEqual({p['addr'] for p in recovered}, addresses)
+            rig = f14_surfaces(source) if name == 'F14' else fixed_wing_surfaces(source, name)
+            moving = [p for p in rig['polygons'] if p['part'].startswith(prefix)]
+            self.assertTrue(all(p['part'].startswith(prefix) for p in rig['polygons'] if p['addr'] in addresses))
+            self.assertEqual({p['addr'] for p in moving if p['addr'] in addresses}, addresses)
+            if name in ('A4', 'F14'):
+                self.assertEqual({p['addr'] for p in moving}, addresses)
+            for p in moving:
+                for x, y, z in p['vertices']:
+                    if name == 'A4':
+                        self.assertLessEqual(y, -18 + 1e-8)
+                    elif name == 'F31':
+                        self.assertLessEqual(y, -17 + 1e-8)
+                        self.assertGreaterEqual(y, -21 - 1e-8)
+                    else:
+                        self.assertLessEqual(y + abs(x) * 5 / 28, 3.36)
+            for part, info in rig['rig'].items():
+                if part.startswith(prefix):
+                    self.assertGreater(info['rotationAxis'][0], 0)
+
+    def test_shape_call_uses_end_relative_target_and_returns_to_caller(self):
+        # An out-of-line vertex/polygon subroutine was previously skipped.
+        main = table(TRIANGLE) + bytes([0x12, 0]) + struct.pack('<h', 1) + bytes([0])
+        child = table([(0, 0, 3), (6, 0, 3), (0, 6, 3)], 3) + polygon([3, 4, 5]) + bytes([0x1e])
+        result = project(image(main + child))
+        self.assertEqual(len(result['polygons']), 1)
+        self.assertEqual(result['polygons'][0]['vertices'], [(0, 0, 3), (6, 0, 3), (0, 6, 3)])
+
+    def test_shape_call_keeps_shared_vertex_and_texture_writes(self):
+        face = polygon([0, 1, 2])
+        main = table(TRIANGLE) + bytes([0x12, 0]) + struct.pack('<h', len(face) + 1) + face + bytes([0])
+        updated = [(0, 0, 9), (8, 0, 9), (0, 8, 9)]
+        child = table(updated) + bytes([0xe2, 0]) + b'CHILD.PIC'.ljust(14, bytes([0])) + bytes([0x1e])
+        result = project(image(main + child))
+        self.assertEqual(result['polygons'][0]['vertices'], updated)
+        self.assertEqual(result['polygons'][0]['texture'], 'CHILD.PIC')
+
+    def test_dynamic_decal_binding_does_not_reuse_the_skin_atlas(self):
+        skin = bytes([0xe2, 0]) + b'SKIN.PIC'.ljust(14, bytes([0]))
+        code = table(TRIANGLE) + skin + polygon([0, 1, 2])
+        code += bytes([0xe0, 0, 1, 0]) + polygon([0, 1, 2])
+        code += skin + polygon([0, 1, 2]) + bytes([0])
+        result = project(image(code))
+        self.assertEqual([p['texture'] for p in result['polygons']], ['SKIN.PIC', '@decal-1', 'SKIN.PIC'])
+
+    def test_vertex_palette_records_are_captured_per_emitted_face(self):
+        color = lambda slot, index: bytes([0xf6]) + struct.pack('<H', slot) + bytes([index, 0, 127, 0])
+        code = table(TRIANGLE) + color(0, 144) + color(1, 145) + color(2, 146) + polygon([0, 1, 2])
+        code += color(1, 155) + polygon([0, 1, 2]) + bytes([0])
+        faces = project(image(code))['polygons']
+        self.assertEqual(faces[0]['vertexColors'], [144, 145, 146])
+        self.assertEqual(faces[1]['vertexColors'], [144, 155, 146])
+
+    def test_export_composes_keyed_skin_over_vertex_palette_and_omits_blank_decals(self):
+        face = {'vertices': [(0, 0, 0), (2, 0, 0), (0, 2, 0)], 'uvs': [(0, 0), (1, 0), (0, 0)],
+                'part': 'body', 'texture': 'TEST.PIC', 'color': 7, 'subtype': 0xee,
+                'normal': (0, -32767, 0), 'vertexColors': [1, 2, 3], 'addr': 1}
+        model = {'polygons': [face, {**face, 'texture': '@decal-1', 'addr': 2}],
+                 'parts': {}, 'instructions': 1}
+        palette = [(i, i, i) for i in range(256)]
+        pic = SimpleNamespace(width=2, height=1, pixels=bytes([255, 4]), palette=None)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'SYNTH.SH').write_bytes(b'synthetic')
+            (root / 'PALETTE.PAL').write_bytes(bytes(768))
+            (root / 'TEST.PIC').write_bytes(b'synthetic')
+            with patch('retail.sh_static.project', return_value=model), patch('retail.sh_static.load_pal', return_value=palette), patch('retail.sh_static.parse_pic', return_value=pic):
+                result = export(root / 'SYNTH.SH', root / 'PALETTE.PAL', root / 'out.json', 2)
+        self.assertEqual(len(result['parts']), 1)
+        part = result['parts'][0]
+        self.assertTrue(part['textureBase'])
+        self.assertTrue(part['cullBackfaces'])
+        self.assertFalse(part['decal'])
+        self.assertEqual(part['texture']['rgba'][3::4], [0, 255])
+        # Winding/UV/palette order is reversed together to match native facing.
+        self.assertEqual(part['colors'][::3], [1/255, 3/255, 2/255])
+        self.assertEqual(part['uvs'], [0.25, 0.5, 0.25, 0.5, 0.75, 0.5])
+
+    def test_bad_or_recursive_shape_calls_fail_with_controlled_error(self):
+        for code in (bytes([0x12, 0, 0xff, 0x7f]), bytes([0x12, 0, 0xfc, 0xff])):
+            with self.assertRaises(SHError):
+                project(image(code))
 
     def test_non_f14_export_identity_scale_and_no_f14_rig_claim(self):
         with tempfile.TemporaryDirectory() as directory:

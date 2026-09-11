@@ -44,6 +44,13 @@ import { TerrainSeams, type SeamPatch } from './seams';
 import { SourceTransition } from './transition';
 import { waypointDestination, type TeleportWaypoint } from './teleport';
 import { SkyLayer } from './sky';
+import {
+  orientManifest,
+  orientShorelines,
+  reflectedWidth,
+  reflectPixels,
+} from './world-orientation';
+import { SeasonalSatellite } from './seasonal-satellite';
 import { patchCloudShadow } from './cloud-shadow';
 import { patchTerrainLightContrast, setTerrainContrast, TERRAIN_CONTRAST } from './light-contrast';
 import { marchedLayer } from '../sim/environment/clouds';
@@ -60,6 +67,7 @@ import {
 export interface EnvironmentDiagnostics {
   timeOfDayHours: number;
   timeText: string;
+  year: number;
   dayOfYear: number;
   season: string;
   sunElevationDeg: number;
@@ -67,6 +75,7 @@ export interface EnvironmentDiagnostics {
   moonElevationDeg: number;
   moonAzimuthDeg: number;
   moonPhase: number;
+  moonWaxing: boolean;
   weather: WeatherId;
   weatherLabel: string;
   wind: WindPresetId;
@@ -164,6 +173,7 @@ export function startTerrainViewer(
   setCockpitMirrors(layout: CockpitMirrorLayout): void;
   setFuelFraction(fraction: number): void;
   setTimeOfDay(hours: number): void;
+  setDate(year: number, dayOfYear: number): void;
   setWeather(id: WeatherId): void;
   setWind(id: WindPresetId): void;
   setCloudQuality(quality: CloudQuality): void;
@@ -236,6 +246,7 @@ export function startTerrainViewer(
     failed = new Set<string>();
   let imagery: DataTexture | undefined;
   let imageryBytes = 0;
+  const seasonalSatellite = new SeasonalSatellite();
   let water: WaterLayer | undefined;
   let shoreline: ShoreLayer | undefined;
   let reportedWaterBytes = 0;
@@ -272,6 +283,7 @@ export function startTerrainViewer(
     return {
       timeOfDayHours: settings.timeOfDayHours,
       timeText: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+      year: settings.year,
       dayOfYear: settings.dayOfYear,
       season: environment.season,
       sunElevationDeg: (sun.elevationRad * 180) / Math.PI,
@@ -279,6 +291,7 @@ export function startTerrainViewer(
       moonElevationDeg: (moon.elevationRad * 180) / Math.PI,
       moonAzimuthDeg: (moon.azimuthRad * 180) / Math.PI,
       moonPhase: moon.phase,
+      moonWaxing: moon.waxing,
       weather: settings.weather,
       weatherLabel: WEATHER_PRESETS[settings.weather].label,
       wind: settings.wind,
@@ -445,6 +458,7 @@ export function startTerrainViewer(
     const compressed = await platform.fs.readBytes(root, folder + meta.path);
     if (disposed || request !== paintRequest) return;
     const pixels = await decodeTerrainBytes(compressed, meta, meta.width * meta.height * 4);
+    if (reflectedWidth(m) !== undefined) reflectPixels(pixels, meta.width, meta.height, 4);
     if (disposed || request !== paintRequest) return;
     const next = new DataTexture(pixels, meta.width, meta.height);
     next.colorSpace = SRGBColorSpace;
@@ -472,7 +486,7 @@ export function startTerrainViewer(
     const path = safeRelativePath(manifestPath);
     folder = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
     const text = await platform.fs.readText(root, path);
-    const m = parseManifest(text);
+    const m = orientManifest(parseManifest(text));
     if (disposed) return;
     d.paintModes = [...(m.imagery ? ['satellite'] : []), ...Object.keys(m.colorMaps ?? {})];
     const requestedPaint = mission.paint;
@@ -523,7 +537,7 @@ export function startTerrainViewer(
       if (disposed) return;
       shoreline = new ShoreLayer(
         scene,
-        parseShorelines(new TextDecoder().decode(raw), m.extents),
+        orientShorelines(m, parseShorelines(new TextDecoder().decode(raw), m.extents)),
         m.waterBodies,
         fail,
       );
@@ -591,6 +605,7 @@ export function startTerrainViewer(
       for (const patch of selectPatches(chunk, world, maxDepth)) {
         if (
           chunk.originX + patch.x >= manifest.extents.width ||
+          chunk.originX + patch.x + patch.span <= 0 ||
           chunk.originZ + patch.z >= manifest.extents.height
         )
           continue;
@@ -647,9 +662,10 @@ export function startTerrainViewer(
             );
             patchCloudShadow(shader);
             patchTerrainLightContrast(shader);
+            seasonalSatellite.patch(shader);
           };
           material.customProgramCacheKey = () =>
-            'terrain-shared-edge-imagery-v6-cloud-shadow-light-contrast';
+            'terrain-shared-edge-imagery-v7-seasonal-satellite';
           const mesh = new Mesh(built.geometry, material);
           // The patch rewrites `transformed` inside begin_vertex, which runs
           // before Three's shadow chunk, so morphed heights reach the receiver.
@@ -700,6 +716,12 @@ export function startTerrainViewer(
     }
     // The clock runs in real time; time acceleration is deferred.
     environment.advance(frameSeconds);
+    seasonalSatellite.update(
+      environment.settings.dayOfYear + environment.settings.timeOfDayHours / 24,
+      environment.settings.latitudeDeg,
+      manifest?.id,
+      d.paint,
+    );
     if (flight) {
       flight.advance(frameSeconds);
       Object.assign(world, flight.pose().camera);
@@ -833,8 +855,10 @@ export function startTerrainViewer(
       cirrus,
       sunDirection: cloudSun,
       sunColor: sky.sun.color,
+      sunIntensity: sky.sun.intensity,
       zenithColor: sky.ambient.color,
       groundColor: sky.ambient.groundColor,
+      ambientIntensity: sky.ambient.intensity,
       origin: d.origin,
       fogColor: scene.fog instanceof Fog ? scene.fog.color : cloudFog,
       fogNear: scene.fog instanceof Fog ? scene.fog.near : 80000,
@@ -891,6 +915,8 @@ export function startTerrainViewer(
   return {
     setMusicEnabled(enabled: boolean): void {
       flight?.setMusicEnabled(enabled);
+      if (flight) d.flight = flight.diagnostics();
+      update(diagnostics());
     },
     setGunMode(mode: MissionParams['gunMode']): void {
       gunMode = mode;
@@ -898,6 +924,8 @@ export function startTerrainViewer(
     },
     setMusicVolume(volume: number): void {
       flight?.setMusicVolume(volume);
+      if (flight) d.flight = flight.diagnostics();
+      update(diagnostics());
     },
     setCockpitMirrors(layout: CockpitMirrorLayout): void {
       mirrors?.setLayout(layout);
@@ -946,6 +974,10 @@ export function startTerrainViewer(
     },
     setTimeOfDay(hours: number) {
       environment.setTimeOfDay(hours);
+      update(diagnostics());
+    },
+    setDate(year: number, dayOfYear: number) {
+      environment.setDate(year, dayOfYear);
       update(diagnostics());
     },
     setWeather(id: WeatherId) {

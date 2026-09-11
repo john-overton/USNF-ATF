@@ -10,7 +10,7 @@ type Patchable = Parameters<NonNullable<MeshStandardMaterial['onBeforeCompile']>
 
 /**
  * Call from inside a material's own `onBeforeCompile`, or through
- * `applyCloudShadow` for a material that has none. Remember to bump the
+ * `applyCloudShadow` to compose with an existing material patch. Remember to bump the
  * material's `customProgramCacheKey`: the shader source has changed.
  */
 export function patchCloudShadow(shader: Patchable): void {
@@ -35,6 +35,11 @@ export function patchCloudShadow(shader: Patchable): void {
 }
 
 export function applyCloudShadow(material: MeshStandardMaterial, cacheKey: string): void {
-  material.onBeforeCompile = patchCloudShadow;
-  material.customProgramCacheKey = () => cacheKey;
+  const previous = material.onBeforeCompile.bind(material);
+  const previousKey = material.customProgramCacheKey();
+  material.onBeforeCompile = (shader, renderer) => {
+    previous.call(material, shader, renderer);
+    patchCloudShadow(shader);
+  };
+  material.customProgramCacheKey = () => `${previousKey}:${cacheKey}`;
 }

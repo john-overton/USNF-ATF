@@ -4,6 +4,7 @@ import {
   loadNavigationMap,
   MAP_ELEVATION_BANDS,
   navigationViewport,
+  initialNavigationZoom,
   worldToMap,
   type NavigationMapData,
   type MapWaypoint,
@@ -64,7 +65,8 @@ export function TerrainMap({
   markerLabel?: 'Aircraft' | 'Camera';
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const [zoom, setZoom] = useState(1);
+  const [chosenZoom, setZoom] = useState<number>();
+  const zoom = chosenZoom ?? (map.data ? initialNavigationZoom(map.data) : 1);
   const [orientation, setOrientation] = useState<MapOrientation>('north-up');
   const rotation = orientation === 'heading-up' ? -aircraft.headingDegrees : 0;
   const [teleporting, setTeleporting] = useState<number | null>(null);
@@ -367,7 +369,7 @@ export function TerrainMap({
             {outside && <p>{markerLabel} outside map</p>}
             <div className="terrain-map-controls">
               <span>RNG −</span>
-              <span>{zoom}×</span>
+              <span>{zoom.toFixed(2).replace(/\.?0+$/, '')}×</span>
               <span>RNG +</span>
             </div>
           </>

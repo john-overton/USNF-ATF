@@ -28,6 +28,12 @@ by assuming sea level. Scene IDs, URLs, acquisition dates, cache checksums and
 processing choices stay in the ignored source cache/provenance. Gameplay uses
 local files only, with no imagery-service calls.
 
+`--max-gap-fraction` permits an explicit, recorded per-bake increase up to 2% when
+coverage is otherwise complete. `--max-gap-radius` similarly permits an explicit,
+recorded increase up to 12 pixels; neither option relaxes the three-date temporal-agreement
+rule. Salt Lake uses `0.007` (0.7%) and `10` pixels because its direct summer 2024
+composite has a measured 0.61% residual after temporal filling and a 10-pixel widest gap.
+
 ```sh
 PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline imagery extracted/terrain/ukraine-sentinel/manifest.json --provider sentinel --cache extracted/terrain-source/sentinel-2 --size 6144
 PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline probe extracted/terrain/ukraine-sentinel/manifest.json

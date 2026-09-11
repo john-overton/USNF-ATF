@@ -63,6 +63,12 @@ Harness cases to add (`tools/harness`):
 
 ## Coordinate conventions (from the source)
 
+**2026-09-11 Utah correction:** Salt Lake now uses a runtime input adapter with
+`worldX = width - sourceX`. DEM rows, atlas columns, polygons, contact lookup,
+runway and waypoints convert together, preserving the world conventions below.
+Stored manifests remain east-positive. The historical defect described below
+still applies to Ukraine, which is deliberately unchanged by the Utah pass.
+
 - World `+Y` is up, `+Z` is north, `+X` is west. The aircraft points toward `−Z`
   (south) at identity, so the HUD computes heading as `180° − yaw`
   (`headingDegreesFromYaw` in `engine/src/sim/flight/index.ts`).

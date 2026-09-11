@@ -11,10 +11,12 @@ function parentSample(
   step: number,
   maxX: number,
   maxZ: number,
+  minX = 0,
 ): number {
-  const x0 = Math.floor(x / step) * step,
+  const gridX = Math.floor(x / step) * step;
+  const x0 = Math.max(minX, gridX),
     z0 = Math.floor(z / step) * step;
-  const x1 = Math.min(maxX, x0 + step),
+  const x1 = Math.min(maxX, gridX + step),
     z1 = Math.min(maxZ, z0 + step);
   const fx = x1 > x0 ? (x - x0) / (x1 - x0) : 0;
   const fz = z1 > z0 ? (z - z0) / (z1 - z0) : 0;
@@ -39,13 +41,14 @@ export function buildPatch(
     indices: number[] = [];
   const step = patch.span / PATCH_CELLS;
   const maxX = Math.min(255, ((extents?.width ?? Infinity) - chunk.originX) / chunk.spacing);
+  const minX = extents ? Math.max(0, -chunk.originX / chunk.spacing) : 0;
   const maxZ = Math.min(255, ((extents?.height ?? Infinity) - chunk.originZ) / chunk.spacing);
   const coarseAt = (sample: (x: number, z: number) => number, x: number, z: number): number =>
     patch.depth === 0
       ? sample(x, z)
-      : parentSample(sample, x, z, (2 * step) / chunk.spacing, maxX, maxZ);
+      : parentSample(sample, x, z, (2 * step) / chunk.spacing, maxX, maxZ, minX);
   const vertex = (x: number, z: number, skirt = false): number => {
-    x = Math.min(x, (extents?.width ?? Infinity) - chunk.originX);
+    x = Math.max(minX * chunk.spacing, Math.min(x, (extents?.width ?? Infinity) - chunk.originX));
     z = Math.min(z, (extents?.height ?? Infinity) - chunk.originZ);
     const sx = x / chunk.spacing,
       sz = z / chunk.spacing;

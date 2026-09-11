@@ -1,4 +1,6 @@
 import type { Platform } from '../platform/Platform';
+import { connectMixer } from './AudioMixer';
+import { BakedMusic, parseBakedMusic } from './BakedMusic';
 import { isEditingTarget, muteControl } from './mute';
 import { NativeScore, parseScoreProgram, type ScoreProgram } from './NativeScore';
 
@@ -321,7 +323,7 @@ function originalTracks(): Record<MusicSituation, MusicTrack> {
   ) as Record<MusicSituation, MusicTrack>;
 }
 interface Voice {
-  source: OscillatorNode;
+  source: OscillatorNode | AudioBufferSourceNode;
   gain: GainNode;
   expression?: GainNode;
   pan?: StereoPannerNode;
@@ -331,6 +333,7 @@ export const MAX_MUSIC_VOICES = 32;
 /** Frame-driven scheduler, with a 120ms look-ahead and no background timers.
  * Note data can be retail; oscillators/envelopes are authored GM approximations. */
 export class FlightMusic {
+  private disconnectMixer?: () => void;
   private context?: AudioContext;
   private master?: GainNode;
   private voices: Voice[] = [];
@@ -350,6 +353,10 @@ export class FlightMusic {
   private score: NativeScore | undefined;
   private selectedTrack: MusicTrack | undefined;
   private scoreFinished = false;
+  private baked?: BakedMusic;
+  private bakedVoice: Voice | undefined;
+  private bakedCycle = -1;
+  private waitingForBaked = false;
   static async load(platform: Platform): Promise<FlightMusic> {
     let manifest: FlightMusicManifest | undefined;
     let error: string | undefined;
@@ -363,6 +370,15 @@ export class FlightMusic {
       error = String(e);
     }
     const music = new FlightMusic(manifest);
+    try {
+      if (await platform.fs.exists('appData', 'audio/flight-music-baked.json')) {
+        const text = await platform.fs.readText('appData', 'audio/flight-music-baked.json');
+        if (text.length > 1_000_000) throw new Error('Baked music manifest too large');
+        music.baked = new BakedMusic(parseBakedMusic(JSON.parse(text)), platform);
+      }
+    } catch (e) {
+      error = String(e);
+    }
     if (error !== undefined) music.error = error;
     return music;
   }
@@ -389,7 +405,7 @@ export class FlightMusic {
       if (!this.context) {
         this.context = new AudioContext();
         this.master = this.context.createGain();
-        this.master.connect(this.context.destination);
+        this.disconnectMixer = connectMixer(this.context, this.master, 'music');
         this.syncVolume();
       }
       if (this.context.state === 'suspended')
@@ -419,7 +435,13 @@ export class FlightMusic {
     const delta =
       this.previousStep === undefined ? 0 : Math.max(0, input.steps - this.previousStep) / 120;
     this.previousStep = input.steps;
-    this.playhead += delta;
+    const current = this.selectedTrack ?? this.tracks[this.state.situation];
+    // Cold phrases wait for their local decode instead of losing the opening notes.
+    const waiting =
+      this.baked?.available(current.sourceSha256, current.durationSeconds) &&
+      !this.baked.ready(current.sourceSha256);
+    if (!waiting && !this.waitingForBaked) this.playhead += delta;
+    this.waitingForBaked = waiting ?? false;
     if (previous !== this.state.situation) {
       this.stopVoices(0.08);
       this.playhead = 0;
@@ -432,6 +454,7 @@ export class FlightMusic {
       this.selectedTrack &&
       this.playhead >= this.selectedTrack.durationSeconds
     ) {
+      this.stopVoices(0.02);
       // Native starts the next sequence on its next service tick. Retaining frame
       // overshoot here would skip its opening chord at time zero.
       this.playhead = 0;
@@ -448,6 +471,31 @@ export class FlightMusic {
     if (this.scoreFinished) return;
     const context = this.context!;
     const track = this.selectedTrack ?? this.tracks[this.state.situation];
+    const buffer = this.baked?.get(context, track.sourceSha256, track.durationSeconds);
+    if (buffer) {
+      const cycle = Math.floor(this.playhead / track.durationSeconds);
+      if (!this.bakedVoice || this.bakedCycle !== cycle) {
+        this.stopVoices();
+        const offset = this.playhead % track.durationSeconds;
+        const source = context.createBufferSource();
+        const gain = context.createGain();
+        source.buffer = buffer;
+        // Same render, no normalization or instrument remapping. Existing master volume applies.
+        gain.gain.setValueAtTime(0, context.currentTime);
+        gain.gain.linearRampToValueAtTime(1, context.currentTime + 0.005);
+        source.connect(gain).connect(this.master!);
+        const voice: Voice = { source, gain };
+        source.onended = () => this.release(voice);
+        this.voices.push(voice);
+        this.bakedVoice = voice;
+        this.bakedCycle = cycle;
+        source.start(context.currentTime, offset);
+        this.played++;
+      }
+      return;
+    }
+    // A valid local render is loading: do not briefly substitute oscillator timbres.
+    if (this.baked?.available(track.sourceSha256, track.durationSeconds)) return;
     const start = Math.max(this.playhead, this.scheduledUntil);
     const end = this.score
       ? Math.min(track.durationSeconds, this.playhead + 0.12)
@@ -569,6 +617,7 @@ export class FlightMusic {
     }
   }
   private release(voice: Voice): void {
+    if (this.bakedVoice === voice) this.bakedVoice = undefined;
     voice.source.onended = null;
     voice.source.disconnect();
     voice.gain.disconnect();
@@ -578,6 +627,7 @@ export class FlightMusic {
     if (i !== -1) this.voices.splice(i, 1);
   }
   private stopVoices(fade = 0): void {
+    this.bakedVoice = undefined;
     for (const voice of [...this.voices]) {
       const now = this.context?.currentTime ?? 0;
       voice.gain.gain.cancelScheduledValues(now);
@@ -620,6 +670,7 @@ export class FlightMusic {
     this.playhead = 0;
     this.scheduledUntil = 0;
     this.previousStep = undefined;
+    this.waitingForBaked = false;
     this.played = 0;
     this.startScore();
   }
@@ -641,21 +692,29 @@ export class FlightMusic {
       played: this.played,
       contextState: this.context?.state ?? 'locked',
       source: this.source,
-      rendering: 'authored GM-style oscillator approximation',
+      rendering: this.bakedVoice
+        ? 'FluidSynth user-bank baked audio'
+        : 'authored GM-style oscillator approximation',
+      bakedError: this.baked?.error,
       midiControls:
         'volume/pan/expression; RPN0 bend sensitivity; sustain/all-notes-off/all-sound-off/reset',
       midiPolicy:
         'RPN initially null; two-semitone default; only RPN0 supported; NRPN ignored; phrase-bounded sustain; authored envelopes',
-      limitations: musicLimitations(this.selectedTrack ?? this.tracks[this.state.situation]),
+      limitations: this.bakedVoice
+        ? this.baked?.tracks[(this.selectedTrack ?? this.tracks[this.state.situation]).sourceSha256]
+            ?.limitations
+        : musicLimitations(this.selectedTrack ?? this.tracks[this.state.situation]),
       error: this.error,
     };
   }
   dispose(): void {
+    this.disconnectMixer?.();
     if (this.disposed) return;
     this.disposed = true;
     window.removeEventListener('pointerdown', this.gesture);
     window.removeEventListener('keydown', this.gesture);
     this.unsubscribeMute();
+    this.baked?.dispose();
     this.stopVoices();
     this.master?.disconnect();
     if (this.context && this.context.state !== 'closed')

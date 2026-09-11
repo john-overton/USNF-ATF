@@ -9,6 +9,15 @@ south to north; columns west to east. Each tile has 256×256 samples, spans 255
 sample intervals, and shares its border samples with neighbours. LOD spacings
 are 30, 100, 300, 900, 2700 meters; 30→100 is not a factor of three.
 
+Runtime Utah adapter (2026-09-11): the stored v1 contract above is unchanged.
+Salt Lake is reflected on input to the flight world's west-positive X using
+`worldX = width - sourceX`. Runtime chunk origins can consequently be negative
+at the partial eastern edge; source tile indices and compressed hashes remain
+the original values. Only the tagged runtime chunk objects reverse decoded
+columns. Viewer/navigation loaders opt in; installer/parser validation remains
+over raw source metadata. Runtime objects must not be serialized as source
+manifests. Authored theater positions are source coordinates converted on use.
+
 Manifest JSON schemaVersion 1:
 
 - id, name: strings
@@ -80,6 +89,10 @@ validation as imagery. The producer defaults to 1024-axis maps (cap 2048); runti
 uses the existing 6144 image limit. Only the selected image is loaded. Authoring
 weights/palettes/provenance are offline files, not renderer inputs. Missing or
 corrupt declared palette files fail installer validation. See [color maps](terrain-colors.md).
+
+Optional elevation-based snow is baked into the same seasonal RGBA bytes; it
+adds no runtime contract fields or changes to heights/water/contact. Its seasonal
+and permanent elevation rules and DEM digest are offline provenance only.
 
 
 ## Optional shoreline ribbons (v1)

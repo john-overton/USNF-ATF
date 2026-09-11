@@ -71,3 +71,124 @@ test('texture cutouts retain alpha testing and opaque depth writes', async () =>
   expect((material.map as DataTexture).image.data![7]).toBe(255);
   model!.dispose();
 });
+
+test('keyed skin keeps its palette base through damage clones and cloud shadows', async () => {
+  const { RetailAircraft } = await import('./RetailAircraft');
+  const { AircraftDamage } = await import('./AircraftDamage');
+  const { applyCloudShadow } = await import('../terrain/cloud-shadow');
+  const { FrontSide, LinearMipmapLinearFilter } = await import('three');
+  const data = {
+    ...triangle,
+    cullBackfaces: true,
+    textureBase: true,
+    decal: false,
+    uvs: [0, 0, 1, 0, 0, 1],
+    texture: { width: 1, height: 1, rgba: [255, 255, 255, 0] },
+  };
+  const model = await RetailAircraft.load({
+    fs: {
+      exists: () => Promise.resolve(true),
+      readText: () => Promise.resolve(JSON.stringify(data)),
+    },
+  } as unknown as Platform);
+  const damage = new AircraftDamage(model!.group);
+  const mesh = model!.parts.get(triangle.name)!.children[0] as Mesh;
+  const material = mesh.material as MeshStandardMaterial;
+  applyCloudShadow(material, 'test-cloud');
+  const shader = {
+    uniforms: {},
+    vertexShader: '#include <project_vertex>',
+    fragmentShader:
+      '#include <map_fragment>\n#include <color_fragment>\n#include <lights_fragment_end>',
+  };
+  material.onBeforeCompile(shader as never, {} as never);
+  expect(shader.fragmentShader).toContain('mix(vColor.rgb, paint.rgb, paint.a)');
+  expect(shader.fragmentShader).toContain('cloudShadow(vCloudWorld)');
+  expect(shader.fragmentShader).not.toContain('#include <color_fragment>');
+  expect(material.customProgramCacheKey()).toContain('retail-keyed-base-v1');
+  expect(material.side).toBe(FrontSide);
+  expect(material.polygonOffset).toBe(false);
+  expect(material.map!.minFilter).toBe(LinearMipmapLinearFilter);
+  damage.dispose();
+  model!.dispose();
+});
+
+test('imported textured gear retracts, hides, and reverses without adding placeholder gear', async () => {
+  const { RetailAircraft } = await import('./RetailAircraft');
+  const data = {
+    ...triangle,
+    gearHeightM: 1.8,
+    parts: [{ ...triangle, name: 'gear-left', gearPose: 'deployed', rotationAxis: [0, 0, 1] }],
+  };
+  const model = await RetailAircraft.load({
+    fs: {
+      exists: () => Promise.resolve(true),
+      readText: () => Promise.resolve(JSON.stringify(data)),
+    },
+  } as unknown as Platform);
+  expect(model!.hasGear).toBe(true);
+  const gear = model!.parts.get('gear-left')!;
+  expect(gear.visible).toBe(false);
+  model!.setGearFraction(1);
+  expect(gear.visible).toBe(true);
+  expect(gear.quaternion.w).toBe(1);
+  model!.setGearFraction(0.5);
+  expect(gear.rotation.z).toBeCloseTo(Math.PI / 4);
+  model!.setGearFraction(0);
+  expect(gear.visible).toBe(false);
+  model!.setGearFraction(1);
+  expect(gear.quaternion.w).toBe(1);
+  expect(() => parseRetailAircraft({ ...data, gearHeightM: -1 })).toThrow();
+  expect(() => parseRetailAircraft({ ...data, cullBackfaces: 'yes' })).toThrow();
+  model!.dispose();
+});
+
+test('native brakes retain backing and burner state preserves nozzle textures', async () => {
+  const { RetailAircraft } = await import('./RetailAircraft');
+  const textured = {
+    ...triangle,
+    uvs: [0, 0, 1, 0, 0, 1],
+    texture: { width: 1, height: 1, rgba: [200, 120, 60, 255] },
+  };
+  const data = {
+    ...triangle,
+    parts: [
+      { ...textured, name: 'exhaust-left-textured' },
+      { ...textured, name: 'afterburner-left-textured' },
+      {
+        ...textured,
+        name: 'airbrake-native-left-panel',
+        nativeBrakeAngle: -1,
+        rotationAxis: [0, 1, 0],
+      },
+      { ...triangle, name: 'airbrake-native-left-support', nativeBrakeAngle: 0 },
+    ],
+  };
+  const model = (await RetailAircraft.load({
+    fs: {
+      exists: () => Promise.resolve(true),
+      readText: () => Promise.resolve(JSON.stringify(data)),
+    },
+  } as unknown as Platform))!;
+  const nozzle = (model.parts.get('exhaust-left-textured')!.children[0] as Mesh)
+    .material as MeshStandardMaterial;
+  const map = nozzle.map;
+  const brake = model.parts.get('airbrake-native-left-panel')!;
+  expect(model.hasAfterburner).toBe(true);
+  expect(model.afterburnerVisible).toBe(false);
+  expect(brake.visible).toBe(false);
+  model.setAirbrakeFraction(0.5);
+  expect(brake.rotation.y).toBeCloseTo(0.5);
+  expect(model.parts.get(triangle.name)!.visible).toBe(true);
+  model.setAirbrakeFraction(1);
+  expect(brake.quaternion.w).toBe(1);
+  model.setAfterburner(true);
+  expect(model.afterburnerVisible).toBe(true);
+  model.setAfterburner(false);
+  expect(nozzle.map).toBe(map);
+  expect(nozzle.color.getHex()).toBe(0xffffff);
+  model.setAirbrakeFraction(0);
+  expect(model.parts.get('airbrake-native-left-support')!.visible).toBe(false);
+  expect(() => parseRetailAircraft({ ...data, nativeBrakeAngle: NaN })).toThrow();
+  model.dispose();
+});

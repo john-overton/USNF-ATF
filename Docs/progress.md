@@ -7,6 +7,239 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-10
 
+## 2026-09-11: Commit/push checkpoint verification
+
+User requested committing and pushing the accumulated aircraft, audio, terrain,
+sky and menu changes. Verified the working tree based on `aa530d0` before this
+checkpoint commit: `bun run check` passed (464 pass, 3 imported-mount tests skipped),
+`bun run harness` passed; terrain discovery passed (37 run, 1 missing local
+Copernicus source skip). Full retail discovery ran 171 tests with 1 error and
+1 missing scratchpad skip: `test_every_lib_entry_decompresses_to_size_prefix`
+rejects truncated `ATF_10.LIB`, entry 84 `S35_S.CB8`, offset
+417294033..425884021. This is the previously documented local-media limitation;
+full retail compatibility is not claimed. Resource/deprecation warnings also
+remain. `git diff --cached --check` passed; staged paths contain no retail outputs.
+See the [phase 4 checkpoint](baselines/phase-4.md) for commands/platform scope.
+Cloud rendering review follows this checkpoint; no new cloud appearance is claimed.
+
+## 2026-09-11: Ground wind assistance ramps with taxi speed
+
+Applied wind now ramps linearly from 5% at rest to 100% at 150 knots horizontal
+ground speed while grounded. At 2 knots it is 6.33%. The default retail/recovered
+integrator applies this only to its aerodynamic input; the preserved assisted
+source uses the same adapter at the FlightLayer boundary. Weather fields and
+true-air telemetry remain unchanged; airborne wind is full strength. This is
+an authored handling adjustment, not a recovered retail force law. See
+[ground-wind baseline](baselines/ground-wind.md) for focused/full verification.
+Desktop bundles rebuilt; restart the app to try taxi/takeoff feel.
+
+## 2026-09-11: Native brakes, ATF F14 exterior and afterburner mapping
+
+Corrected the A4 brake hole by restoring fixed skin and importing native aft
+panels/backing; X31 and ATF F14 now also use their native brake state geometry.
+F14 exterior/atlas/rig/gear now come from ATF-GOLD, while its USNF flight profile
+remains selected. F14/X31 afterburners reuse original atlas-mapped flame faces;
+nozzle textures survive engine/burner switches. All three exterior bundles are
+installed and runtime rebuilt. See [device acceptance](baselines/aircraft-devices.md)
+for source identity, 41 SH tests, 462 workspace tests/3 skips and live keyboard,
+close-up and native-gear ground verification. F14 brakes switch the native raised
+pose; continuous schedules remain unported. Next reproduction: restart the built
+app, start a new flight, then B / 6 / T. This supersedes the earlier authored A4
+brake cut and USNF exterior choice, not the preserved USNF flight comparison.
+
+## 2026-09-11: Aircraft materials and native textured gear
+
+Corrected E0 dynamic decal binding (blank fallback instead of full aircraft atlas),
+keyed paint over palette-filled skin, native surface facing, texel-center UVs and
+filtered/mipmapped sampling. Damage/debris clones and cloud shadows preserve the
+skin shader. All three models now import native textured gear geometry in place
+of procedural struts/wheels, with authored retraction and visible-wheel ground
+support heights. Updated model JSONs are installed and desktop bundles rebuilt.
+See [texture acceptance](baselines/aircraft-textures.md) for live G-key/ground
+checks, close-up captures, tests and limits. Dynamic livery selection, native
+lighting/retraction schedules and exact multi-wheel ground pitch remain open.
+
+## 2026-09-11: Correction — missing native flap subroutine geometry restored
+
+The user's reference disproved the earlier stepped-wing explanation. Native
+opcode `0x12` is an end-relative shape call; the exporter was skipping it and
+therefore omitting original flap panels on all three aircraft. Implemented call
+traversal with persistent shared slots/textures, restored the panels and original
+UVs, and rigged their actual leading edges. The earlier substitute-strip fix and
+its silhouette acceptance are superseded. See [corrected evidence](baselines/flap-placement.md)
+and [SH findings](formats/sh.md). Neutral A4 now has a complete inboard trailing
+wing; deflection/mixing remains authored. Reload updated installed models to view.
+
+## 2026-09-11: Flap placement corrected from actual wing edges
+
+Revised all three exporter rigs and installed the regenerated exterior JSONs in
+Linux app data. A-4 inboard flap is narrower/aft with a higher hinge; F-14 follows
+a narrow swept trailing strip; X-31 reuses the outboard tabs and their sloped
+hinge instead of cutting fixed inboard wing. This corrects the earlier flap
+placement acceptance. Geometry preservation and trailing-region regressions pass;
+Electron inspection covers neutral/deployed views. See
+[flap evidence](baselines/flap-placement.md) and the updated
+[porting technique](aircraft-porting.md#recover-the-complete-wing-before-fitting-hinges-corrected-2026-09-11).
+Hinges remain authored mesh fits. Next step: reload the installed models in flight.
+
+## 2026-09-11: Utah east/west orientation corrected at runtime boundary
+
+Salt Lake now converts source east-positive coordinates to world west-positive
+coordinates (`worldX = theaterWidth - sourceX`) when loading. DEM columns, chunk
+placement, all paint atlases, water including holes, optional shorelines, authored
+runway/waypoints and ground contact are converted together. LOD coverage counting
+and collision lookup retain the source-grid indexing; partial eastern tiles are
+clipped at the reflected left boundary. Compass/physics are unchanged. Navigation
+now places Denver east of Salt Lake and Bonneville west. Disk data/hashes remain
+unchanged; no rebake/install required. This Utah-specific migration does not fix
+Ukraine's documented geographic mirroring. See [Salt Lake evidence](baselines/salt-lake.md).
+
+## 2026-09-11: Curved lunar phases and image-derived glow
+
+Replaced the straight lunar cutoff with a projected spherical terminator whose
+curvature follows phase, mirrored for waxing/waning. The rim and phase edge use
+a 2%-of-diameter feather. Moon glow now convolves the phase-masked photograph's
+luminance with near/broad Gaussian kernels, rather than illuminating a full disc
+behind every phase. Work is confined to the moon's small sky region; no extra
+render target or sun/terrain-light changes. Tests cover area, mirroring, feather
+and zero emission at new moon. See [sky evidence](baselines/sky-lighting.md).
+
+## 2026-09-11: Larger sun/moon discs and softer lunar halo
+
+Visible sun and moon angular radii are now 5× their original values, including
+the moon photograph's UV footprint. Sun scattering/glow, limb feather width,
+astronomical positions/phases and terrain lighting remain unchanged. Moon haze
+now has an independent Gaussian angular falloff with a gentle outer taper and
+sub-code-value dithering to reduce dark gradient bands. See
+[sky baseline](baselines/sky-lighting.md) for checks and desktop captures.
+
+## 2026-09-11: Aircraft selection resets incompatible loadout stations
+
+Confirmed A-4E/X-31 Fly blockers came from inherited F-14 station selections:
+unknown AIM54C/AIM120 and sensor stores, incompatible counts and nonexistent
+stations. Their installed native defaults both validate with no problems.
+`choose-aircraft` now clears only station selections on an actual plane change,
+allowing the shell to seed the selected aircraft's own defaults. Reselecting the
+same plane keeps edits; fuel, theater and other mission settings are preserved.
+Async default installation also checks the current aircraft before applying.
+Validation remains enabled; this does not implement missile firing.
+See [loadout-switch evidence](baselines/aircraft-loadout-switch.md).
+
+## 2026-09-11: Live seasonal satellite tint and white snow
+
+Satellite mode now smoothly follows the calendar: lighter spring green, darker
+summer green, autumn brown and winter gray. Viewer-local uniforms update without
+atlas reloads. Salt Lake shares the offline snow bands, interpolated through the
+year using morphed terrain elevation; pure-white snow replaces source albedo
+before normal lighting. Fixed seasonal bakes were also rebaked/reinstalled white.
+No water/contact or flight changes. Tests and live evidence are recorded in the
+[Salt Lake baseline](baselines/salt-lake.md). Remaining tuning is artistic: RGB
+vegetation hints and snowlines are not observed cover or physical accumulation.
+
+## 2026-09-11: Elevation-driven seasonal snow
+
+The color-map baker now accepts optional per-theater snow rules: smooth seasonal
+elevation bands plus a permanent-snow override, sampled from verified DEM chunks.
+Salt Lake's four maps were rebaked from existing appearance weights; no satellite
+refetch or geometry/contact changes. Ukraine is unchanged. Rules are artistic,
+not observed snow coverage; coarse atlas texels can miss small summit patches.
+See [snow authoring](terrain-colors.md#elevation-based-snow--2026-09-11) and the
+[Salt Lake baseline](baselines/salt-lake.md). Next tuning step: fly mountain terrain
+in each season and adjust `theaters/salt-lake-snow.json`, then rebake/reinstall.
+
+## 2026-09-11: Salt Lake seasonal bake and actual desktop flight review
+
+Installed four 1024×409 seasonal maps using the same appearance weights/palettes as
+Ukraine. Navigation starts at 400 statute miles across on large theaters; smaller
+theaters retain full coverage. Practice links and aircraft/model/payload reloads
+now serialize the current mission plus loaded manifest instead of stale page URLs.
+
+Correction to the earlier flight acceptance: the old strip crossed six WBM water
+samples, despite passing the height-only probe. Moved the authored strip 1.5 km west
+within the airport area, updated waypoint 1, and validated the full footprint with
+the actual GroundSampler (dry, 1285.11–1287.51 m; deck 1288 m). Fresh Electron tests
+verify flight starts, seasonal switching, teleports and settled rendered terrain.
+See [Salt Lake review](baselines/salt-lake.md) for evidence and known geographic limits.
+
+## 2026-09-11: Salt Lake theater selection persists into flight
+
+The flight-hosted terrain helper now commits theater selection to the same mission state
+used by the main menu, loadout, pause and resume flows; it no longer reloads the Ukraine
+manifest after selecting Salt Lake. A 370-point KSLC deck probe found terrain elevations
+of 1284.3–1292.4 m across the strip, so the authored contact deck is 1293 m: five metres
+above airport chart elevation, but within the existing 10 m terrain-fit validation limit.
+
+## 2026-09-11: Salt Lake direct Sentinel texture accepted with recorded bounded gaps
+
+The Salt Lake & Front Range direct Sentinel-2 bake exhausted its summer 2024 low-cloud
+scene set with 0.61% residual land coverage after three-date temporal filling. The
+pipeline now makes its residual interpolation fraction and radius explicit, bounded
+per-bake settings (hard caps: 2% and 12 output pixels). This theater records 0.7% and
+10 pixels; it retains the three-date agreement requirement. The verified installed
+dataset contains 4,666 Copernicus DEM chunks, 12,747 water bodies and a 3072×1227
+direct-Sentinel atlas. See `theaters/salt-lake.json` and the terrain polish guide.
+
+## 2026-09-11: Salt Lake & Front Range theater authored
+
+Added the public-data theater configuration covering Salt Lake City, Bonneville Salt
+Flats and Denver, plus a selectable runtime theater definition. The main menu and terrain
+explorer now choose the installed theater; the Salt Lake definition supplies KSLC's runway
+start and three named map/flight teleport points. The generated terrain and Sentinel-2
+paint atlas remain a local, ignored install artifact; pipeline build/install verification
+is the next reproducible step.
+
+## 2026-09-11: Clouds inherit solar exposure and colour
+
+The cloud march previously copied the sky light colours but discarded their intensities,
+leaving a full-strength neutral hemisphere fill that washed dawn, dusk and night clouds
+white. Direct and ambient cloud scattering now use the same noon-relative intensities as
+the scene lights, preserving the warm low-sun key and reducing fill after sunset. Targeted
+cloud/sky shader tests, TypeScript and the production renderer build pass; GPU appearance
+acceptance remains open.
+
+## 2026-09-11: Live date picker and lunar eighths
+
+The environment controls now place a native date picker beside the time control in
+both terrain and pause settings. It updates the running calendar year/day without
+restarting flight. A labeled icon reports the computed new, crescent, quarter,
+gibbous or full phase in its waxing/waning eighth; hover text exposes the phase name
+and illumination. Environment and UI coverage pass; desktop visual acceptance remains
+open alongside the moon/low-sun pass.
+
+## 2026-09-11: Astronomical moon disc and low-sun terrain key
+
+Night now renders the simulation's computed moon position and phase with a bundled
+public-domain NASA Galileo lunar photograph and a restrained cool halo. The low sun
+no longer loses its directional-light strength merely because it is near the horizon:
+Lambert shading still keeps level terrain dim at a grazing angle, while ridges and
+terrain faces oriented toward sunrise or sunset receive the expected warm key light.
+This is direct lighting rather than an indiscriminate post-process wash; fog continues
+to inherit the scattering-model horizon colour. The full check passes (440 tests, 3
+existing import-dependent skips); visual acceptance remains the next desktop-flight step.
+See [sky lighting evidence](baselines/sky-lighting.md).
+
+## 2026-09-10: Classic-style Escape bar and mixer
+
+Paused flight now exposes live settings and six actual audio groups alongside
+briefing/debrief, resume and confirmed exits. Mixer levels persist across reload;
+session settings do not reset combat. 438 Bun pass/3 skips, 25 Python pass; see
+[desktop evidence and limits](baselines/escape-mixer.md). Original menu-bar pixel
+parity and finer speech/effects submixes are not claimed.
+
+## 2026-09-10: User-approved FluidR3 baking and playback
+
+All 154 local XMI files rendered; hash-keyed optional flight playback installed for
+USNF, with bounded lazy decode, downbeat preservation, pause/mute/reset and explicit
+oscillator fallback. Existing 41-track MUS selection unchanged. ATF assets staged;
+unsupported native dispatch not fabricated. 433 Bun pass/3 skips, 25 Python pass;
+fresh baked/legacy desktop music checks pass. [Evidence](baselines/fluidr3-audition.md).
+Earlier audition-pending/no-engine-integration statements below are superseded.
+
+**Music auditions resumed:** user-installed FluidSynth 2.6.0 and selected FluidR3
+GM now render three baseline phrases successfully through the existing offline
+exporter. 22 targeted tests pass. No live synth integration or arrangement edits;
+listening acceptance pending. [Evidence](baselines/fluidr3-audition.md).
+
 **Selectable guns:** retail-derived projectile dynamics and original imported yellow
 geometry now coexist with remake bullets. Both modes share the trailing pipper,
 using their programmed speed and an authored drop correction. Main-menu/helper

@@ -33,3 +33,10 @@ test('invalid CLI options fail before launching conversion or writing output', a
   for (const args of [[], ['--aircraft', '../a4e'], ['--aircraft'], ['--aircraft', 'x31', '--unknown'], ['--aircraft', 'a4e', '--aircraft', 'x31']])
     await expect(main(args)).rejects.toThrow();
 });
+
+test('F14 exterior uses explicit ATF rig while preserving USNF flight source', () => {
+  const commands = portCommands('f14', '/tmp/media', '/tmp/out', 'python3');
+  expect(commands[0]).toContain('/tmp/media/atf-gold/ATF_2.LIB/F14.SH');
+  expect(commands[0]).toContain('F14_ATF');
+  expect(commands[1]).toContain('/tmp/media/usnf97/USNF_2.LIB/F14.PT');
+});

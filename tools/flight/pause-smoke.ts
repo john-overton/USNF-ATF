@@ -44,10 +44,16 @@ try {
   await press('ArrowDown');
   await press('Escape');
   await session.poll(async () => (await screen()) === 'paused' ? true : undefined, 'pause briefing');
-  await session.poll(async () => await session.evaluate(`window.__pauseContexts.filter(c=>c.state!=='closed').every(c=>c.state==='suspended')`) ? true : undefined, 'flight audio suspended');
+  await session.poll(async () => {
+    report.contexts=await session.evaluate('window.__pauseContexts.map(c=>c.state)');
+    report.audio=await session.evaluate('(()=>{const d=window.__flightDiagnostics();return {audio:d.audio,music:d.music,gun:d.gun,combatAudio:d.combatAudio}})()');
+    return await session.evaluate(`window.__pauseContexts.filter(c=>c.state!=='closed').every(c=>c.state==='suspended')`) ? true : undefined;
+  }, 'flight audio suspended');
   const before = await snapshot();
   report.before = before;
   await session.capture('paused');
+  await session.evaluate(`document.querySelector('[data-escape-page="briefing"]').click()`);
+  await session.poll(async()=>await session.evaluate('!!document.querySelector(".brief-paper")')?true:undefined,'briefing page');
   await session.evaluate(`document.querySelector('[data-menu-command="brief-page-up"]').click()`);
   assert.equal(await session.evaluate(`document.querySelector('.brief-paper h2').textContent`), 'Flight status');
   await session.capture('paused-status');
@@ -78,6 +84,8 @@ try {
   await session.poll(async () => (await screen()) === undefined ? true : undefined, 'Escape resumes');
   await press('Escape');
   await session.poll(async () => (await screen()) === 'paused' ? true : undefined, 'third pause');
+  await session.evaluate(`document.querySelector('[data-escape-page="leave"]').click()`);
+  await session.poll(async()=>await session.evaluate('!!document.querySelector("[data-menu-command=main-menu]")')?true:undefined,'leave confirmation');
   await session.evaluate(`document.querySelector('[data-menu-command="main-menu"]').click()`);
   await session.poll(async () => (await screen()) === 'main-menu' ? true : undefined, 'quit to main menu');
   assert.equal(await session.evaluate(`!!document.querySelector('#terrain-canvas')`), false, 'Quitting disposes the viewer');

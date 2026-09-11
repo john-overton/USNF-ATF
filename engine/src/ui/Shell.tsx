@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { audioMixer } from '../flight/AudioMixer';
+import { muteControl } from '../flight/mute';
+import { EscapeMenu, type EscapePage } from './menu/EscapeMenu';
 import { getPlatform } from '../platform';
 import { RendererProbe } from './RendererProbe';
 import { TerrainViewer } from './TerrainViewer';
@@ -87,6 +90,7 @@ export function Shell({ search }: { search: string }) {
         // Arrive on the aircraft's own stock loadout, the way the original does,
         // unless the player has already chosen something for this mission.
         setState((previous) =>
+          previous.mission.aircraft === aircraft &&
           Object.keys(previous.mission.loadout.stations).length === 0
             ? {
                 ...previous,
@@ -111,6 +115,36 @@ export function Shell({ search }: { search: string }) {
   }, [state.mission.aircraft]);
   const [unrestricted, setUnrestricted] = useState(false);
   const [briefingPage, setBriefingPage] = useState(0);
+  const [escapePage, setEscapePage] = useState<EscapePage>('flight');
+  const [settingsHost, setSettingsHost] = useState<HTMLDivElement | null>(null);
+  const [mixerError, setMixerError] = useState('');
+  const levels = useSyncExternalStore(
+    audioMixer.subscribe,
+    audioMixer.snapshot,
+    audioMixer.snapshot,
+  );
+  const [muted, setMuted] = useState(muteControl.muted);
+  useEffect(() => muteControl.subscribe(setMuted), []);
+  useEffect(() => {
+    let active = true;
+    let writes = Promise.resolve();
+    const platform = getPlatform();
+    const unsubscribe = audioMixer.subscribe(() => {
+      const text = JSON.stringify({ version: 1, levels: audioMixer.snapshot() });
+      writes = writes
+        .then(() => platform.fs.writeText('appData', 'settings/audio-mixer.json', text))
+        .catch((e: unknown) => {
+          if (active) setMixerError(`Unable to save mixer: ${String(e)}`);
+        });
+    });
+    void audioMixer.load(platform).catch((e: unknown) => {
+      if (active) setMixerError(`Unable to load mixer: ${String(e)}`);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
   const audio = useRef<UiAudio>(null);
   // Only while a menu is on screen. A flight has its own AudioContext, and a
   // second one sitting idle behind it is both wasteful and, for the retail audio
@@ -127,6 +161,7 @@ export function Shell({ search }: { search: string }) {
     };
   }, [assets, menuScreen]);
   const act = useCallback((action: MenuAction) => {
+    if (action.command === 'back' || action.command === 'resume') setEscapePage('flight');
     if (action.command === 'back') setBriefingPage(0);
     if (action.command === 'exit') {
       void getPlatform()
@@ -148,6 +183,21 @@ export function Shell({ search }: { search: string }) {
   useEffect(() => {
     // Escape pauses/resumes a flight; repeated keydown must not toggle it twice.
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') {
+        const dialog = document.querySelector('.escape-overlay');
+        const buttons = dialog?.querySelectorAll<HTMLElement>('button:not(:disabled),input,select');
+        if (buttons?.length) {
+          const first = buttons[0]!;
+          const last = buttons[buttons.length - 1]!;
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }
+      }
       if (event.key === 'Escape' && !event.repeat) {
         event.preventDefault();
         act({ command: 'back' });
@@ -171,22 +221,39 @@ export function Shell({ search }: { search: string }) {
         <div className="mission-view" inert={paused} aria-hidden={paused}>
           <TerrainViewer
             mission={state.mission}
+            onMission={(mission) => setState((previous) => ({ ...previous, mission }))}
             onGunMode={(gunMode) =>
               setState((previous) => ({ ...previous, mission: { ...previous.mission, gunMode } }))
             }
             parseError={parsed.parseError}
             paused={paused}
+            settingsHost={settingsHost}
           />
         </div>
         {paused && (
-          <MissionBrief
-            mission={state.mission}
-            page={briefingPage}
-            onPage={setBriefingPage}
-            {...(summary ? { summary } : {})}
-            {...(assets ? { assets } : {})}
+          <EscapeMenu
+            page={escapePage}
+            onPage={setEscapePage}
             onCommand={act}
-          />
+            levels={levels}
+            onLevel={(bus, value) => audioMixer.set(bus, value)}
+            muted={muted}
+            onMute={() => muteControl.toggle()}
+            settingsHost={setSettingsHost}
+            error={mixerError}
+          >
+            {escapePage === 'briefing' && (
+              <MissionBrief
+                mission={state.mission}
+                page={briefingPage}
+                onPage={setBriefingPage}
+                {...(summary ? { summary } : {})}
+                {...(assets ? { assets } : {})}
+                onCommand={act}
+                embedded
+              />
+            )}
+          </EscapeMenu>
         )}
       </div>
     );
@@ -196,6 +263,7 @@ export function Shell({ search }: { search: string }) {
       <TerrainViewer
         key={state.screen}
         mission={state.mission}
+        onMission={(mission) => setState((previous) => ({ ...previous, mission }))}
         onGunMode={(gunMode) =>
           setState((previous) => ({ ...previous, mission: { ...previous.mission, gunMode } }))
         }
@@ -242,6 +310,7 @@ export function Shell({ search }: { search: string }) {
   return (
     <MainMenu
       mission={state.mission}
+      onMission={(mission) => setState((previous) => ({ ...previous, mission }))}
       onGunMode={(gunMode) =>
         setState((previous) => ({ ...previous, mission: { ...previous.mission, gunMode } }))
       }

@@ -1,3 +1,4 @@
+import { groundWindEnvironment } from './ground-wind';
 import rawAircraft from '../../data/placeholder-aircraft.json';
 import type { DamageEffects } from '../combat/damage';
 import { fitEnvelopeAero } from './retail-envelope';
@@ -377,7 +378,7 @@ export function stepFlight(
   if (state.status === 'crashed') return finish(state);
   const ground = env.sampleGround(state.position.x, state.position.z);
   if (!ground) return finish({ ...state, status: 'waiting-terrain' });
-  const a = aerodynamics(state, env, def),
+  const a = aerodynamics(state, groundWindEnvironment(state, env), def),
     pitch = clamp(controls.pitch, -1, 1),
     roll = clamp(controls.roll, -1, 1),
     yaw = clamp(controls.yaw, -1, 1);

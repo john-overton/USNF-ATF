@@ -1,4 +1,5 @@
 import type { AircraftId } from './aircraft-catalog';
+import { connectMixer } from './AudioMixer';
 import { isEditingTarget, muteControl } from './mute';
 import type { Platform } from '../platform/Platform';
 
@@ -147,6 +148,7 @@ export function flightAudioLevels(state: FlightAudioState): {
 
 /** A scene owns one instance and disposes it together with its input adapter. */
 export class FlightAudio {
+  private disconnectMixer?: () => void;
   private context?: AudioContext;
   private master?: GainNode;
   private jet?: GainNode;
@@ -239,7 +241,7 @@ export class FlightAudio {
     this.context = context;
     const master = context.createGain();
     master.gain.value = muteControl.muted ? 0 : 0.45;
-    master.connect(context.destination);
+    this.disconnectMixer = connectMixer(context, master, 'aircraft');
     this.master = master;
     const buffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
     const samples = buffer.getChannelData(0);
@@ -437,6 +439,7 @@ export class FlightAudio {
     };
   }
   dispose(): void {
+    this.disconnectMixer?.();
     if (this.disposed) return;
     this.disposed = true;
     window.removeEventListener('pointerdown', this.gesture);

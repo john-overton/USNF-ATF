@@ -1,4 +1,5 @@
 import type { TerrainChunk } from '../data';
+import { chunkNeedsReflection } from './world-orientation';
 
 export async function decodeTerrainBytes(
   bytes: Uint8Array,
@@ -38,6 +39,7 @@ export async function decodeChunk(bytes: Uint8Array, chunk: TerrainChunk): Promi
   const raw = await decodeTerrainBytes(bytes, chunk, 256 * 256 * 2);
   const samples = new Float32Array(256 * 256),
     view = new DataView(raw.buffer);
+  const reverse = chunkNeedsReflection(chunk);
   for (let i = 0; i < samples.length; i++) {
     const h = chunk.offset + view.getUint16(i * 2, true) * chunk.scale;
     if (
@@ -45,7 +47,7 @@ export async function decodeChunk(bytes: Uint8Array, chunk: TerrainChunk): Promi
       h > chunk.maxElevation + chunk.scale + 0.001
     )
       throw new Error('Sample outside manifest elevation bounds');
-    samples[i] = h;
+    samples[reverse ? Math.floor(i / 256) * 256 + 255 - (i % 256) : i] = h;
   }
   return samples;
 }

@@ -4,6 +4,7 @@ import {
   CloudPass,
   MARCH_FRAGMENT,
   SHADOW_CHUNK,
+  cloudLightingFactors,
   cloudScaleFor,
   createCloudShadowUniforms,
   updateCloudShadowUniforms,
@@ -20,8 +21,10 @@ const state = (): CloudUniformState => ({
   cirrus: WEATHER_PRESETS.broken.layers[1]!,
   sunDirection: new Vector3(0.3, 0.9, -0.2).normalize(),
   sunColor: new Color(1, 0.94, 0.82),
+  sunIntensity: 2.4,
   zenithColor: new Color(0.2, 0.35, 0.7),
   groundColor: new Color(0.3, 0.29, 0.26),
+  ambientIntensity: 1.7,
   origin: { x: 8192, z: -16384 },
   fogColor: new Color(0x91b1c8),
   fogNear: 80000,
@@ -41,6 +44,15 @@ test('cloud quality maps to a march scale and off disables the pass', () => {
   p.quality = 'full';
   expect(p.enabled).toBe(true);
   p.dispose();
+});
+
+test('cloud lighting follows direct and hemisphere intensity rather than retaining white fill', () => {
+  expect(cloudLightingFactors(2.4, 1.7)).toEqual({ direct: 1, ambient: 1 });
+  const twilight = cloudLightingFactors(1.08, 0.2);
+  expect(twilight.direct).toBeCloseTo(0.45, 5);
+  expect(twilight.ambient).toBeLessThan(0.12);
+  expect(MARCH_FRAGMENT).toContain('uniform float cloudSunStrength;');
+  expect(MARCH_FRAGMENT).toContain('uniform float cloudAmbientStrength;');
 });
 
 test('setSize recomputes the low-resolution target and its byte estimate', () => {

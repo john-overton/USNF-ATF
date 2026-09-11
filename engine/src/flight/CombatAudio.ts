@@ -1,4 +1,5 @@
 import type { CombatEvent } from '../sim/combat/world';
+import { connectMixer } from './AudioMixer';
 import { AUDIO_GAPS } from './audio-capabilities';
 import type { Vec3 } from '../sim/flight';
 import { isEditingTarget, muteControl } from './mute';
@@ -100,6 +101,7 @@ interface Voice {
  * Pause discards one-shots rather than resuming stale explosions. Call reset when
  * replacing the CombatWorld (which restarts its event-id sequence). */
 export class CombatAudio {
+  private disconnectMixer?: () => void;
   private context?: AudioContext;
   private master?: GainNode;
   private buffers = new Map<string, AudioBuffer>();
@@ -126,7 +128,7 @@ export class CombatAudio {
         this.context = new AudioContext();
         this.master = this.context.createGain();
         this.master.gain.value = muteControl.muted ? 0 : 0.45;
-        this.master.connect(this.context.destination);
+        this.disconnectMixer = connectMixer(this.context, this.master, 'effects');
       }
       if (this.context.state === 'suspended')
         void this.context.resume().catch((error: unknown) => {
@@ -287,6 +289,10 @@ export class CombatAudio {
         value || muteControl.muted ? 0 : 0.45,
         this.context.currentTime,
       );
+    if (this.context && this.context.state !== 'closed')
+      void (value ? this.context.suspend() : this.context.resume()).catch((error: unknown) => {
+        this.error = String(error);
+      });
   }
   reset(): void {
     this.stopVoices();
@@ -323,6 +329,7 @@ export class CombatAudio {
     };
   }
   dispose(): void {
+    this.disconnectMixer?.();
     if (this.disposed) return;
     this.disposed = true;
     window.removeEventListener('pointerdown', this.gesture);

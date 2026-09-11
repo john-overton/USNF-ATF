@@ -3,6 +3,7 @@ import type { FsRoot, Platform } from '../platform/Platform';
 import { WaterBodyIndex } from './WaterIndex';
 import { ByteCache } from '../terrain/cache';
 import { decodeChunk, sampleHeight } from '../terrain/chunk';
+import { sourceX } from '../terrain/world-orientation';
 
 export interface ContactSurface {
   height: number;
@@ -80,8 +81,9 @@ export class GroundSampler {
       [1, 100],
     ] as const) {
       const span = 255 * spacing;
+      const gridX = sourceX(this.manifest, x);
       const chunk = this.index.get(
-        `${lod}/${Math.floor(Math.min(x, this.manifest.extents.width - 0.001) / span)}/${Math.floor(Math.min(z, this.manifest.extents.height - 0.001) / span)}`,
+        `${lod}/${Math.floor(Math.min(gridX, this.manifest.extents.width - 0.001) / span)}/${Math.floor(Math.min(z, this.manifest.extents.height - 0.001) / span)}`,
       );
       if (chunk) return chunk;
     }

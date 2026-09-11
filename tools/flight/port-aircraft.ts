@@ -18,7 +18,7 @@ export function portCommands(id: AircraftId, sourceRoot: string, out: string, py
   const recipe = AIRCRAFT_RECIPES[id];
   const source = (relative: string) => path.resolve(sourceRoot, relative);
   return [
-    [python, '-m', 'retail.sh_static', source(recipe.model), '--pal', source(recipe.palette), '--out', path.join(out, `${id}.json`), '--name', AIRCRAFT[id].name, `--${recipe.scale.axis}-metres`, String(recipe.scale.metres)],
+    [python, '-m', 'retail.sh_static', source(recipe.model), '--pal', source(recipe.palette), '--out', path.join(out, `${id}.json`), '--name', AIRCRAFT[id].name, `--${recipe.scale.axis}-metres`, String(recipe.scale.metres), ...(recipe.rigVariant ? ['--rig-variant', recipe.rigVariant] : [])],
     [python, '-m', 'retail.flight', '--pt', source(recipe.pt), '--out', path.join(out, `${id}-flight.json`)],
     [python, '-m', 'retail.audio', '--pt', source(recipe.pt), '--out', path.join(out, 'audio', `${id}.json`)],
     [python, '-m', 'retail.cockpit', '--aircraft', id, '--source-root', sourceRoot, '--out', path.join(out, 'cockpits', `${id}.json`)],
@@ -35,6 +35,7 @@ export function summarizeModel(value: unknown) {
   let triangles = 0;
   for (const part of parts) {
     triangles += part.positions.length / 9;
+    if (part.name.startsWith('afterburner-')) continue;
     part.positions.forEach((n, i) => { const axis = i % 3; min[axis] = Math.min(min[axis]!, n); max[axis] = Math.max(max[axis]!, n); });
   }
   return {

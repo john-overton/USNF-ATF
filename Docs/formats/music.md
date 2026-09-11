@@ -1,5 +1,24 @@
 # Music recovery — 2026-09-10
 
+## Baked runtime extension
+
+User approved FluidR3 previews; all local XMI files are now baked. Optional
+`audio/flight-music-baked.json` version1/rendering `fluidsynth-user-bank` has a
+`tracks` map keyed by original source SHA-256. Entries carry name, WAV/bank SHA-256,
+byte size, original and rendered durations, and conversion limitations. WAV path is
+derived only from the validated hash under `audio/music-baked/`. Notes and scores
+in `flight-music.json` remain authoritative; matching renders supply sound, not new
+score assignments. Missing/invalid data falls back explicitly to the old renderer.
+No FluidSynth process runs in-game. See [schema/use/verification](../baselines/fluidr3-audition.md).
+This supersedes earlier oscillator-only and listening-pending status below.
+
+## Current audition status
+
+FluidSynth 2.6.0 and FluidR3 GM are now installed locally. Three offline baseline
+renders succeeded; see [audition evidence](../baselines/fluidr3-audition.md).
+This supersedes missing-synth/bank statements below. Native device identity remains
+unknown, user listening is pending, and the engine still uses authored oscillators.
+
 ## Gap follow-up (supersedes earlier controller limitations below)
 
 Runtime supports RPN0 sensitivity (CC101/100, CC6/38), sustain64, sound-off120,

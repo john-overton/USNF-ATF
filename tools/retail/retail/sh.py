@@ -125,7 +125,7 @@ FIXED = {
     0xee: 2, 0xe4: 20, 0xe6: 10, 0xea: 8, 0x76: 10, 0x08: 10,
 }
 BC_SIZES = {0x72: 6, 0x96: 8, 0x08: 6, 0x3a: 8, 0x68: 10}
-COND_JUMPS = {0x05, 0x12, 0x14, 0x18, 0x4a}
+COND_JUMPS = {0x05, 0x14, 0x18, 0x4a}
 JB = {0x38: 3, 0x05: 3, 0x48: 4, 0xc8: 8, 0xa6: 6, 0xac: 4}
 
 
@@ -224,7 +224,10 @@ class _Walker:
         if op == 0x38:                      # jump rel16
             tgt = off + JB[0x38] + self.s16(off + 1)
             return 3, table, [tgt], False
-        if op in COND_JUMPS:                # conditional jump rel16 (05 after plane tests; 12/14/18/4a state tests)
+        if op == 0x12:                      # relative subroutine call; native saves return PC
+            tgt = off + 4 + self.s16(off + 2)
+            return 4, table, [tgt], True
+        if op in COND_JUMPS:                # conditional jump rel16 (05 after plane tests; 14/18/4a state tests)
             tgt = off + JB[0x05] + self.s16(off + 2)
             return 4, table, [tgt], True
         if op == 0x6c:                      # state test: 6 bytes + embedded [N 00 rel16] conditional jump

@@ -82,6 +82,17 @@ test('the data root and manifest keep the viewer defaults', () => {
   );
 });
 
+test('a selected theater supplies its installed manifest unless a deep link overrides it', () => {
+  expect(parse('?theater=salt-lake')).toMatchObject({
+    theater: 'salt-lake',
+    manifestPath: 'terrains/salt-lake/manifest.json',
+  });
+  expect(parse('?theater=salt-lake&manifest=terrains/custom/manifest.json').manifestPath).toBe(
+    'terrains/custom/manifest.json',
+  );
+  expect(validateMission({ ...DEFAULT_MISSION, theater: 'salt-lake' })).toEqual([]);
+});
+
 test('fuel, payload, opponent count and skill clamp instead of failing a load', () => {
   expect(parse('?flightFuel=-3').loadout.internalFuelFraction).toBe(0);
   expect(parse('?flightFuel=9').loadout.internalFuelFraction).toBe(1);

@@ -1,3 +1,4 @@
+import { groundWindEnvironment } from '../sim/flight/ground-wind';
 import type { gunSight, GunSightTarget } from './gun-sight';
 import { LagGunSight } from './lag-gun-sight';
 import type { GunMode } from '../data/retail-gun';
@@ -97,6 +98,8 @@ export interface FlightDiagnostics {
   aircraftName: string;
   aircraftId: AircraftId;
   modelTriangles: number;
+  gearSource: 'retail' | 'placeholder';
+  gearSupportHeightM: number;
   flightModel: string;
   flightModelId: 'assisted' | 'retail-envelope' | 'recovered-envelope';
   nativeEnvelopeAvailable: boolean;
@@ -307,6 +310,8 @@ export class FlightLayer {
             nativeEnvelope: this.useNativeEnvelope,
           }
         : PLACEHOLDER_AIRCRAFT;
+    if (model?.hasGear && model.data.gearHeightM !== undefined)
+      this.definition = { ...this.definition, gearHeightM: model.data.gearHeightM };
     this.environment = { sampleGround: (x: number, z: number) => ground.sample(x, z) };
     this.state = this.initialState();
     this.previous = this.state;
@@ -346,11 +351,13 @@ export class FlightLayer {
       this.aircraft.add(fin);
     } else this.aircraft.add(model.group);
     const presentationScale = model ? AIRCRAFT[this.aircraftId].length / 19.1 : 1;
-    for (const [x, z] of [
-      [-1.7, 1.2],
-      [1.7, 1.2],
-      [0, model ? -5 : -3],
-    ]) {
+    for (const [x, z] of model?.hasGear
+      ? []
+      : [
+          [-1.7, 1.2],
+          [1.7, 1.2],
+          [0, model ? -5 : -3],
+        ]) {
       const pivot = new Group();
       pivot.position.set(x! * presentationScale, -0.65, z! * presentationScale);
       const strut = new Mesh(new BoxGeometry(0.15, 1.25, 0.15), fuselage);
@@ -365,7 +372,7 @@ export class FlightLayer {
     // Original moving hook and burner effects supplement imported geometry when needed.
     configureAircraftHook(this.hook, this.aircraftId, !!model, dark);
     this.aircraft.add(this.hook);
-    for (const x of !AIRCRAFT[this.aircraftId].afterburner
+    for (const x of !AIRCRAFT[this.aircraftId].afterburner || this.model?.hasAfterburner
       ? []
       : this.aircraftId === 'x31'
         ? [0]
@@ -442,7 +449,7 @@ export class FlightLayer {
     return createFlightState({
       position: {
         x: this.strip.x,
-        y: this.strip.elevation + PLACEHOLDER_AIRCRAFT.gearHeightM,
+        y: this.strip.elevation + this.definition.gearHeightM,
         z: this.strip.z + this.strip.length / 2 - 150,
       },
       airspeed: 0,
@@ -712,7 +719,7 @@ export class FlightLayer {
           flaps: this.systems.flapFraction,
           airbrake: this.systems.airbrakeFraction,
         },
-        this.environment,
+        this.useRetail ? this.environment : groundWindEnvironment(this.state, this.environment),
         definition,
         dt,
       );
@@ -729,7 +736,14 @@ export class FlightLayer {
         this.airborneArmed = false;
       }
       this.state = next.state;
-      this.telemetry = next.telemetry;
+      this.telemetry = this.useRetail
+        ? next.telemetry
+        : {
+            ...sampleAssistedTelemetry(next.state, this.environment, definition, {
+              flaps: this.systems.flapFraction,
+            }),
+            reason: next.telemetry.reason,
+          };
       const hours = this.environmentModel?.settings.timeOfDayHours ?? 12;
       const weather = this.environmentModel?.settings.weather;
       const wasDestroyed = this.combat.player.damage.destroyed;
@@ -862,7 +876,7 @@ export class FlightLayer {
       if (name.startsWith('wing-right')) part.rotation.y = -this.wingSweep();
     }
     for (const part of this.model?.data.parts ?? []) {
-      if (part.rotationAxis)
+      if (part.rotationAxis && !part.gearPose && part.nativeBrakeAngle === undefined)
         this.model?.setSurfaceAngle(
           part.name,
           surfaceAngle(part.name, {
@@ -872,6 +886,8 @@ export class FlightLayer {
           }),
         );
     }
+    this.model?.setGearFraction(this.systems.gearFraction);
+    this.model?.setAirbrakeFraction(this.systems.airbrakeFraction);
     this.model?.setAfterburner(this.input.engineRunning && this.systems.afterburnerFraction > 0.1);
     this.hook.rotation.x =
       Number(this.hook.userData.stowedAngle) +
@@ -973,6 +989,8 @@ export class FlightLayer {
           : 70000,
       flightProfileSha256: this.useRetail ? this.profile!.source.sha256 : null,
       modelTriangles: this.model?.triangles ?? 0,
+      gearSource: this.model?.hasGear ? 'retail' : 'placeholder',
+      gearSupportHeightM: this.definition.gearHeightM,
       cameraMode: this.input.cameraMode,
       viewYawRad: this.input.cameraYaw,
       viewPitchRad: this.input.cameraPitch,
@@ -1008,13 +1026,21 @@ export class FlightLayer {
         wingSweepRad: this.wingSweep(),
         ...(this.model?.surfaceDiagnostics() ?? {}),
         gearRotation: this.gearParts[0]?.rotation.z ?? 0,
-        gearVisible: Number(this.gearParts[0]?.visible),
+        gearVisible: Number(
+          this.model?.hasGear ? this.systems.gearFraction > 0.01 : this.gearParts[0]?.visible,
+        ),
         hookRotation: this.hook.rotation.x,
         hookPivotY: this.hook.position.y,
         hookPivotZ: this.hook.position.z,
         hookArmLength: Number(this.hook.userData.armLength),
-        burnerVisible: Number(this.burners[0]?.visible),
-        wingLeftRotation: this.model?.parts.get('wing-left-color')?.rotation.y ?? 0,
+        burnerVisible: Number(
+          this.model?.hasAfterburner
+            ? this.model.afterburnerVisible
+            : (this.burners[0]?.visible ?? false),
+        ),
+        wingLeftRotation:
+          [...(this.model?.parts ?? [])].find(([name]) => name.startsWith('wing-left'))?.[1]
+            .rotation.y ?? 0,
       },
     };
   }

@@ -38,6 +38,57 @@ The 1024 × 1024 RGBA map uses approximately 5.33 MiB of GPU mip storage plus
 191.94 MiB GPU plus 143.95 MiB CPU. Switching back to the large satellite atlas
 still incurs its one-time decode/upload cost.
 
+## Elevation-based snow — 2026-09-11
+
+Optional `--snow theaters/salt-lake-snow.json` blends each seasonal palette toward
+an editable snow RGB color. Every band is `[snow begins, full snow]` in meters
+above sea level. A smoothstep transition avoids hard elevation stripes. The
+greater of the season and permanent-band weights wins, so the permanent band
+guarantees snow even if a season's snowline is raised above it.
+
+Salt Lake's artistic starting bands are winter 1800–2400 m, spring 2400–3100 m,
+autumn 2800–3400 m, summer 3300–3800 m; permanent 3800–4100 m. These are not
+measured snowlines. No slope/aspect, snowfall, glacier, lake ice or snow-depth
+simulation is implied. Water rendering/classification and flight contact do not
+change. Other theaters remain unchanged unless explicitly baked with snow rules.
+
+Heights are bilinearly sampled from verified 100 m base DEM chunks at atlas texel
+centers. Missing coverage fails the bake. At the default Salt Lake resolution,
+one color texel spans about 843 m, so tiny summit snow patches can be missed.
+Rules and a digest of the contributing DEM records are recorded in provenance.
+Rebaking still reuses the original appearance weights, never a previously snowed
+image. Always pass `--snow` to retain snow on subsequent rebakes; omitting it
+explicitly produces the original palette-only appearance.
+
+```sh
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline color-maps extracted/terrain/salt-lake/manifest.json --weights extracted/terrain/salt-lake/color-maps/weights.npz --palettes extracted/terrain/salt-lake/color-maps/palettes.json --snow theaters/salt-lake-snow.json
+```
+
+## Date-driven satellite appearance — 2026-09-11
+
+Select **satellite** in Ground colors and change the live Date control. The source
+atlas stays loaded; viewer-local shader uniforms continuously interpolate artistic
+tints at day 15 (gray winter), 110 (light-green spring), 205 (darker-green summer)
+and 290 (brown autumn), with smooth year-wrap interpolation. The clock contributes
+its fractional day. Southern latitudes shift the cycle by half a year. An RGB
+vegetation hint reduces greening on deserts, rock and salt flats; this is not
+land-cover classification or a reconstruction of historical seasonal imagery.
+
+Salt Lake also interpolates snowlines from the shared `theaters/salt-lake-snow.json`
+rules, plus the permanent-snow override. Runtime snow uses morphed/seam-adjusted
+terrain height, not source-photo brightness, and blends toward pure-white albedo
+before lighting. Sun, moon, clouds and slope shading still affect snow; it does
+not glow at night. A snow-only post-light white balance removes 90% of the warm
+color cast and multiplies brightness by 1.4 before fog/tone mapping, preserving
+relative slope shading with no emissive floor. This is an artistic readability
+adjustment, not a physical snow reflectance model. Palette bakes now also use
+pure white and were reinstalled.
+The runtime adds no height, collision, water/ice changes or extra texture atlas.
+It applies only to satellite mode; manually selected seasonal bakes remain fixed
+and are not double-tinted. Other theaters receive the date tint, but have no
+runtime snow unless a theater-specific rule is added. The photo can still contain
+source-date snow/shadows; this pass does not reconstruct what lies beneath them.
+
 ## Shoreline ribbons — first pass, 2026-09-09
 
 `pipeline shorelines` derives continuous ribbons from the existing sea-level water

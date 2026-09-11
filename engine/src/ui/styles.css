@@ -86,6 +86,18 @@ th {
   display: grid;
   gap: 4px;
 }
+.environment-clock-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(132px, 0.55fr);
+  align-items: end;
+  gap: 12px;
+}
+.environment-clock-controls > div {
+  min-width: 0;
+}
+.environment-clock-controls input[type='range'] {
+  width: 100%;
+}
 .terrain-panel input,
 .terrain-panel select,
 .terrain-panel button {
@@ -307,6 +319,16 @@ th {
   gap: 0.5cqw;
   font-size: 1.6cqw;
 }
+.menu-theater-select {
+  display: flex;
+  align-items: center;
+  gap: 0.45cqw;
+  color: #ccd8df;
+  font-size: 1.7cqw;
+}
+.menu-theater-select select {
+  max-width: 30cqw;
+}
 .menu-main-caption span {
   color: #bac7d1;
 }
@@ -424,7 +446,107 @@ th {
   position: relative;
 }
 .mission-view[aria-hidden='true'] {
-  visibility: hidden;
+  filter: brightness(0.35);
+}
+.escape-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  overflow: auto;
+  color: #f2e7bc;
+  background: #10140e55;
+}
+.escape-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 6px 12px;
+  background: linear-gradient(#595d43, #292e21);
+  border-block: 2px solid #a7a47b;
+  box-shadow: 0 4px 10px #0009;
+}
+.escape-overlay button,
+.escape-settings select {
+  padding: 8px 14px;
+  font: inherit;
+  color: #fff2bf;
+  background: #343c29;
+  border: 1px outset #aaa684;
+  cursor: pointer;
+}
+.escape-overlay button:hover,
+.escape-overlay button[aria-pressed='true'] {
+  background: #596246;
+}
+.escape-overlay :focus-visible {
+  outline: 2px solid #ffdf65;
+  outline-offset: 3px;
+}
+.escape-panel {
+  margin: 6vh auto;
+  width: min(760px, calc(100% - 48px));
+  padding: 24px;
+  box-sizing: border-box;
+  background: #20281eef;
+  border: 2px ridge #a8a17c;
+  box-shadow: 0 10px 40px #0009;
+}
+.escape-panel h1 {
+  margin-top: 0;
+  font-size: 24px;
+}
+.escape-panel p {
+  line-height: 1.5;
+}
+.escape-panel button {
+  margin: 8px 8px 0 0;
+}
+.mixer-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 2fr 48px;
+  align-items: center;
+  gap: 16px;
+  margin: 18px 0;
+}
+.mixer-row input {
+  width: 100%;
+  accent-color: #dfbc55;
+}
+.mixer-row output {
+  text-align: right;
+}
+.escape-settings label {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+  margin: 16px 0;
+}
+.escape-settings .environment-clock-controls label {
+  margin: 16px 0;
+}
+.escape-settings select,
+.escape-settings input[type='range'],
+.escape-settings input[type='date'] {
+  max-width: 65%;
+  flex: 1;
+}
+.mission-brief-embedded {
+  position: relative;
+  height: calc(100% - 58px);
+  min-height: 420px;
+}
+@media (max-width: 600px) {
+  .escape-panel {
+    padding: 16px;
+  }
+  .mixer-row {
+    grid-template-columns: 1fr 40px;
+    gap: 8px;
+  }
+  .mixer-row span {
+    grid-column: 1 / -1;
+  }
 }
 .mission-pause {
   position: absolute;

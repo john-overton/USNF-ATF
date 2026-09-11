@@ -1,5 +1,70 @@
 # SH: shape research and neutral F-14 projection
 
+## 2026-09-11: native texture composition, decals and gear
+
+This corrects the earlier partial `4c/6c` cutout interpretation. Native ATF
+`FC` polygon handler dispatches a palette/Gouraud base followed by a texture
+pass. Subtype bit 8 selects keyed texture copying; the inner copy skips exact
+index `0xff`. For `EE`, the underlying opaque fill uses shared per-vertex palette
+colors from `F6` (slot uint16 +1, palette byte +3, signed lighting normal +4..6).
+`ED/CD` instead use the header palette color. Texture-only `4C/6C` have no base
+fill. Making the whole EE mesh transparent incorrectly removes skin. Export now
+captures these colors and composes base/texture in one renderer draw. The raw
+palette colors are recovered; Three.js lighting is still authored.
+
+`E0` handler `0x4b92a8` calls `BrushFromIndex` (`0x49c5a0`) and changes the active
+bitmap to a player/mission decal. Unconfigured indices fall back to `BLANK.PIC`,
+a 256×128 all-index255 image in both local `_1.LIB` trees. It must not retain the
+previous `_F14`/`_A4` atlas. Default export omits these invisible overlays; livery
+selection is not yet imported. `E2` restores explicitly named textures. `D0`
+invokes `DrawStreamer`, not a texture binding.
+
+The native texture path calls `G_TextureFlip` at `0x48d020`, replacing V with
+`(height-1)-V`; preserve the inversion and use texel-center normalization. Stored
+normal tests select only front-facing surfaces. Exported winding now follows the
+stored normal, and runtime front-face culling prevents competing opposite-side
+artwork. Mipmaps/filtering and overlay depth bias are modern renderer choices.
+Exact disassembly/reproduction: ignored `extracted/aircraft-textures/native-*.txt`
+and `native-findings.md`. These are static executable findings, not complete
+native renderer execution/parity.
+
+Reviewed gear-state projections add F14 10, A4 18, F31 22 original polygons,
+including textured wheel/strut cutouts and doors. `sh_gear.py` merges only these
+state differences with neutral skin. Native mounts are reused; grouped runtime
+retraction remains authored. Visible alpha footprints determine scale-aware
+support height. See [porting procedure](../aircraft-porting.md) and
+[verification](../baselines/aircraft-textures.md).
+
+
+## 2026-09-11: relative shape calls restore missing flap panels
+
+Correction to the earlier static projection and surface acceptance: opcode `0x12`
+is a subroutine call, not a visibility/state test to ignore. Native ATF.SMS
+handler `0x4b6b98` reads the signed rel16 at opcode+2, saves return PC opcode+4,
+and calls opcode+4+rel16. On return it restores only PC. Vertex slots and texture
+state persist. Dispatch table `0x4f644c` selects this handler; `0x1e` handler
+`0x4b6114` returns, and `0x82` handler `0x4b677c` writes shared vertex slots.
+Exact disassembly/reproduction is in ignored
+`extracted/flap-recovery/native-call.txt`. This is direct static executable
+inspection, not an executed oracle for the complete drawing program.
+
+The old projector skipped neutral flap subcalls selected by the existing zero-state
+F0 guards. Correct call traversal restores 6 A4, 6 F31 and 8 F14 polygons, with
+no changes to previously emitted polygon positions in the local comparison.
+Four A4 faces fill both rectangular inboard wing gaps; four F31 faces restore
+inboard trailing panels; eight F14 faces restore inner/outer trailing panels.
+The remaining A4/F31 faces restore a static hook/rudder respectively. Counts
+before authored partitioning are now A4 240, F31 230, F14 194.
+
+The rig now uses these original flap faces rather than cutting substitute strips
+from fixed wing. A4 hinge follows the panels' upper forward edge; F14 inner/outer
+panels have separate exact leading-edge axes; F31 splits inner/outer hinges at
+the change in wing height. Deflection angles/mixing remain authored. The earlier
+claim that the A4's missing inboard area was a stepped source trailing edge is
+retracted. Full SH state/LOD semantics, thick-skin hinge mechanics and native
+animation schedules remain unproven. See [updated port technique](../aircraft-porting.md).
+
+
 ## 2026-09-10: exterior cockpit cutouts and authored surface placement
 
 Inspected local F14/A4/F31 atlas artwork and polygon mappings show palette index
@@ -250,3 +315,27 @@ At 7.26 m wingspan, F31 is 14.988 m long with 2.576 m canard span. Nose/probe
 interpretation and native unit scale remain uncertain. Different retail skins
 do not fix the small source canard proportions. Measurements remain ignored in
 `extracted/x31-review/measurements.json`; see [setup](../phase-4-aircraft.md).
+
+
+## 2026-09-11: ATF device state and exterior variants
+
+ATF F14 differs from USNF F14: the reviewed neutral projection contains 322 faces
+versus 194, with different articulated pivots and state-word addresses. Use an
+explicit source variant in rig selection. ATF F14 gear state is `0x802c`; brakes
+are `0x8026`; afterburner is `0x8020`. A4 brakes use `0x6d30`; F31 brakes use
+`0x65a6` and afterburner `0x65a0`. Burner imports resolve to `_PLafterBurner` via
+the native import/thunk table. These selected branches are statically recognized,
+not executed x86 animation.
+
+Brake states add 12/4/4 faces for A4/F14/F31; burner states add 8/4 for F14/F31.
+No neutral skin or nozzle polygons disappear in these comparisons. The A4 panel
+is aft of the previously authored skin cut and includes separate back/brace
+geometry. Native burner faces are crossed atlas-mapped sheets, not cone meshes.
+ATF F14 neutral nozzle disks use subtype 0x74 and F31 uses 0x64, so USNF's 0x44
+check is not portable. ATF texture-only keyed overlays also use 0x5c/0x7c.
+
+Keep state deltas separate from authored control-surface partitions. Original
+geometry, UVs and selected-state identity are recovered; brake interpolation,
+gear retraction, brightness and actuator schedules remain presentation choices.
+See [device baseline](../baselines/aircraft-devices.md) for local evidence paths,
+source identity, reproduction and runtime verification.

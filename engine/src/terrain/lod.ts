@@ -1,5 +1,6 @@
 import type { TerrainChunk, TheaterManifest } from '../data';
 import { LOD_METERS, type LodLevel } from './index';
+import { sourceX } from './world-orientation';
 
 export interface WorldPosition {
   x: number;
@@ -86,11 +87,12 @@ export function selectSourceChunks(
     const span = 255 * LOD_METERS[level];
     // Sparse airbase LOD0 must never replace complete coarse theater coverage.
     let required = 0;
-    const x0 = Math.max(0, Math.floor((camera.x - horizon) / span));
+    const gridCamera = { ...camera, x: sourceX(manifest, camera.x) };
+    const x0 = Math.max(0, Math.floor((gridCamera.x - horizon) / span));
     const z0 = Math.max(0, Math.floor((camera.z - horizon) / span));
     const x1 = Math.min(
       Math.ceil(manifest.extents.width / span) - 1,
-      Math.floor((camera.x + horizon) / span),
+      Math.floor((gridCamera.x + horizon) / span),
     );
     const z1 = Math.min(
       Math.ceil(manifest.extents.height / span) - 1,
@@ -98,7 +100,7 @@ export function selectSourceChunks(
     );
     for (let z = z0; z <= z1 && required <= 25; z++)
       for (let x = x0; x <= x1 && required <= 25; x++) {
-        if (distanceToSquare(x * span, z * span, span, camera) < horizon) required++;
+        if (distanceToSquare(x * span, z * span, span, gridCamera) < horizon) required++;
       }
     if (
       required === candidates.length &&

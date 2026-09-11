@@ -15,6 +15,26 @@ import { DEFAULT_MISSION, type MissionParams } from '../../sim/mission/params';
 const go = (screen: Screen, command: MenuAction['command'], mission = DEFAULT_MISSION) =>
   nextScreen(screen, { command }, mission);
 
+test('changing planes drops aircraft-specific stores but preserves the rest of the mission', () => {
+  const mission: MissionParams = {
+    ...DEFAULT_MISSION,
+    theater: 'salt-lake',
+    manifestPath: 'terrains/salt-lake/manifest.json',
+    loadout: {
+      ...DEFAULT_MISSION.loadout,
+      internalFuelFraction: 0.65,
+      stations: { 4: { store: 'AIM54C.JT', count: 2 } },
+    },
+  };
+  for (const aircraft of ['a4e', 'x31'] as const) {
+    const next = nextMission({ command: 'choose-aircraft', aircraft }, mission);
+    expect(next).toEqual({ ...mission, aircraft, loadout: { ...mission.loadout, stations: {} } });
+    expect(next.loadout.internalFuelFraction).toBe(0.65);
+  }
+  expect(nextMission({ command: 'choose-aircraft', aircraft: 'f14' }, mission)).toBe(mission);
+  expect(mission.loadout.stations[4]?.store).toBe('AIM54C.JT');
+});
+
 test('a bare launch shows the menu and every existing deep link still wins', () => {
   expect(initialScreen('')).toBe('main-menu');
   expect(initialScreen('?')).toBe('main-menu');
@@ -131,6 +151,27 @@ test('a whole run from the menu to a flight and back leaves a flyable mission', 
   expect(state.screen).toBe('quick-fight');
   expect(state.mission.mode).toBe('quick-fight');
   expect(state.mission.opponents).toEqual([{ aircraft: 'f14', skill: 2 }]);
+});
+
+test('a selected theater stays attached through explorer, flight setup, pause and resume', () => {
+  const saltLake: MissionParams = {
+    ...DEFAULT_MISSION,
+    theater: 'salt-lake',
+    manifestPath: 'terrains/salt-lake/manifest.json',
+  };
+  let state: ShellState = { screen: 'main-menu', mission: saltLake };
+  state = applyMenuAction(state, { command: 'terrain-explorer' });
+  expect(state).toMatchObject({ screen: 'explorer', mission: saltLake });
+  state = applyMenuAction({ ...state, screen: 'main-menu' }, { command: 'free-flight' });
+  state = applyMenuAction(state, { command: 'choose-aircraft', aircraft: 'f14' });
+  state = applyMenuAction(state, { command: 'fly' });
+  expect(state).toMatchObject({ screen: 'flight', mission: { ...saltLake, mode: 'free-flight' } });
+  state = applyMenuAction(state, { command: 'back' });
+  state = applyMenuAction(state, { command: 'resume' });
+  expect(state.mission).toMatchObject({
+    theater: 'salt-lake',
+    manifestPath: 'terrains/salt-lake/manifest.json',
+  });
 });
 
 test('the debrief keeps the summary taken as the flight was left', () => {

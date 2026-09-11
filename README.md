@@ -11,8 +11,9 @@ A non-commercial fan remake of Jane's US Navy Fighters '97 (and, later, ATF Gold
 **Current status (2026-09-10):** the app now opens on a **main menu** rather than
 straight into the viewer. From it you can set up a guns-only quick fight, take a free
 flight, or enter the terrain explorer, choosing an aircraft and its loadout on the
-way. Escape opens a two-page mission briefing and pauses the current flight;
-Resume or Escape continues it, and Main menu ends it, without a page reload.
+way. Escape opens a classic-style pause bar with live settings, a saved volume
+mixer, the two-page mission briefing, debrief and confirmed exit controls.
+Resume or Escape continues the retained flight, without a page reload.
 The main menu is laid out at the geometry recovered from the original's own
 `CHOOSEAC.DLG`, and it will use the original's artwork and sounds if you port them
 from your own disc ([menu porting](Docs/menu-porting.md)). The loadout screen shows
@@ -41,10 +42,21 @@ exports all identified standalone audio from both discs, including unused speech
 An additional 48s S35_S soundtrack prefix is recovered separately as incomplete.
 MIDI bend sensitivity, sustain/releases and bounded finite XMIDI loops are supported;
 unsupported controls are diagnosed. Offline user-bank MIDI audition is optional,
-not an engine instrument-fidelity upgrade; see [remaining audio gaps](Docs/baselines/audio-gaps.md).
+and user-approved FluidR3 renders can now supply flight music through an optional
+local baked manifest. All current USNF score tracks are covered in the development
+installation; runtime needs no synth process or SoundFont. This is selected-bank
+playback, not proven native instrument identity. See [baking and verification](Docs/baselines/fluidr3-audition.md)
+and [remaining audio gaps](Docs/baselines/audio-gaps.md).
 [music notes](Docs/formats/music.md) distinguish recovered scripts from runtime parity.
-Exterior cockpit texture cutouts and flap placement have been revised on all three
-aircraft; re-run the aircraft porter to update previously installed models.
+Ground wind assistance ramps from 5% at rest to full at 150 knots ground speed;
+airborne wind remains full strength. See [handling evidence](Docs/baselines/ground-wind.md).
+
+Exterior texture composition, decal binding, flap geometry and textured landing
+gear have been revised on all three aircraft; rebuild the runtime and re-run the
+aircraft porter for older installations. F-14 now uses the ATF exterior; native
+speedbrake panels preserve fuselage backing, and F-14/X-31 use original mapped
+afterburner faces. See [texture acceptance](Docs/baselines/aircraft-textures.md)
+and [device acceptance](Docs/baselines/aircraft-devices.md).
 See [guns-only evidence and limitations](Docs/baselines/phase-6.md).
 
 The desktop app also has a terrain explorer with streamed elevation, floating origin,
@@ -128,6 +140,20 @@ to view. Existing installed theaters require the installer's `--replace` option.
 The [terrain polish guide](Docs/terrain-polish.md) covers optional label-free satellite
 paint, bounded coastline smoothing and shared panel edges.
 
+The included `theaters/salt-lake.json` covers Salt Lake City, the Bonneville Salt Flats
+and Denver. Build it with the same pipeline, add a Sentinel-2 texture atlas, then install
+it as `terrains/salt-lake`; the theater selectors and named flight/map teleports use that
+path automatically.
+
+```sh
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline fetch --config theaters/salt-lake.json --output extracted/terrain-source/salt-lake
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline build --config theaters/salt-lake.json --source extracted/terrain-source/salt-lake --output extracted/terrain/salt-lake
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline imagery extracted/terrain/salt-lake/manifest.json --provider sentinel --cache extracted/terrain-source/sentinel-2 --size 3072 --max-gap-fraction 0.007 --max-gap-radius 10
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline color-maps extracted/terrain/salt-lake/manifest.json --size 1024 --snow theaters/salt-lake-snow.json
+PYTHONPATH=terrain-pipeline .venv/bin/python -m pipeline probe extracted/terrain/salt-lake/manifest.json
+bun tools/terrain/install.ts --terrain extracted/terrain/salt-lake --data-root "$HOME/.config/USNF-ATF/data"
+```
+
 See the [pipeline guide](Docs/phase-2-pipeline.md), [renderer guide](Docs/phase-3-renderer.md),
 and [packaged smoke/installation tools](tools/terrain/README.md) for full commands
 and limits. Terrain outputs and source rasters remain ignored under `extracted/`.
@@ -135,7 +161,11 @@ and limits. Terrain outputs and source rasters remain ignored under `extracted/`
 ## Practice flight
 
 Run `bun run dev:electron`, then choose **Practice runway** or **Final approach**.
-These are practice starts over the installed Ukraine terrain and a fictional runway.
+These use the selected installed theater and an authored practice runway.
+Salt Lake includes all four seasonal color maps and starts the navigation display
+at approximately 400 statute miles across (the scale bar still reads nautical miles).
+Choose **satellite** under Ground colors for live date-driven seasonal tinting and
+Salt Lake's moving snowline; the named seasonal color maps remain fixed bakes.
 The **Aircraft** dropdown selects the locally converted F-14, A-4E or X-31;
 missing imports use an explicitly identified original placeholder.
 [Full aircraft-port helper and checklist](Docs/aircraft-porting.md) covers repeatable

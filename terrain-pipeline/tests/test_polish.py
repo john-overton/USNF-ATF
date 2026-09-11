@@ -102,3 +102,15 @@ class PolishTests(unittest.TestCase):
         self.assertTrue(np.all(rgb[:,40:43,40:43]==50))
         covered[20:50,20:50]=False
         with self.assertRaisesRegex(ValueError,'Too much'):fill_small_gaps(rgb,covered,water)
+        covered[20:50,20:50]=True
+        covered[20:27,20:27]=False
+        count,radius=fill_small_gaps(rgb,covered,water,max_fraction=0.01)
+        self.assertEqual(count,49)
+        self.assertLessEqual(radius,6)
+        covered[20:27,20:27]=True
+        covered[20:29,20:29]=False
+        count,radius=fill_small_gaps(rgb,covered,water,max_fraction=0.01,max_radius=10)
+        self.assertEqual(count,81)
+        self.assertLessEqual(radius,10)
+        with self.assertRaisesRegex(ValueError,'Maximum interpolation'):fill_small_gaps(rgb,covered,water,max_fraction=0.03)
+        with self.assertRaisesRegex(ValueError,'Maximum interpolation radius'):fill_small_gaps(rgb,covered,water,max_radius=13)

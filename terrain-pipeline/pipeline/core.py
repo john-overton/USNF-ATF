@@ -417,11 +417,14 @@ def main():
     p.add_argument('--source',type=Path);p.add_argument('--cache',type=Path)
     p.add_argument('--provider',choices=['sentinel','eox'],default='sentinel')
     p.add_argument('--size',type=int,default=3072);p.add_argument('--attribution');p.add_argument('--license')
+    p.add_argument('--max-gap-fraction',type=float,default=0.005)
+    p.add_argument('--max-gap-radius',type=float,default=6)
     p=sub.add_parser('smooth-coasts');p.add_argument('manifest',type=Path)
     sub.add_parser('probe-shorelines').add_argument('manifest',type=Path)
     p=sub.add_parser('shorelines');p.add_argument('manifest',type=Path);p.add_argument('--overrides',type=Path)
     p=sub.add_parser('color-maps');p.add_argument('manifest',type=Path)
     p.add_argument('--size',type=int,default=1024);p.add_argument('--palettes',type=Path);p.add_argument('--weights',type=Path)
+    p.add_argument('--snow',type=Path,help='optional seasonal/permanent snow elevation rules JSON')
     p=sub.add_parser('paint-coasts');p.add_argument('manifest',type=Path)
     p.add_argument('--inland',type=float,default=200);p.add_argument('--feather',type=float,default=100)
     p.add_argument('--offshore',type=float,default=3000)
@@ -438,7 +441,7 @@ def main():
             elif args.cache:
                 if args.provider=='sentinel':
                     from .sentinel import fetch_sentinel
-                    result=fetch_sentinel(args.manifest,args.cache,args.size)
+                    result=fetch_sentinel(args.manifest,args.cache,args.size,args.max_gap_fraction,args.max_gap_radius)
                 else:result=fetch_eox(args.manifest,args.cache,args.size)
             else:raise ValueError('imagery requires --source or --cache for the selected provider')
         elif args.command=='probe-shorelines':
@@ -449,7 +452,7 @@ def main():
             result=bake_shorelines(args.manifest,args.overrides)
         elif args.command=='color-maps':
             from .color_map import bake_color_maps
-            result=bake_color_maps(args.manifest,args.size,args.palettes,args.weights)
+            result=bake_color_maps(args.manifest,args.size,args.palettes,args.weights,args.snow)
         elif args.command=='paint-coasts':
             from .coast_paint import paint_coasts
             result=paint_coasts(args.manifest,args.inland,args.feather,args.offshore)

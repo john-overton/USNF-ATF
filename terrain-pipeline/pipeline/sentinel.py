@@ -75,17 +75,21 @@ def fill_stable_gaps(rgb,covered,water,used,items,output,grid_key,p,transform):
     return int(accepted.sum())
 
 
-def fill_small_gaps(rgb,covered,water):
-    """Bounded color interpolation only: <=0.5% of land, <=6 output pixels from data."""
+def fill_small_gaps(rgb,covered,water,max_fraction=0.005,max_radius=6):
+    """Bounded color interpolation only: configured land fraction and radius."""
+    if not 0 < max_fraction <= 0.02:
+        raise ValueError('Maximum interpolation fraction must be between 0 and 0.02')
+    if not 0 < max_radius <= 12:
+        raise ValueError('Maximum interpolation radius must be between 0 and 12 pixels')
     missing=~covered & ~water
     count=int(missing.sum())
     if not count:return 0,0.0
-    if count>int((~water).sum())*0.005:
+    if count>int((~water).sum())*max_fraction:
         raise ValueError(f'Too much missing land imagery to interpolate: {count} pixels')
     distance,indices=distance_transform_edt(~covered,return_indices=True)
     maximum=float(distance[missing].max())
-    if maximum>6:
-        raise ValueError(f'Land imagery gap exceeds six-pixel interpolation radius: {maximum}')
+    if maximum>max_radius:
+        raise ValueError(f'Land imagery gap exceeds {max_radius}-pixel interpolation radius: {maximum}')
     for band in range(3):rgb[band,missing]=rgb[band,indices[0][missing],indices[1][missing]]
     covered[missing]=True
     return count,maximum
@@ -103,7 +107,7 @@ def ranked_scenes(items):
             for item in sorted(groups[key], key=score)[rank:rank+1]]
 
 
-def fetch_sentinel(manifest_path, output, size=3072):
+def fetch_sentinel(manifest_path, output, size=3072, max_gap_fraction=0.005, max_gap_radius=6):
     if not 2 <= size <= 6144:
         raise ValueError('imagery size must be 2..6144')
     m = json.loads(manifest_path.read_text()); p, e = m['projection'], m['extents']
@@ -184,7 +188,7 @@ def fetch_sentinel(manifest_path, output, size=3072):
     print(f'Temporal agreement filled {stable_fill} mask-gap pixels; {int(missing.sum())} remain',flush=True)
     if missing.any():
         np.savez_compressed(output/'incomplete-coverage.npz',rgb=rgb,covered=covered,water=water)
-    interpolated,interpolation_radius=fill_small_gaps(rgb,covered,water)
+    interpolated,interpolation_radius=fill_small_gaps(rgb,covered,water,max_gap_fraction,max_gap_radius)
     print(f'Interpolated {interpolated} residual color pixels, max radius {interpolation_radius:.2f} pixels',flush=True)
     for band,value in enumerate([40,94,130]):rgb[band,~covered]=value
     mosaic=output/f'sentinel-2024-{grid_key}.tif'
@@ -193,7 +197,9 @@ def fetch_sentinel(manifest_path, output, size=3072):
     (output/f'sentinel-2024-{grid_key}.json').write_text(json.dumps(dict(query=query,scenes=used,
         processingVersion="native-mask-v3-temporal-median12-gap6",stableMinimumDates=3,
         stableToleranceFromMedian=12,waterFillPixels=int((~covered).sum()),stableMaskGapPixels=stable_fill,interpolatedLandPixels=interpolated,
-        maxInterpolationRadiusPixels=interpolation_radius,sourceResolutionMeters=10,attribution=ATTRIBUTION,license=LICENSE),indent=2)+'\n')
+        maxInterpolationRadiusPixels=interpolation_radius,maxInterpolationFraction=max_gap_fraction,
+        maximumAllowedInterpolationRadiusPixels=max_gap_radius,
+        sourceResolutionMeters=10,attribution=ATTRIBUTION,license=LICENSE),indent=2)+'\n')
     result=add_imagery(manifest_path,mosaic,ATTRIBUTION,LICENSE,size)
     m=json.loads(manifest_path.read_text());m['imagery']['attributionDisplay']='credits'
     manifest_path.write_text(json.dumps(m,separators=(',',':'))+'\n')

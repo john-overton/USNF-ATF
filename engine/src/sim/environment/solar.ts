@@ -20,6 +20,8 @@ export interface SkyBody {
 export interface MoonPosition extends SkyBody {
   /** Illuminated fraction, 0 new to 1 full. Approximate. */
   phase: number;
+  /** Whether illumination is increasing; used for the eight conventional phase icons. */
+  waxing: boolean;
 }
 export type Season = 'winter' | 'spring' | 'summer' | 'autumn';
 
@@ -134,7 +136,12 @@ export function moonPosition(
     norm360(
       280.459 + 0.98564736 * d + 1.915 * Math.sin(sunAnomaly) + 0.02 * Math.sin(2 * sunAnomaly),
     ) * DEG;
-  return { ...body, phase: (1 - Math.cos(lambda - sunLongitude)) / 2 };
+  const phaseAngle = lambda - sunLongitude;
+  return {
+    ...body,
+    phase: (1 - Math.cos(phaseAngle)) / 2,
+    waxing: Math.sin(phaseAngle) >= 0,
+  };
 }
 
 /** Meteorological seasons, flipped south of the equator. */
@@ -173,4 +180,15 @@ export function dayOfYearFor(month: number, day: number): number {
   let total = day;
   for (let m = 0; m < month - 1; m++) total += MONTH_DAYS[m]!;
   return total;
+}
+
+/** Inverse of `dayOfYearFor`, retaining its deliberate leap-calendar convention. */
+export function monthDayFor(dayOfYear: number): { month: number; day: number } {
+  let remaining = Math.max(1, Math.min(366, Math.floor(dayOfYear)));
+  for (let month = 0; month < MONTH_DAYS.length; month++) {
+    const days = MONTH_DAYS[month]!;
+    if (remaining <= days) return { month: month + 1, day: remaining };
+    remaining -= days;
+  }
+  return { month: 12, day: 31 };
 }

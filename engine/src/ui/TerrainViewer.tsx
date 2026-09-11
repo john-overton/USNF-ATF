@@ -1,4 +1,5 @@
 import type { CockpitMirrorLayout } from '../terrain/mirrors';
+import { createPortal } from 'react-dom';
 import { CockpitOverlay, GunStatus } from '../flight/CockpitOverlay';
 import { AIRCRAFT } from '../flight/aircraft-catalog';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -7,12 +8,15 @@ import { FlightNavigationOverlay } from '../flight/FlightNavigationOverlay';
 import type { FsRoot } from '../platform/Platform';
 import { startTerrainViewer, type TerrainDiagnostics } from '../terrain/viewer';
 import { ExplorerNavigationOverlay } from './ExplorerNavigationOverlay';
-import type { MissionParams } from '../sim/mission/params';
+import { missionQuery, type MissionParams } from '../sim/mission/params';
 import type { GunMode } from '../data/retail-gun';
 import { GunModeSelect } from './GunModeSelect';
 import type { MapWaypoint } from '../terrain/navigation-map';
+import { THEATERS, theaterById } from '../terrain/theaters';
 import {
   CLOUD_QUALITIES,
+  dayOfYearFor,
+  monthDayFor,
   WEATHER_PRESETS,
   WIND_PRESETS,
   type CloudQuality,
@@ -20,23 +24,106 @@ import {
   type WindPresetId,
 } from '../sim/environment';
 
+const MOON_PHASE_ICONS = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'] as const;
+const MOON_PHASE_NAMES = [
+  'New moon',
+  'Waxing crescent',
+  'First quarter',
+  'Waxing gibbous',
+  'Full moon',
+  'Waning gibbous',
+  'Last quarter',
+  'Waning crescent',
+] as const;
+
+export function moonPhaseIcon(phase: number, waxing: boolean): { icon: string; label: string } {
+  const brightness = Math.max(0, Math.min(4, Math.round(phase * 4)));
+  const index = waxing ? brightness : (8 - brightness) % 8;
+  return { icon: MOON_PHASE_ICONS[index]!, label: MOON_PHASE_NAMES[index]! };
+}
+
+function dateInputValue(year: number, dayOfYear: number): string {
+  const { month, day } = monthDayFor(dayOfYear);
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function dayFromDateInput(value: string): { year: number; dayOfYear: number } | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return undefined;
+  const year = Number(match[1]),
+    month = Number(match[2]),
+    day = Number(match[3]);
+  if (year < 1600 || year > 2400 || month < 1 || month > 12 || day < 1 || day > 31)
+    return undefined;
+  return { year, dayOfYear: dayOfYearFor(month, day) };
+}
+
+function EnvironmentDatePicker({
+  environment,
+  onChange,
+}: {
+  environment: TerrainDiagnostics['environment'];
+  onChange: (year: number, dayOfYear: number) => void;
+}) {
+  const moon = moonPhaseIcon(environment.moonPhase, environment.moonWaxing);
+  return (
+    <label>
+      Date{' '}
+      <span
+        aria-label={`${moon.label}, ${Math.round(environment.moonPhase * 100)}% illuminated`}
+        title={moon.label}
+      >
+        {moon.icon}
+      </span>{' '}
+      <input
+        aria-label="Date"
+        type="date"
+        value={dateInputValue(environment.year, environment.dayOfYear)}
+        onChange={(event) => {
+          const next = dayFromDateInput(event.target.value);
+          if (next) onChange(next.year, next.dayOfYear);
+        }}
+      />
+    </label>
+  );
+}
+
 /** The WebGL host for both the explorer and a flight; the shell decides which. */
 export function TerrainViewer({
   mission,
   parseError = '',
   paused = false,
   onGunMode,
+  onMission,
+  settingsHost,
 }: {
   mission: MissionParams;
   /** A query the shell could not read; shown here because this is where errors live. */
   parseError?: string;
   paused?: boolean;
   onGunMode?: (mode: GunMode) => void;
+  onMission?: (mission: MissionParams) => void;
+  settingsHost?: HTMLElement | null;
 }) {
   const flightMode = mission.mode !== 'explorer';
   const [root, setRoot] = useState<FsRoot>(mission.root);
   const [path, setPath] = useState(mission.manifestPath);
   const [request, setRequest] = useState({ root, path, generation: 0 });
+  const sessionQuery = (patch: Partial<MissionParams> = {}) => {
+    const query = missionQuery({
+      ...mission,
+      root: request.root,
+      manifestPath: request.path,
+      ...patch,
+    });
+    query.set('view', 'terrain');
+    return query.toString();
+  };
+  const sessionUrl = () => {
+    const url = new URL(window.location.href);
+    url.search = sessionQuery();
+    return url;
+  };
   const [stats, setStats] = useState<TerrainDiagnostics>();
   const [error, setError] = useState('');
   const [panelMinimized, setPanelMinimized] = useState(mission.mode === 'quick-fight');
@@ -104,6 +191,121 @@ export function TerrainViewer({
   }, [paused, request, sceneKey, parseError]);
   return (
     <div className="probe-root">
+      {settingsHost &&
+        createPortal(
+          <section className="escape-settings" aria-label="Live flight settings">
+            <GunModeSelect
+              value={mission.gunMode}
+              {...(onGunMode ? { onChange: onGunMode } : {})}
+            />
+            <p>
+              Gun changes retain ammunition and combat state, clear rounds in flight and safe the
+              guns.
+            </p>
+            {stats?.environment && (
+              <>
+                <div className="environment-clock-controls">
+                  <label>
+                    Time of day{' '}
+                    <input
+                      aria-label="Time of day"
+                      type="range"
+                      min="0"
+                      max="24"
+                      step="0.25"
+                      value={stats.environment.timeOfDayHours}
+                      onChange={(e) => viewerRef.current?.setTimeOfDay(Number(e.target.value))}
+                    />
+                  </label>
+                  <EnvironmentDatePicker
+                    environment={stats.environment}
+                    onChange={(year, dayOfYear) => viewerRef.current?.setDate(year, dayOfYear)}
+                  />
+                </div>
+                <label>
+                  Weather{' '}
+                  <select
+                    aria-label="Weather"
+                    value={stats.environment.weather}
+                    onChange={(e) => viewerRef.current?.setWeather(e.target.value as WeatherId)}
+                  >
+                    {Object.values(WEATHER_PRESETS).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Wind{' '}
+                  <select
+                    aria-label="Wind"
+                    value={stats.environment.wind}
+                    onChange={(e) => viewerRef.current?.setWind(e.target.value as WindPresetId)}
+                  >
+                    {Object.values(WIND_PRESETS).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Cloud quality{' '}
+                  <select
+                    aria-label="Cloud quality"
+                    value={stats.environment.cloudQuality}
+                    onChange={(e) =>
+                      viewerRef.current?.setCloudQuality(e.target.value as CloudQuality)
+                    }
+                  >
+                    {CLOUD_QUALITIES.map((q) => (
+                      <option key={q} value={q}>
+                        {q}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+            {!!stats?.paintModes?.length && (
+              <label>
+                Ground colors{' '}
+                <select
+                  aria-label="Ground colors"
+                  value={stats.paint ?? ''}
+                  onChange={(e) => {
+                    void viewerRef.current
+                      ?.setTerrainPaint(e.target.value)
+                      .catch((e: unknown) => setError(String(e)));
+                  }}
+                >
+                  {stats.paintModes.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {stats?.flight && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={stats.flight.music.enabled}
+                  onChange={(e) => viewerRef.current?.setMusicEnabled(e.target.checked)}
+                />{' '}
+                In-flight music enabled
+              </label>
+            )}
+            <p>
+              These settings apply to the current flight without restarting it. Aircraft and
+              flight-model changes are not applied mid-flight here.
+            </p>
+            {error && <p role="alert">{error}</p>}
+          </section>,
+          settingsHost,
+        )}
       {stats?.imageryAttribution && (
         <small className="terrain-imagery-credit">{stats.imageryAttribution}</small>
       )}
@@ -183,6 +385,39 @@ export function TerrainViewer({
             }}
           >
             <label>
+              Theater{' '}
+              <select
+                id="terrain-theater"
+                aria-label="Theater selection"
+                value={mission.theater}
+                onChange={(event) => {
+                  const theater = theaterById(event.target.value);
+                  if (!theater) return;
+                  setRoot('appData');
+                  setPath(theater.manifestPath);
+                  setError('');
+                  setStats(undefined);
+                  setRequest({
+                    root: 'appData',
+                    path: theater.manifestPath,
+                    generation: request.generation + 1,
+                  });
+                  onMission?.({
+                    ...mission,
+                    theater: theater.id,
+                    root: 'appData',
+                    manifestPath: theater.manifestPath,
+                  });
+                }}
+              >
+                {THEATERS.map((theater) => (
+                  <option key={theater.id} value={theater.id}>
+                    {theater.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               Data root{' '}
               <select
                 id="terrain-root"
@@ -230,21 +465,34 @@ export function TerrainViewer({
           )}
           {stats?.environment && (
             <section aria-label="Environment">
-              <label htmlFor="environment-time">
-                Time of day {stats.environment.timeText} · sun{' '}
-                {stats.environment.sunElevationDeg.toFixed(1)}° elevation,{' '}
-                {stats.environment.sunAzimuthDeg.toFixed(0)}° azimuth
-              </label>
-              <input
-                id="environment-time"
-                type="range"
-                min="0"
-                max="24"
-                step="0.01"
-                value={stats.environment.timeOfDayHours}
-                onChange={(event) => viewerRef.current?.setTimeOfDay(Number(event.target.value))}
-                onPointerUp={() => canvas.current?.focus()}
-              />
+              <div className="environment-clock-controls">
+                <div>
+                  <label htmlFor="environment-time">
+                    Time of day {stats.environment.timeText} · sun{' '}
+                    {stats.environment.sunElevationDeg.toFixed(1)}° elevation,{' '}
+                    {stats.environment.sunAzimuthDeg.toFixed(0)}° azimuth
+                  </label>
+                  <input
+                    id="environment-time"
+                    type="range"
+                    min="0"
+                    max="24"
+                    step="0.01"
+                    value={stats.environment.timeOfDayHours}
+                    onChange={(event) =>
+                      viewerRef.current?.setTimeOfDay(Number(event.target.value))
+                    }
+                    onPointerUp={() => canvas.current?.focus()}
+                  />
+                </div>
+                <EnvironmentDatePicker
+                  environment={stats.environment}
+                  onChange={(year, dayOfYear) => {
+                    viewerRef.current?.setDate(year, dayOfYear);
+                    canvas.current?.focus();
+                  }}
+                />
+              </div>
               <label>
                 Weather{' '}
                 <select
@@ -426,7 +674,7 @@ export function TerrainViewer({
                   id="aircraft-selector"
                   value={stats.flight.aircraftId}
                   onChange={(event) => {
-                    const url = new URL(window.location.href);
+                    const url = sessionUrl();
                     url.searchParams.set('aircraft', event.target.value);
                     url.searchParams.set(
                       'flightModel',
@@ -451,7 +699,7 @@ export function TerrainViewer({
                   id="flight-model-selector"
                   value={stats.flight.flightModelId}
                   onChange={(event) => {
-                    const url = new URL(window.location.href);
+                    const url = sessionUrl();
                     url.searchParams.set('flightModel', event.target.value);
                     url.searchParams.set('flightFuel', String(stats.flight!.fuelFraction));
                     window.location.assign(url.href);
@@ -505,7 +753,7 @@ export function TerrainViewer({
                   onSubmit={(event) => {
                     event.preventDefault();
                     const values = new FormData(event.currentTarget);
-                    const url = new URL(window.location.href);
+                    const url = sessionUrl();
                     url.searchParams.set('flightFuel', String(stats.flight!.fuelFraction));
                     url.searchParams.set('flightPayload', String(Number(values.get('payload'))));
                     window.location.assign(url.href);
@@ -575,7 +823,7 @@ export function TerrainViewer({
                 </dd>
                 <dt>GPU DRAM bandwidth</dt>
                 <dd>Unavailable in WebGL2</dd>
-                <dt>World east / north / altitude</dt>
+                <dt>World X / north / altitude</dt>
                 <dd>
                   {stats.camera.x.toFixed(0)} / {stats.camera.z.toFixed(0)} /{' '}
                   {stats.camera.y.toFixed(0)} m
@@ -593,24 +841,24 @@ export function TerrainViewer({
           )}
           <p>
             <a
-              href={`?mode=flight&gunMode=${mission.gunMode}&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
+              href={`?${sessionQuery({ mode: 'free-flight', start: 'runway', opponents: [], camera: {} })}`}
             >
               Practice runway
             </a>
             {' · '}
             <a
-              href={`?mode=flight&gunMode=${mission.gunMode}&flightStart=approach&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
+              href={`?${sessionQuery({ mode: 'free-flight', start: 'approach', opponents: [], camera: {} })}`}
             >
               Final approach
             </a>
             {' · '}
             <a
-              href={`?mode=flight&gunMode=${mission.gunMode}&flightStart=airborne&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
+              href={`?${sessionQuery({ mode: 'free-flight', start: 'airborne', opponents: [], camera: {} })}`}
             >
               Airborne practice
             </a>
             {' · '}
-            <a href="?mode=explore">Terrain explorer</a>
+            <a href={`?${sessionQuery({ mode: 'explorer', opponents: [] })}`}>Terrain explorer</a>
             {' · '}
             <a href="?view=probe">Renderer diagnostic</a>
           </p>

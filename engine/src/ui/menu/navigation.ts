@@ -206,7 +206,11 @@ export function nextMission(action: MenuAction, mission: MissionParams): Mission
     case 'terrain-explorer':
       return { ...mission, mode: 'explorer', opponents: [] };
     case 'choose-aircraft':
-      return action.aircraft ? { ...mission, aircraft: action.aircraft } : mission;
+      // Station indices and store files belong to one airframe. Empty selections
+      // let the shell load the new aircraft's defaults, not the previous jet's missiles.
+      return action.aircraft && action.aircraft !== mission.aircraft
+        ? { ...mission, aircraft: action.aircraft, loadout: { ...mission.loadout, stations: {} } }
+        : mission;
     default:
       return mission;
   }

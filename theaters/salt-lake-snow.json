@@ -1,0 +1,10 @@
+{
+  "color": "#ffffff",
+  "seasons": {
+    "winter": [1800, 2400],
+    "spring": [2400, 3100],
+    "autumn": [2800, 3400],
+    "summer": [3300, 3800]
+  },
+  "permanent": [3800, 4100]
+}

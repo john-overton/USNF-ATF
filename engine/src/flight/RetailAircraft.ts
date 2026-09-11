@@ -11,7 +11,9 @@ import {
   UnsignedByteType,
   SRGBColorSpace,
   DoubleSide,
-  NearestFilter,
+  LinearFilter,
+  LinearMipmapLinearFilter,
+  FrontSide,
   Vector3,
 } from 'three';
 import type { Platform } from '../platform/Platform';
@@ -24,6 +26,12 @@ export interface AircraftPart {
   pivot?: number[];
   rotationAxis?: number[];
   parent?: string;
+  cullBackfaces?: boolean;
+  decal?: boolean;
+  textureBase?: boolean;
+  gearPose?: 'deployed' | 'stowed';
+  /** Signed deployed angle; imported brake vertices are already open. Zero marks supports. */
+  nativeBrakeAngle?: number;
   texture?: { width: number; height: number; rgba: number[] };
 }
 export interface RetailAircraftData extends AircraftPart {
@@ -31,6 +39,7 @@ export interface RetailAircraftData extends AircraftPart {
   parts?: AircraftPart[];
   texture?: { width: number; height: number; rgba: number[] };
   limitations: string[];
+  gearHeightM?: number;
 }
 /** Bounded runtime contract; retail data stays in user data, outside application bundles. */
 export function parseRetailAircraft(value: unknown): RetailAircraftData {
@@ -42,6 +51,11 @@ export function parseRetailAircraft(value: unknown): RetailAircraftData {
     throw new Error('Invalid aircraft limitations');
   if (data.parts !== undefined && (!Array.isArray(data.parts) || data.parts.length > 100))
     throw new Error('Invalid aircraft parts');
+  if (
+    data.gearHeightM !== undefined &&
+    (!Number.isFinite(data.gearHeightM) || data.gearHeightM <= 0 || data.gearHeightM > 10)
+  )
+    throw new Error('Invalid aircraft gear support height');
   let vertices = 0;
   for (const part of [data, ...(data.parts ?? [])]) {
     if (
@@ -52,6 +66,15 @@ export function parseRetailAircraft(value: unknown): RetailAircraftData {
       part.positions.some((n) => !Number.isFinite(n) || Math.abs(n) > 100)
     )
       throw new Error('Invalid aircraft triangle positions');
+    if (
+      (part.cullBackfaces !== undefined && typeof part.cullBackfaces !== 'boolean') ||
+      (part.decal !== undefined && typeof part.decal !== 'boolean') ||
+      (part.textureBase !== undefined && typeof part.textureBase !== 'boolean') ||
+      (part.gearPose !== undefined && !['deployed', 'stowed'].includes(part.gearPose)) ||
+      (part.nativeBrakeAngle !== undefined &&
+        (!Number.isFinite(part.nativeBrakeAngle) || Math.abs(part.nativeBrakeAngle) > Math.PI))
+    )
+      throw new Error('Invalid aircraft material/gear metadata');
     vertices += part.positions.length / 3;
     if (
       !Array.isArray(part.colors) ||
@@ -138,7 +161,10 @@ export class RetailAircraft {
         texture.colorSpace = SRGBColorSpace;
         // Exported V is already bottom-origin, matching the source SH atlas convention.
         texture.flipY = false;
-        texture.magFilter = NearestFilter;
+        texture.magFilter = LinearFilter;
+        texture.minFilter = LinearMipmapLinearFilter;
+        texture.generateMipmaps = true;
+        texture.anisotropy = 4;
         texture.needsUpdate = true;
         this.textures.push(texture);
       }
@@ -166,17 +192,66 @@ export class RetailAircraft {
       const material = new MeshStandardMaterial({
         vertexColors: true,
         roughness: 0.8,
-        side: DoubleSide,
+        side: part.cullBackfaces ? FrontSide : DoubleSide,
+        // Keyed overlay faces stay depth-tested, with a small bias over skin.
+        polygonOffset: part.decal === true,
+        polygonOffsetFactor: part.decal ? -1 : 0,
+        polygonOffsetUnits: part.decal ? -1 : 0,
         ...(part.uvs && texture ? { map: texture, alphaTest: 0.5 } : {}),
       });
+      if (part.name.startsWith('afterburner-')) {
+        material.emissive.setHex(0xffffff);
+        material.emissiveMap = texture ?? null;
+        material.color.setHex(0x000000);
+        material.depthWrite = false;
+        material.polygonOffset = false;
+      }
+      if (part.textureBase) {
+        // Retail EE/ED/CD paint a keyed texture over a palette-filled polygon.
+        // Compose in one draw so the base cannot z-fight with its own markings.
+        material.onBeforeCompile = (shader) => {
+          shader.fragmentShader = shader.fragmentShader
+            .replace(
+              '#include <map_fragment>',
+              `
+#ifdef USE_MAP
+  vec4 paint = texture2D(map, vMapUv);
+  diffuseColor.rgb *= mix(vColor.rgb, paint.rgb, paint.a);
+#else
+  diffuseColor.rgb *= vColor.rgb;
+#endif`,
+            )
+            .replace('#include <color_fragment>', '');
+        };
+        material.customProgramCacheKey = () => 'retail-keyed-base-v1';
+      }
       material.userData.originalMap = material.map;
       group.add(new Mesh(geometry, material));
       this.group.add(group);
       this.parts.set(part.name, group);
     }
+    this.setGearFraction(0);
+    this.setAirbrakeFraction(0);
+    this.setAfterburner(false);
     this.group.updateMatrixWorld(true);
     for (const part of data.parts ?? []) {
       if (part.parent) this.parts.get(part.parent)!.attach(this.parts.get(part.name)!);
+    }
+  }
+  get hasGear(): boolean {
+    return this.data.parts?.some((part) => part.gearPose === 'deployed') ?? false;
+  }
+  setGearFraction(value: number): void {
+    const fraction = Math.max(0, Math.min(1, value));
+    for (const part of this.data.parts ?? []) {
+      if (!part.gearPose) continue;
+      const group = this.parts.get(part.name)!;
+      if (part.gearPose === 'stowed') {
+        group.visible = fraction <= 0.01;
+      } else {
+        group.visible = fraction > 0.01;
+        if (part.rotationAxis) this.setSurfaceAngle(part.name, ((1 - fraction) * Math.PI) / 2);
+      }
     }
   }
   static async load(
@@ -204,19 +279,26 @@ export class RetailAircraft {
         ]),
     );
   }
+  get hasAfterburner(): boolean {
+    return this.data.parts?.some((part) => part.name.startsWith('afterburner-')) ?? false;
+  }
+  get afterburnerVisible(): boolean {
+    return [...this.parts].some(
+      ([name, group]) => name.startsWith('afterburner-') && group.visible,
+    );
+  }
+  setAirbrakeFraction(value: number): void {
+    const fraction = Math.max(0, Math.min(1, value));
+    for (const part of this.data.parts ?? []) {
+      if (part.nativeBrakeAngle === undefined) continue;
+      this.parts.get(part.name)!.visible = fraction > 0.01;
+      this.setSurfaceAngle(part.name, -part.nativeBrakeAngle * (1 - fraction));
+    }
+  }
   setAfterburner(lit: boolean): void {
+    // Native burner state adds flame faces; it does not replace nozzle paint.
     for (const [name, group] of this.parts) {
-      if (!name.startsWith('exhaust-')) continue;
-      for (const child of group.children) {
-        if (!(child instanceof Mesh)) continue;
-        const material = child.material as MeshStandardMaterial;
-        const map = material.userData.originalMap as DataTexture | null;
-        if (material.map !== (lit ? map : null)) {
-          material.map = lit ? map : null;
-          material.color.setHex(lit ? 0xffffff : 0x202328);
-          material.needsUpdate = true;
-        }
-      }
+      if (name.startsWith('afterburner-')) group.visible = lit;
     }
   }
   dispose(): void {

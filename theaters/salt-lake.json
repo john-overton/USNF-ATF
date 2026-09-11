@@ -1,0 +1,7 @@
+{
+  "id": "salt-lake",
+  "name": "Salt Lake & Front Range",
+  "bbox": [-114.5, 39.2, -104.5, 42.2],
+  "roughnessThreshold": 80,
+  "sourcePaddingDegrees": 0.5
+}

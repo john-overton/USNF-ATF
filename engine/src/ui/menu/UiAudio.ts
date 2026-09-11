@@ -1,4 +1,5 @@
 import { UI_SOUNDS, type UiSound } from '../../data/retail-menu';
+import { connectMixer } from '../../flight/AudioMixer';
 import { flightPcm, resampleFlightPcm } from '../../flight/FlightAudio';
 import { isEditingTarget, muteControl } from '../../flight/mute';
 
@@ -28,6 +29,7 @@ function usable(clip: UiClip | undefined): clip is UiClip {
 /** Menu one-shots. A screen owns one instance and disposes it on unmount.
  * With no retail bundle installed every clip is missing and `play` is silent. */
 export class UiAudio {
+  private disconnectMixer?: () => void;
   private context: AudioContext | undefined;
   private master?: GainNode;
   private buffers: Partial<Record<UiSound, AudioBuffer>> = {};
@@ -94,7 +96,7 @@ export class UiAudio {
     this.context = context;
     const master = context.createGain();
     master.gain.value = muteControl.muted ? 0 : 0.45;
-    master.connect(context.destination);
+    this.disconnectMixer = connectMixer(context, master, 'menu');
     this.master = master;
     for (const name of UI_SOUNDS) {
       const clip = this.clips[name];
@@ -164,6 +166,7 @@ export class UiAudio {
   }
 
   dispose(): void {
+    this.disconnectMixer?.();
     if (this.disposed) return;
     this.disposed = true;
     window.removeEventListener('pointerdown', this.gesture);

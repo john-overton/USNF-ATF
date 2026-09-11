@@ -1,5 +1,46 @@
 # Phase 4 baseline: original practice flight on Mac
 
+## 2026-09-11: Taxi wind assistance
+
+Ground physics now scales applied wind from 5% at rest to full at 150 knots
+horizontal ground speed, with full airborne wind and unchanged weather readouts.
+See [ground-wind baseline](ground-wind.md) for the exact rule, tests and scope.
+
+
+## 2026-09-11: Native brakes and afterburners; ATF F14 exterior
+
+A4 brake backing is preserved with original aft panels instead of a fuselage cut.
+X31/F14 native brakes and F14/X31 atlas-mapped burner states are imported. The
+F14 exterior now uses the separate ATF rig and gear mounts; its USNF flight source
+remains. Models installed, runtime rebuilt, live brake/burner and ground checks
+passed. See [device baseline](aircraft-devices.md) for exact source, commands,
+41 SH tests, 462 workspace tests/3 skips, visual captures and remaining limits.
+
+
+## 2026-09-11: Aircraft texture composition and native gear
+
+All three imported aircraft now resolve dynamic decal pages separately, composite
+keyed texture paint over native palette base colors, use front-face visibility,
+and reuse original textured wheel/strut/door geometry. Imported gear replaces
+procedural fallback and supplies visible-pixel support height. Exact commands,
+32 SH tests, 460 engine/workspace tests (3 skips), live actuator/ground checks,
+source commit and texture limitations are in [texture baseline](aircraft-textures.md).
+Native lighting, selected mission liveries and original gear schedules remain
+outside acceptance. Runtime rebuilt and exterior JSONs installed locally.
+
+
+## 2026-09-11: Missing native flap faces restored (correction)
+
+The earlier substitute wing cuts did not repair the A-4's rectangular gaps.
+Native `0x12` drawing calls were being skipped, omitting original neutral flap
+panels on A4/F31/F14. Calls now use signed end-relative targets and persistent
+shared vertex/texture state. Recovered panels/UVs are rigged at their own hinge
+edges and installed for all three aircraft. Exact native handler evidence,
+source base, 23 passing SH tests, full check results and renderer captures are
+recorded in [corrected flap acceptance](flap-placement.md). Earlier silhouette
+acceptance is superseded; full native animation remains unproven.
+
+
 ## 2026-09-09 correction: closing-range bar direction
 
 Same Apple M3/macOS 26.6.2, Bun 1.4.2 and Node v22.14.0 as below.
@@ -1268,3 +1309,27 @@ arms the counters. Render triangles alone cannot establish valid shaders or
 visible aircraft: retain console-error checks and screenshot review alongside
 physics assertions. Keep control-driven packaged acceptance separate from
 synthetic deterministic model tests and from human feel assessment.
+
+
+## 2026-09-11 accumulated-work checkpoint
+
+Machine: Linux x64, kernel 7.1.9-arch1-2; Bun 1.4.2, Node v26.8.1,
+Python 3.14.7. Source: `aa530d0c0cfada24d27594dbe345d2a2bcde5895`
+plus the accumulated working-tree changes committed in the checkpoint containing
+this entry. Checks ran before commit creation; no fresh Electron visual or
+cross-platform acceptance is implied by this checkpoint.
+
+- `bun run check`: exit 0; 464 pass, 3 skip, 0 fail. Skips: imported
+  F14/A4E/X31 mount/camera/rebasing integration tests.
+- `bun run harness`: exit 0, synthetic original-aircraft flight scenarios.
+- `python3 -m unittest discover -s tools/retail/tests`: exit 1; 171 run,
+  1 error, 1 skip. Error in complete-library decompression integration:
+  local truncated ATF_10.LIB rejects S35_S.CB8 directory offsets. Skip:
+  unavailable USNF_1.LIB scratchpad comparison. ResourceWarnings remain.
+- `PYTHONPATH=terrain-pipeline .venv/bin/python -m unittest discover -s terrain-pipeline/tests`:
+  exit 0; 37 run, 1 skip (local Copernicus sources unavailable).
+  Rasterio deprecation warnings remain.
+- `git diff --cached --check`: exit 0.
+
+Next reproduction: use the same commands on this checkpoint; complete ATF media
+and the optional local test fixtures are needed for the skipped/failed gates.

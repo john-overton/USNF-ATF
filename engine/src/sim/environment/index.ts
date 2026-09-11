@@ -103,6 +103,15 @@ export class Environment {
     this.settings.timeOfDayHours = hours % 24;
     this.cachedHours = NaN;
   }
+  setDate(year: number, dayOfYear: number): void {
+    if (!Number.isInteger(year) || year < 1600 || year > 2400)
+      throw new Error('Year must be between 1600 and 2400');
+    if (!Number.isInteger(dayOfYear) || dayOfYear < 1 || dayOfYear > 366)
+      throw new Error('Day of year must be 1 to 366');
+    this.settings.year = year;
+    this.settings.dayOfYear = dayOfYear;
+    this.cachedHours = NaN;
+  }
   setWeather(id: WeatherId): void {
     this.settings.weather = id;
   }

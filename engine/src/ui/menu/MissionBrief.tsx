@@ -14,6 +14,7 @@ export function MissionBrief({
   onCommand,
   page,
   onPage,
+  embedded = false,
 }: {
   mission: MissionParams;
   summary?: FlightSummary;
@@ -21,12 +22,13 @@ export function MissionBrief({
   onCommand: (action: MenuAction) => void;
   page: number;
   onPage: (page: number) => void;
+  embedded?: boolean;
 }) {
   return (
     <div
-      className="mission-pause"
-      role="dialog"
-      aria-modal="true"
+      className={embedded ? 'mission-brief-embedded' : 'mission-pause'}
+      role={embedded ? undefined : 'dialog'}
+      aria-modal={embedded ? undefined : true}
       aria-label="Mission brief — paused"
     >
       <MenuScreen

@@ -106,7 +106,14 @@ function fixture(samples?: CombatSamples) {
       sources.push(source);
       return source;
     },
-    resume: () => Promise.resolve(),
+    suspend: () => {
+      context.state = 'suspended';
+      return Promise.resolve();
+    },
+    resume: () => {
+      context.state = 'running';
+      return Promise.resolve();
+    },
     close: () => {
       context.state = 'closed';
       return Promise.resolve();
@@ -196,10 +203,12 @@ test('pause and mute stop active sounds immediately and consume inaudible events
   gesture();
   audio.update([event(0, 'destroyed')], origin);
   audio.setPaused(true);
+  expect(audio.diagnostics().contextState).toBe('suspended');
   expect(sources[0]!.stopped).toBe(true);
   expect(audio.diagnostics().voices).toBe(0);
   audio.update([event(1)], origin);
   audio.setPaused(false);
+  expect(audio.diagnostics().contextState).toBe('running');
   audio.update([event(1)], origin);
   expect(sources.length).toBe(1);
   audio.update([event(2)], origin);

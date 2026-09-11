@@ -20,20 +20,25 @@ let aircraft: RetailAircraft | undefined;
 const hook = new Group();
 const material = new MeshStandardMaterial({color: 0x20272c, roughness: 1});
 Object.assign(window, {
-  async aircraftPreview(data: RetailAircraftData, id: AircraftId, controls: SurfaceControls, hookFraction: number, view: string) {
+  async aircraftPreview(data: RetailAircraftData, id: AircraftId, controls: SurfaceControls, hookFraction: number, view: string, gearFraction = 0, afterburner = false) {
     if (!aircraft) {
       aircraft = await RetailAircraft.load({ fs: { exists: () => Promise.resolve(true), readText: () => Promise.resolve(JSON.stringify(data)) } } as unknown as Platform, id);
       scene.add(aircraft!.group);
       configureAircraftHook(hook, id, true, material); scene.add(hook);
     }
     for (const part of aircraft!.data.parts ?? [])
-      if (part.rotationAxis) aircraft!.setSurfaceAngle(part.name, surfaceAngle(part.name, controls));
+      if (part.rotationAxis && !part.gearPose && part.nativeBrakeAngle === undefined) aircraft!.setSurfaceAngle(part.name, surfaceAngle(part.name, controls));
+    aircraft!.setGearFraction(gearFraction);
+    aircraft!.setAirbrakeFraction(controls.airbrake);
+    aircraft!.setAfterburner(afterburner);
     hook.rotation.x = Number(hook.userData.stowedAngle) + hookFraction * (Number(hook.userData.deployAngle) - Number(hook.userData.stowedAngle));
     camera.up.set(0, 1, 0);
     if (view === 'top') { camera.position.set(0, 40, 0); camera.up.set(0, 0, -1); }
     else if (view === 'side') camera.position.set(40, 0, 0);
+    else if (view === 'underside') { camera.position.set(20, -12, -25); }
+    else if (view === 'rear') camera.position.set(20, 12, 25);
     else camera.position.set(20, 12, -25);
-    camera.zoom = view === 'top' ? 0.75 : 1;
+    camera.zoom = view === 'top' ? (id === 'f14' ? 0.45 : 0.55) : id === 'f14' ? 0.75 : 1;
     camera.updateProjectionMatrix();
     camera.lookAt(0, 0, 0);
     renderer.render(scene, camera);
