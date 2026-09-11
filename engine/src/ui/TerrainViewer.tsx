@@ -257,23 +257,15 @@ export function TerrainViewer({
                     value={stats.environment.cloudAppearance}
                     onChange={(event) => {
                       viewerRef.current?.setCloudAppearance(
-                        event.target.value as 'solid' | 'volume',
+                        event.target.value as 'sunshine' | 'solid' | 'volume',
                       );
                       canvas.current?.focus();
                     }}
                   >
+                    <option value="sunshine">Sunshine clouds</option>
                     <option value="solid">Solid exterior</option>
                     <option value="volume">Volumetric</option>
                   </select>
-                </label>
-                <label>
-                  Ground fog (200–600 ft AGL){' '}
-                  <input
-                    type="checkbox"
-                    aria-label="Ground fog"
-                    checked={stats.environment.groundFog}
-                    onChange={(e) => viewerRef.current?.setGroundFog(e.target.checked)}
-                  />
                 </label>
                 <label>
                   Cloud quality{' '}
@@ -558,26 +550,16 @@ export function TerrainViewer({
                   aria-label="Cloud appearance"
                   value={stats.environment.cloudAppearance}
                   onChange={(event) => {
-                    viewerRef.current?.setCloudAppearance(event.target.value as 'solid' | 'volume');
+                    viewerRef.current?.setCloudAppearance(
+                      event.target.value as 'sunshine' | 'solid' | 'volume',
+                    );
                     canvas.current?.focus();
                   }}
                 >
+                  <option value="sunshine">Sunshine clouds</option>
                   <option value="solid">Solid exterior</option>
                   <option value="volume">Volumetric</option>
                 </select>
-              </label>
-              <label>
-                Ground fog (200–600 ft AGL){' '}
-                <input
-                  type="checkbox"
-                  id="environment-fog"
-                  aria-label="Ground fog"
-                  checked={stats.environment.groundFog}
-                  onChange={(event) => {
-                    viewerRef.current?.setGroundFog(event.target.checked);
-                    canvas.current?.focus();
-                  }}
-                />
               </label>
               <label>
                 Cloud quality{' '}

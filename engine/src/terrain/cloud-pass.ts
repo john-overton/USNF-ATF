@@ -11,6 +11,7 @@
  */
 import {
   Color,
+  Matrix4,
   Data3DTexture,
   DataTexture,
   LinearFilter,
@@ -27,6 +28,9 @@ import {
   type Texture,
   type WebGLRenderer,
 } from 'three';
+import { SUNSHINE_GLSL, SUNSHINE_RECONSTRUCTION } from './sunshine-shader';
+import { SUNSHINE_HISTORY } from './sunshine-history';
+import { loadSunshineTextures, type SunshineTextures } from '../render/sunshine-textures';
 import { FullScreenQuad, Pass } from 'three/addons/postprocessing/Pass.js';
 import { buildCloudShape, buildCloudVolume, buildCoverageTexture } from '../render/cloud-noise';
 import { COVERAGE_TILE_METERS, type CloudLayer } from '../sim/environment/clouds';
@@ -65,7 +69,9 @@ export interface CloudUniformState {
   terrain?: WeatherHeightField | undefined;
   fogTerrain?: WeatherHeightField | undefined;
   groundFog?: boolean;
-  appearance?: 'solid' | 'volume';
+  wind?: { x: number; z: number };
+  sunshine?: { coverage: number; density: number };
+  appearance?: 'sunshine' | 'solid' | 'volume';
 }
 
 export function cloudScaleFor(quality: CloudQuality): number {
@@ -142,6 +148,7 @@ uniform float cloudCoverageAmount;
 uniform vec3 cloudSunDirection;
 uniform vec2 cloudOrigin;
 uniform float cloudTileMeters;
+uniform float cloudShadowEnabled;
 
 float cloudCoverageAt(vec2 worldXZ) {
   return texture2D(cloudCoverage, (worldXZ + cloudOffset) / cloudTileMeters).r;
@@ -151,7 +158,7 @@ float cloudShaped(float noise, float amount) {
   return clamp((noise + amount - 1.0) / max(1e-3, amount), 0.0, 1.0);
 }
 float cloudShadow(vec3 worldPosition) {
-  if (cloudCoverageAmount <= 0.0) return 1.0;
+  if (cloudShadowEnabled < 0.5 || cloudCoverageAmount <= 0.0) return 1.0;
   // A sun on the horizon casts shadows that stretch to infinity; the light is already
   // near zero there, so stop rather than sampling a wildly extrapolated point.
   if (cloudSunDirection.y <= 0.05) return 1.0;
@@ -185,6 +192,7 @@ interface CloudShadowUniforms extends Record<string, { value: unknown }> {
   cloudSunDirection: { value: Vector3 };
   cloudOrigin: { value: Vector2 };
   cloudTileMeters: { value: number };
+  cloudShadowEnabled: { value: number };
 }
 
 let shadowSingleton: CloudShadowUniforms | undefined;
@@ -207,6 +215,7 @@ export function createCloudShadowUniforms(): Record<string, { value: unknown }> 
     cloudSunDirection: { value: new Vector3(0, 1, 0) },
     cloudOrigin: { value: new Vector2() },
     cloudTileMeters: { value: COVERAGE_TILE_METERS },
+    cloudShadowEnabled: { value: 1 },
   };
   return { ...shadowSingleton };
 }
@@ -222,6 +231,8 @@ export function updateCloudShadowUniforms(
   u.cloudBaseM.value = state.layer?.baseM ?? 0;
   u.cloudCoverageAmount.value = state.layer?.coverage ?? 0;
   u.cloudTileMeters.value = COVERAGE_TILE_METERS;
+  // Sunshine upstream has no cloud-shadow pass; legacy noise would cast unrelated patches.
+  u.cloudShadowEnabled.value = state.appearance === 'sunshine' ? 0 : 1;
   u.weatherHeight.value = state.terrain?.texture ?? null;
   u.weatherReady.value = state.terrain ? 1 : 0;
   if (state.terrain) {
@@ -261,6 +272,7 @@ uniform mat4 cameraWorld;
 uniform vec3 rayOrigin;
 uniform int cloudSteps;
 uniform float cloudJitter;
+layout(location = 1) out vec4 weatherRayData;
 uniform float cloudTopM;
 uniform float cloudDensity;
 uniform float cloudStratus;
@@ -396,6 +408,8 @@ float fogAmount(float distanceM) {
   return clamp((distanceM - cloudFogNear) / max(1.0, cloudFogFar - cloudFogNear), 0.0, 1.0);
 }
 
+${SUNSHINE_GLSL}
+
 float fogSigma(vec3 p) {
   if (groundFog < 0.5) return 0.0;
   vec2 ground = sampleWeatherHeight(fogHeight, fogBounds, fogSize, fogRange, p.xz);
@@ -443,6 +457,7 @@ void integrateMedium(vec3 ro, vec3 dir, float start, float end, float jitter,
 }
 
 void main() {
+  weatherRayData = vec4(0.0);
   vec4 clip = vec4(vUv * 2.0 - 1.0, -1.0, 1.0);
   vec4 view = inverseProjection * clip;
   vec3 viewDir = normalize(view.xyz / view.w);
@@ -450,7 +465,7 @@ void main() {
   // Stored log depth is along the view axis, not along the ray.
   float forward = max(1e-4, -viewDir.z);
 
-  float sceneDistance = MAX_MARCH_M;
+  float sceneDistance = sunshineMode > 0.5 ? 180000.0 : MAX_MARCH_M;
   if (cloudHasDepth > 0.5) {
     float d = texture2D(tDepth, vUv).x;
     // A cleared depth of 1 is sky; anything else is w = (far + 1)^d - 1.
@@ -490,6 +505,54 @@ void main() {
       cirrus = vec4(mix(lit, cloudFogColor, fogAmount(t)), alpha);
       cirrusT = t;
     }
+  }
+
+  if (sunshineMode > 0.5 && cloudMarch > 0.5) {
+    vec4 cloudData;
+    vec4 cloud = sunshineMarch(ro, dir, sceneDistance, cloudData);
+    float cloudT = cloudData.b;
+    if (cloud.a < 0.001 && cirrusT >= 0.0 && cirrus.a > 0.001) cloudData.rgb = vec3(cirrusT);
+    weatherRayData = vec4(cloudData.rgb / 1000.0, cloudHasDepth > 0.5 ? texture2D(tDepth,vUv).r : 1.0);
+    // A single history depth cannot correctly reproject two translucent layers.
+    // Keep analytic cirrus fresh wherever it materially overlaps the cloud.
+    if (cirrusT >= 0.0 && cloud.a > 0.001 &&
+        cirrus.a * (cirrusT < cloudT ? 1.0 : 1.0-cloud.a) > 0.001) weatherRayData.a = -1.0;
+    // Cloud reconstruction has a representative depth, as in Sunshine's post
+    // pass. Retained cirrus and terrain fog are composed around that depth.
+    float limit = sceneDistance;
+    vec2 fogSpan = groundFog > 0.5 ?
+      slabInterval(ro,dir,fogRange.x,fogRange.y+${FOG_TOP_AGL_M},min(limit,8000.0)) : vec2(0.0);
+    bool cloudDone = false;
+    bool cirrusDone = cirrusT < 0.0;
+    float cursor = 0.0;
+    for (int j=0;j<67;j++) {
+      float nextFog = j < 64 ? mix(fogSpan.x,fogSpan.y,float(j+1)/64.0) : limit;
+      // Process both layer events in order before the next fog boundary.
+      for (int event=0;event<2;event++) {
+        float nextCloud = cloudDone ? limit+1.0 : cloudT;
+        float nextCirrus = cirrusDone ? limit+1.0 : cirrusT;
+        float layerT = min(nextCloud,nextCirrus);
+        if (layerT > nextFog) break;
+        integrateMedium(ro,dir,max(cursor,fogSpan.x),min(layerT,fogSpan.y),0.5,
+          vec2(0.0),fogSpan,phase,scatter,transmittance);
+        cursor = max(cursor,layerT);
+        if (nextCloud <= nextCirrus) {
+          scatter += transmittance * cloud.rgb * cloud.a;
+          transmittance *= 1.0-cloud.a;
+          cloudDone = true;
+        } else {
+          scatter += transmittance * cirrus.rgb * cirrus.a;
+          transmittance *= 1.0-cirrus.a;
+          cirrusDone = true;
+        }
+      }
+      integrateMedium(ro,dir,max(cursor,fogSpan.x),min(nextFog,fogSpan.y),0.5,
+        vec2(0.0),fogSpan,phase,scatter,transmittance);
+      cursor = max(cursor,nextFog);
+      if (cloudDone && cirrusDone && cursor >= fogSpan.y) break;
+    }
+    gl_FragColor = vec4(scatter,transmittance);
+    return;
   }
 
   float limit = min(sceneDistance, MAX_MARCH_M);
@@ -615,6 +678,9 @@ uniform sampler2D tDiffuse;
 uniform sampler2D tClouds;
 uniform sampler2D tDepth;
 uniform vec2 cloudTexel;
+uniform vec2 fullTexel;
+uniform float sunshineMode;
+${SUNSHINE_RECONSTRUCTION}
 uniform float cloudHasDepth;
 
 /**
@@ -627,6 +693,15 @@ const float DEPTH_EDGE = 0.02;
 void main() {
   vec3 scene = texture2D(tDiffuse, vUv).rgb;
   vec4 cloud = texture2D(tClouds, vUv);
+  if (sunshineMode > 0.5) {
+    vec2 res = 1.0 / cloudTexel;
+    cloud = texture2D_bicubic(tClouds,vUv,res);
+    cloud += texture2D_bicubic(tClouds,vUv+vec2(2.0*fullTexel.x,0),res);
+    cloud += texture2D_bicubic(tClouds,vUv-vec2(2.0*fullTexel.x,0),res);
+    cloud += texture2D_bicubic(tClouds,vUv+vec2(0,2.0*fullTexel.y),res);
+    cloud += texture2D_bicubic(tClouds,vUv-vec2(0,2.0*fullTexel.y),res);
+    cloud *= 0.2;
+  }
   if (cloudHasDepth > 0.5) {
     float here = texture2D(tDepth, vUv).x;
     vec2 base = floor(vUv / cloudTexel - 0.5) + 0.5;
@@ -642,6 +717,9 @@ void main() {
         matched = texture2D(tClouds, tap);
       }
     }
+    if (sunshineMode > 0.5)
+      for (int y=-2;y<=2;y++) for (int x=-2;x<=2;x++)
+        furthest = max(furthest, abs(texture2D(tDepth,vUv+vec2(float(x),float(y))*cloudTexel).r-here));
     if (furthest > DEPTH_EDGE) cloud = matched;
   }
   gl_FragColor = vec4(scene * cloud.a + cloud.rgb, 1.0);
@@ -663,6 +741,39 @@ export class CloudPass extends Pass {
   private byteEstimate = 0;
   private currentQuality: CloudQuality = 'half';
   private currentSteps = 40;
+  private sunshineTextures: SunshineTextures | undefined;
+  private sunshineLoad: Promise<void> | undefined;
+  private disposed = false;
+  private readonly historyTargets: WebGLRenderTarget[];
+  private readonly historyMaterial: ShaderMaterial;
+  private historyIndex = 0;
+  private historyValid = false;
+  private historyKey = '';
+  private readonly previousPosition = new Vector3();
+  private readonly previousProjection = new Matrix4();
+
+  loadSunshine(read: Parameters<typeof loadSunshineTextures>[0]): Promise<void> {
+    this.sunshineLoad ??= loadSunshineTextures(read).then((textures) => {
+      if (this.disposed) {
+        Object.values(textures).forEach((texture) => texture.dispose());
+        return;
+      }
+      this.sunshineTextures = textures;
+      const mapping = {
+        coverage: 'extra_large_noise',
+        large: 'large_noise',
+        medium: 'noise_medium',
+        small: 'noise_small',
+        curl: 'curl_noise',
+        height: 'heightmask',
+        dither: 'dither_small',
+      } as const;
+      for (const name of Object.keys(mapping) as (keyof typeof mapping)[])
+        this.marchMaterial.uniforms[mapping[name]]!.value = textures[name];
+      this.historyValid = false;
+    });
+    return this.sunshineLoad;
+  }
 
   constructor(
     camera: PerspectiveCamera,
@@ -674,6 +785,22 @@ export class CloudPass extends Pass {
       defines: { LIGHT_STEPS: LIGHT_STEPS },
       uniforms: {
         ...this.shadowUniforms,
+        extra_large_noise: { value: null },
+        large_noise: { value: null },
+        noise_medium: { value: null },
+        noise_small: { value: null },
+        curl_noise: { value: null },
+        dither_small: { value: null },
+        heightmask: { value: null },
+        sunshineMode: { value: 0 },
+        sunshineTime: { value: 0 },
+        sunshineScale: { value: 1 },
+        sunshineCoverage: { value: 0.874 },
+        sunshineDensity: { value: 0.14 },
+        sunshineWind: { value: new Vector2(1, 1).normalize() },
+        sunshineSteps: { value: 300 },
+        sunshineLightSteps: { value: 32 },
+        sunshineOffset: { value: new Vector2() },
         tDepth: { value: null },
         cloudVolume: { value: null },
         cloudShape: { value: null },
@@ -721,6 +848,8 @@ export class CloudPass extends Pass {
         tClouds: { value: null },
         tDepth: { value: null },
         cloudTexel: { value: new Vector2(1, 1) },
+        fullTexel: { value: new Vector2(1, 1) },
+        sunshineMode: { value: 0 },
         cloudHasDepth: { value: 0 },
       },
       vertexShader: VERTEX,
@@ -729,11 +858,32 @@ export class CloudPass extends Pass {
       depthWrite: false,
     });
     this.target = new WebGLRenderTarget(1, 1, {
+      count: 2,
       type: highPrecision ? HalfFloatType : UnsignedByteType,
       depthBuffer: false,
       stencilBuffer: false,
       minFilter: LinearFilter,
       magFilter: LinearFilter,
+    });
+    this.historyTargets = [this.target.clone(), this.target.clone()];
+    this.historyMaterial = new ShaderMaterial({
+      uniforms: {
+        currentColor: { value: null },
+        currentData: { value: null },
+        previousColor: { value: null },
+        previousData: { value: null },
+        inverseProjection: { value: new Matrix4() },
+        cameraWorld: { value: new Matrix4() },
+        previousViewProjection: { value: new Matrix4() },
+        worldCamera: { value: new Vector3() },
+        previousOrigin: { value: new Vector2() },
+        texel: { value: new Vector2() },
+        validHistory: { value: 0 },
+      },
+      vertexShader: VERTEX,
+      fragmentShader: SUNSHINE_HISTORY,
+      depthTest: false,
+      depthWrite: false,
     });
     this.quality = 'half';
   }
@@ -761,7 +911,15 @@ export class CloudPass extends Pass {
     this.marchMaterial.uniforms.cloudJitter!.value = value;
   }
   get bytes(): number {
-    return this.byteEstimate;
+    return (
+      this.byteEstimate +
+      (this.sunshineTextures
+        ? Object.values(this.sunshineTextures).reduce(
+            (sum, texture) => sum + (texture.image.data?.byteLength ?? 0),
+            0,
+          )
+        : 0)
+    );
   }
   get scale(): number {
     return (
@@ -785,15 +943,53 @@ export class CloudPass extends Pass {
     this.lowWidth = Math.max(1, Math.ceil(this.width * scale));
     this.lowHeight = Math.max(1, Math.ceil(this.height * scale));
     this.target.setSize(this.lowWidth, this.lowHeight);
+    for (const target of this.historyTargets) target.setSize(this.lowWidth, this.lowHeight);
+    this.historyValid = false;
     // Half-float accumulation avoids quantized bands in smooth storm/fog gradients.
     this.byteEstimate =
-      scale > 0 ? this.lowWidth * this.lowHeight * (this.highPrecision ? 8 : 4) : 0;
+      scale > 0 ? this.lowWidth * this.lowHeight * (this.highPrecision ? 8 : 4) * 6 : 0;
   }
 
   update(state: CloudUniformState): void {
     updateCloudShadowUniforms(this.shadowUniforms, state);
     const u = this.marchMaterial.uniforms;
     const layer = state.layer;
+    const sunshine = state.appearance === 'sunshine' && Boolean(this.sunshineTextures);
+    u.sunshineMode!.value = Number(sunshine);
+    u.sunshineTime!.value = state.evolutionSeconds * 15.111;
+    u.sunshineCoverage!.value = state.sunshine?.coverage ?? 0.874;
+    u.sunshineDensity!.value = state.sunshine?.density ?? 0.14;
+    u.sunshineScale!.value = Math.max(
+      0.05,
+      ((layer?.topM ?? 25000) - (layer?.baseM ?? 1500)) / 23500,
+    );
+    (u.sunshineOffset!.value as Vector2).set(state.offset.x, state.offset.z);
+    (u.sunshineWind!.value as Vector2).set(state.wind?.x ?? 0, state.wind?.z ?? 0).normalize();
+    // Sunshine needs its own sample budget; retain 40 as the legacy default,
+    // scaling explicit user overrides relative to Sunshine's 300/32 defaults.
+    u.sunshineSteps!.value = Math.min(720, Math.round(this.currentSteps * 7.5));
+    u.sunshineLightSteps!.value = Math.min(32, Math.max(8, this.currentSteps));
+    const key = [
+      state.appearance,
+      state.sunshine?.coverage,
+      state.sunshine?.density,
+      layer?.type,
+      layer?.baseM,
+      layer?.topM,
+      layer?.coverage,
+      layer?.density,
+      state.terrain?.texture.uuid,
+      state.fogTerrain?.texture.uuid,
+      state.groundFog,
+      this.currentQuality,
+      this.currentSteps,
+      state.sunDirection.x.toFixed(3),
+      state.sunDirection.y.toFixed(3),
+    ].join('|');
+    if (key !== this.historyKey) {
+      this.historyValid = false;
+      this.historyKey = key;
+    }
     // A full rolling cycle takes about ten minutes; wrapping avoids float drift.
     u.cloudEvolution!.value = (state.evolutionSeconds * 0.01) % (Math.PI * 2);
     u.cloudSolid!.value = Number(state.appearance === 'solid');
@@ -858,9 +1054,46 @@ export class CloudPass extends Pass {
     renderer.clear();
     this.quad.render(renderer);
 
+    let cloudTexture = this.target.texture;
+    if (u.sunshineMode!.value === 1 && this.highPrecision) {
+      const h = this.historyMaterial.uniforms;
+      const position = new Vector3().setFromMatrixPosition(this.camera.matrixWorld);
+      const origin = this.shadowUniforms.cloudOrigin!.value as Vector2;
+      position.x += origin.x;
+      position.z += origin.y;
+      const movedTooFar = position.distanceTo(this.previousPosition) > 2000;
+      const projectionChanged = !this.previousProjection.equals(this.camera.projectionMatrix);
+      h.currentColor!.value = this.target.textures[0];
+      h.currentData!.value = this.target.textures[1];
+      const previous = this.historyTargets[1 - this.historyIndex]!;
+      const output = this.historyTargets[this.historyIndex]!;
+      h.previousColor!.value = previous.textures[0];
+      h.previousData!.value = previous.textures[1];
+      h.inverseProjection!.value = this.camera.projectionMatrixInverse;
+      h.cameraWorld!.value = this.camera.matrixWorld;
+      (h.worldCamera!.value as Vector3).copy(position);
+      (h.texel!.value as Vector2).set(1 / this.lowWidth, 1 / this.lowHeight);
+      h.validHistory!.value = Number(this.historyValid && !movedTooFar && !projectionChanged);
+      this.quad.material = this.historyMaterial;
+      renderer.setRenderTarget(output);
+      this.quad.render(renderer);
+      cloudTexture = output.texture;
+      (h.previousViewProjection!.value as Matrix4).multiplyMatrices(
+        this.camera.projectionMatrix,
+        this.camera.matrixWorldInverse,
+      );
+      (h.previousOrigin!.value as Vector2).copy(origin);
+      this.previousPosition.copy(position);
+      this.previousProjection.copy(this.camera.projectionMatrix);
+      this.historyValid = true;
+      this.historyIndex = 1 - this.historyIndex;
+    } else this.historyValid = false;
+
     const c = this.compositeMaterial.uniforms;
     c.tDiffuse!.value = readBuffer.texture;
-    c.tClouds!.value = this.target.texture;
+    c.tClouds!.value = cloudTexture;
+    c.sunshineMode!.value = u.sunshineMode!.value as number;
+    (c.fullTexel!.value as Vector2).set(1 / this.width, 1 / this.height);
     // The same depth the march clipped against, so the taps compare like with like.
     c.tDepth!.value = depth ?? null;
     c.cloudHasDepth!.value = depth ? 1 : 0;
@@ -872,6 +1105,11 @@ export class CloudPass extends Pass {
   }
 
   override dispose(): void {
+    this.disposed = true;
+    if (this.sunshineTextures)
+      Object.values(this.sunshineTextures).forEach((texture) => texture.dispose());
+    for (const target of this.historyTargets) target.dispose();
+    this.historyMaterial.dispose();
     this.marchMaterial.dispose();
     this.compositeMaterial.dispose();
     this.target.dispose();

@@ -19,7 +19,7 @@ function weatherProbe() {
   const shape=new Data3DTexture(new Uint8Array(8).fill(255),2,2,2);shape.format=RedFormat;shape.needsUpdate=true;
   uniforms.cloudCoverage!.value=coverage;uniforms.cloudShape!.value=shape;
   const material=new ShaderMaterial({defines:{LIGHT_STEPS:6},uniforms:{...uniforms,samplePosition:{value:new Vector3()}},
-    vertexShader:'void main(){gl_Position=vec4(position.xy,0.0,1.0);}',
+    vertexShader:'varying vec2 vUv; void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}',
     fragmentShader:MARCH_FRAGMENT.slice(0,MARCH_FRAGMENT.indexOf('void main()'))+'\nuniform vec3 samplePosition;\nvoid main(){vec2 h=cloudGroundAt(samplePosition.xz);gl_FragColor=vec4(h.x,coarseDensity(samplePosition),fogSigma(samplePosition),h.y);}',depthTest:false,depthWrite:false});
   const quad=new FullScreenQuad(material);
   const samples=[];

@@ -79,7 +79,7 @@ export function probe() {
   const material = new ShaderMaterial({
     defines: { LIGHT_STEPS: 6 },
     uniforms: { weatherRange: { value: new Vector2(0, 0) }, cloudBaseM: { value: 1200 }, cloudTopM: { value: 2800 }, cloudSunDirection: { value: new Vector3(0, 1, 0) } },
-    vertexShader: 'void main(){gl_Position=vec4(position.xy,0.0,1.0);}',
+    vertexShader: 'varying vec2 vUv; void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}',
     fragmentShader: prefix + '\nvoid main(){float tau=lightOpticalDepth(vec3(0.0,1300.0,0.0)); gl_FragColor=vec4(tau,exp(-tau),skyOpticalDepth(vec3(0.0,1300.0,0.0)),1.0);}',
     depthTest: false, depthWrite: false,
   });

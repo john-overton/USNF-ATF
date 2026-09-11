@@ -1,0 +1,15 @@
+{
+  "source": "https://github.com/Bonkahe/SunshineClouds2",
+  "commit": "a73a80b08fb37b255f8f10d49debd71e5541bd70",
+  "generator": "Godot 4.4.1.stable.official.49a5bc7b6",
+  "license": "MIT, Copyright (c) 2025 David House",
+  "uncompressedSha256": {
+    "large.bin.gz": "14e9e26760321ebb97853090c2066b258728763478680f615af85e65c0d39c44",
+    "medium.bin.gz": "b9ef00b9b0f1ae07a4fd3221fbee579e19ccff99fffbb59dd5508e3b23c82793",
+    "small.bin.gz": "0fe83fa89c0b1823b413c3ffb6793bba676bea047448dd068910e27f735f687c",
+    "coverage.bin.gz": "35d03884a615907aec8a40ef32c75ad6dde4f7054edde1d5e83448ad3d68543e",
+    "height.bin.gz": "6769131a5958cee22a12ab93bbfbac3a40178cde60a0c25aa123366507aa9997",
+    "curl.bin.gz": "ac84d635e1e0f4309259fb1f89449fb0f05e0d66c651dd23b147b4e3e29858b3",
+    "dither.bin.gz": "b65364d03eb86fc7e5d01654cc199cda706a904c2da2d8ab78fa85952fef9a6c"
+  }
+}

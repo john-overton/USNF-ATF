@@ -87,7 +87,7 @@ export interface EnvironmentDiagnostics {
   cloudQuality: CloudQuality;
   cloudSteps: number;
   groundFog: boolean;
-  cloudAppearance: 'solid' | 'volume';
+  cloudAppearance: 'sunshine' | 'solid' | 'volume';
   weatherTerrainReady: boolean;
   fogTerrainReady: boolean;
   weatherGroundM: number | undefined;
@@ -185,8 +185,7 @@ export function startTerrainViewer(
   setWeather(id: WeatherId): void;
   setWind(id: WindPresetId): void;
   setCloudQuality(quality: CloudQuality): void;
-  setGroundFog(enabled: boolean): void;
-  setCloudAppearance(value: 'solid' | 'volume'): void;
+  setCloudAppearance(value: 'sunshine' | 'solid' | 'volume'): void;
   setTerrainPaint(mode: string): Promise<void>;
   teleportToWaypoint(point: TeleportWaypoint): Promise<void>;
   setNavigationTarget(point: { id: number; x: number; z: number } | undefined): void;
@@ -219,8 +218,8 @@ export function startTerrainViewer(
     ...(query.wind === undefined ? {} : { wind: query.wind }),
   });
   let cloudQuality: CloudQuality = query.clouds ?? 'half';
-  let groundFog = query.fog !== 'off';
-  let cloudAppearance = query.cloudAppearance ?? 'solid';
+  let groundFog = query.weather === 'fog';
+  let cloudAppearance = query.cloudAppearance ?? 'sunshine';
   let weatherTerrain: WeatherTerrain | undefined;
   // Parsed before any GPU resource exists, so a bad value surfaces through the
   // viewer's explicit error path rather than leaking a context.
@@ -316,7 +315,12 @@ export function startTerrainViewer(
       windBearingDeg:
         speed < 1e-6 ? 0 : ((Math.atan2(-wind.x, wind.z) * 180) / Math.PI + 540) % 360,
       cloudQuality,
-      cloudSteps: environment.settings.weather === 'storm' ? Math.max(80, cloudSteps) : cloudSteps,
+      cloudSteps:
+        cloudAppearance === 'sunshine'
+          ? Math.min(720, Math.round(cloudSteps * 7.5))
+          : environment.settings.weather === 'storm'
+            ? Math.max(80, cloudSteps)
+            : cloudSteps,
       groundFog,
       cloudAppearance,
       weatherTerrainReady: Boolean(weatherTerrain?.clouds),
@@ -553,6 +557,9 @@ export function startTerrainViewer(
     Object.assign(world, pose.position);
     yaw = pose.yaw;
     pitch = pose.pitch;
+    await antialias.clouds.loadSunshine((name) =>
+      platform.fs.readBytes('assets', `sunshine/${name}.bin.gz`),
+    );
     weatherTerrain = new WeatherTerrain(m, async (chunk) =>
       decodeChunk(await platform.fs.readBytes(root, folder + chunk.path), chunk),
     );
@@ -896,6 +903,20 @@ export function startTerrainViewer(
       appearance: cloudAppearance,
       groundFog,
       offset: cloudOffset,
+      wind: environment.windAt(world, cloudEvolutionSeconds),
+      // Sunshine coverage is a noise threshold, not the old coverage fraction.
+      // Broken uses the upstream .874/.14 defaults; presets retain their intent.
+      sunshine: {
+        coverage:
+          layer?.type === 'stratus'
+            ? 0.985
+            : layer?.type === 'cumulonimbus'
+              ? 0.92
+              : environment.settings.weather === 'scattered'
+                ? 0.78
+                : 0.874,
+        density: (0.14 * (layer?.density ?? 0.7)) / 0.7,
+      },
       evolutionSeconds: cloudEvolutionSeconds,
       cirrusOffset,
       layer,
@@ -1031,18 +1052,15 @@ export function startTerrainViewer(
     },
     setWeather(id: WeatherId) {
       environment.setWeather(id);
+      groundFog = id === 'fog';
       update(diagnostics());
     },
     setWind(id: WindPresetId) {
       environment.setWind(id);
       update(diagnostics());
     },
-    setCloudAppearance(value: 'solid' | 'volume') {
+    setCloudAppearance(value: 'sunshine' | 'solid' | 'volume') {
       cloudAppearance = value;
-    },
-    setGroundFog(enabled: boolean) {
-      groundFog = enabled;
-      update(diagnostics());
     },
     setCloudQuality(quality: CloudQuality) {
       cloudQuality = quality;

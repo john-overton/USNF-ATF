@@ -26,13 +26,15 @@ try {
     assert(Number.isFinite(ground));
     assert(Number.isFinite(d.environment.weatherGroundM));
     for(const aglFeet of [100,600]){
-      const values = {x:site.x,z:site.z,y:String(ground + aglFeet*.3048),pitch:'0.02',yaw:'0',clouds:'off'};
+      const values = {x:site.x,z:site.z,y:String(ground + aglFeet*.3048),pitch:'0.02',yaw:'0',clouds:'off',weather:'fog'};
       const diagnostic = await navigate(values);
+      assert.equal(diagnostic.environment.groundFog,true);
       await s.capture(`${site.name}-fog-${aglFeet}ft`);
       reports.push({site:site.name,aglFeet,ground,diagnostic});
     }
     const cloud = await navigate({x:site.x,z:site.z,y:String(d.environment.weatherGroundM + 1900),pitch:'0.02',yaw:'0'});
     await s.capture(`${site.name}-cloud-1900m-agl`);
+    assert.equal(cloud.environment.groundFog,false);
     reports.push({site:site.name,aglM:1900,diagnostic:cloud});
   }
   assert.equal(s.errors.length,0);

@@ -70,13 +70,13 @@ test('setSize recomputes the low-resolution target and its byte estimate', () =>
   p.quality = 'half';
   p.setSize(2560, 1440);
   expect(p.resolution).toEqual({ width: 1280, height: 720 });
-  expect(p.bytes).toBe(1280 * 720 * 8);
+  expect(p.bytes).toBe(1280 * 720 * 8 * 6);
   p.quality = 'quarter';
   expect(p.resolution).toEqual({ width: 640, height: 360 });
-  expect(p.bytes).toBe(640 * 360 * 8);
+  expect(p.bytes).toBe(640 * 360 * 8 * 6);
   p.quality = 'full';
   expect(p.resolution).toEqual({ width: 2560, height: 1440 });
-  expect(p.bytes).toBe(2560 * 1440 * 8);
+  expect(p.bytes).toBe(2560 * 1440 * 8 * 6);
   p.dispose();
 });
 

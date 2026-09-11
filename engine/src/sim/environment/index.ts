@@ -170,7 +170,7 @@ export interface EnvironmentQuery {
   clouds?: CloudQuality;
   cloudSteps?: number;
   fog?: 'off' | 'ground';
-  cloudAppearance?: 'solid' | 'volume';
+  cloudAppearance?: 'sunshine' | 'solid' | 'volume';
 }
 /**
  * URL overrides. Invalid values throw so the viewer's existing explicit error
@@ -228,8 +228,8 @@ export function parseEnvironmentQuery(search: string): EnvironmentQuery {
   }
   const appearance = params.get('cloudAppearance');
   if (appearance !== null) {
-    if (appearance !== 'solid' && appearance !== 'volume')
-      throw new Error('Invalid cloudAppearance parameter: expected solid or volume');
+    if (appearance !== 'sunshine' && appearance !== 'solid' && appearance !== 'volume')
+      throw new Error('Invalid cloudAppearance parameter: expected sunshine, solid or volume');
     query.cloudAppearance = appearance;
   }
   const fog = params.get('fog');

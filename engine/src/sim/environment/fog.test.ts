@@ -34,11 +34,17 @@ test('fog URL selection survives session serialization and rejects typos', () =>
 });
 
 test('cloud appearance URL selection round-trips and rejects typos', () => {
-  for (const appearance of ['solid', 'volume'] as const) {
+  for (const appearance of ['sunshine', 'solid', 'volume'] as const) {
     const mission = parseMissionQuery(`?cloudAppearance=${appearance}`);
     expect(parseMissionQuery(`?${missionQuery(mission)}`).environment.cloudAppearance).toBe(
       appearance,
     );
   }
   expect(() => parseMissionQuery('?cloudAppearance=mistyped')).toThrow('Invalid cloudAppearance');
+});
+
+test('fog is a distinct weather preset without cloud layers', () => {
+  const mission = parseMissionQuery('?weather=fog');
+  expect(parseMissionQuery('?' + missionQuery(mission).toString()).environment.weather).toBe('fog');
+  expect(WEATHER_PRESETS.fog.layers).toEqual([]);
 });

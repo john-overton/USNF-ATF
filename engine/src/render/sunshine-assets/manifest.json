@@ -1,0 +1,44 @@
+{
+  "coverage": {
+    "channels": 4,
+    "depth": 1,
+    "height": 1024,
+    "width": 1024
+  },
+  "curl": {
+    "channels": 4,
+    "depth": 128,
+    "height": 128,
+    "width": 128
+  },
+  "dither": {
+    "channels": 1,
+    "depth": 64,
+    "height": 64,
+    "width": 64
+  },
+  "height": {
+    "channels": 4,
+    "depth": 1,
+    "height": 1,
+    "width": 256
+  },
+  "large": {
+    "channels": 1,
+    "depth": 128,
+    "height": 128,
+    "width": 128
+  },
+  "medium": {
+    "channels": 1,
+    "depth": 128,
+    "height": 128,
+    "width": 128
+  },
+  "small": {
+    "channels": 1,
+    "depth": 128,
+    "height": 128,
+    "width": 128
+  }
+}

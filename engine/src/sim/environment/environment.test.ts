@@ -148,7 +148,7 @@ test('gusts are deterministic, bounded and vary in time and space', () => {
 
 test('cloud presets keep a cirrus sheet and one marched layer below it', () => {
   for (const preset of Object.values(WEATHER_PRESETS)) {
-    expect(preset.layers.some((layer) => layer.type === 'cirrus')).toBe(true);
+    expect(preset.layers.some((layer) => layer.type === 'cirrus')).toBe(preset.id !== 'fog');
     const marched = marchedLayer(preset);
     if (marched) {
       expect(marched.topM).toBeGreaterThan(marched.baseM);

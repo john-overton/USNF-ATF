@@ -5,7 +5,7 @@
  */
 import type { Vec3 } from '../flight';
 
-export type WeatherId = 'clear' | 'scattered' | 'broken' | 'overcast' | 'storm';
+export type WeatherId = 'fog' | 'clear' | 'scattered' | 'broken' | 'overcast' | 'storm';
 export type CloudType = 'cumulus' | 'cumulonimbus' | 'stratus' | 'cirrus';
 export interface CloudLayer {
   type: CloudType;
@@ -22,8 +22,9 @@ export interface WeatherPreset {
   label: string;
   layers: readonly CloudLayer[];
 }
-/** Authored in Docs/environment-plan.md; a cirrus sheet is present in every preset. */
+/** Authored in Docs/environment-plan.md; cirrus accompanies the cloud presets; ground fog is separate. */
 export const WEATHER_PRESETS: Readonly<Record<WeatherId, WeatherPreset>> = Object.freeze({
+  fog: { id: 'fog', label: 'Fog (200–600 ft AGL)', layers: [] },
   clear: {
     id: 'clear',
     label: 'Clear',
