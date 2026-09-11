@@ -1323,3 +1323,74 @@ spatial grain; camera movement, coarse distant sampling and approximate history
 reprojection can still shimmer. No claim of zero flicker or Godot image parity.
 Next reproducible acceptance: restart the app and fly into Broken and Thunderstorm
 towers, comparing cloud boundaries and interiors during the user's approach.
+
+## 2026-09-11: Moving-camera cloud lighting correction
+
+Source: working tree based on `bb791a8`, with the accompanying primary-light
+weighting and representative-depth correction. Comparison loads the three cloud
+source modules directly from `0eafc38` through the GPU runner's optional commit
+argument; it does not alter the checkout. Machine: Linux Omarchy, RTX 4070,
+NVIDIA 610.57.04 / ANGLE OpenGL ES 3.2, Bun 1.4.2, Node 26.8.1.
+
+Acceptance correction: the user reports fixed-dither `bb791a8` worsened moving
+fringes and retained a closing-circle/tunnel inside clouds. Static cameras looked
+good. Its previous stationary variance thresholds did not establish acceptance;
+replace those assertions with a uniform-cloud lighting invariant and report
+moving-view measurements without treating their average as visual proof.
+
+Changes: restore animated source jitter. Apply the first partial interval and
+remaining-opacity cap before both sunlight and opacity accumulation. Weight AO
+by the same contributions. Reproject history at the opacity-weighted depth,
+rather than the last step; this also replaces the highest-density sample used
+for approximate cirrus/cloud ordering. Mixed-layer history rejection remains.
+The independent near/far clip-history correction remains. Clouds can become
+slightly darker because excess first/final-sample light is removed.
+
+Commands:
+
+```sh
+bun run check
+bun tools/flight/sunshine-gpu-smoke.ts 0eafc38
+bun tools/flight/sunshine-gpu-smoke.ts
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/cloud-smoke.ts motion-lighting-verified above,inside,tower-side
+bun tools/flight/cloud-flight-smoke.ts
+git diff --check
+```
+
+- Check: 476 pass, 3 existing imported-mount skips (F14/A4E/X31), zero failures;
+  types/lint/format pass. No Python changes/tests.
+- Uniform cloud fixture replaces only sampled density and sun visibility with
+  constants, retaining the real primary integrator. Across 32 combinations of
+  density and animated jitter, fully opaque red-channel radiance has a .31090307
+  range in `0eafc38` and zero in the correction. All corrected opacities exceed
+  .999. This directly detects light added beyond the ray's opacity budget.
+- Actual-texture sequences: 48 frames at 60 Hz, measure last 32; moving camera
+  travels 8 m/frame (480 m/s), at 10000 m interior or 26000 m upper edge, looking
+  towards (camera.x,10000,camera.z-30000). Mean adjacent-frame RGB byte differences
+  for stationary/interior-moving/edge-moving are .135376/.161275/.247684 in
+  `0eafc38`, versus .093336/.123131/.156063 in this correction. Motion contributes
+  to these values; brightness changes also affect them. They are not a perceptual
+  acceptance score or evidence that the user's precise artifact is eliminated.
+- Existing GPU regressions pass: 128 upstream density/light comparisons (53
+  nonempty), rebase byte difference zero, geometry-depth difference zero, far
+  clouds visible beyond 80 km, low clouds visible from 20 km, brightness ratios
+  .7500073/.5, far-clip history retained and FOV changes rejected. GL error zero.
+- Initial exploratory GPU run failed the old stationary threshold after restoring
+  animated jitter, as expected; that misleading acceptance criterion is removed.
+  An expanded fixture initially failed history retention because it teleported
+  16 km from edge to interior; warm the new camera location before testing far
+  clip. Corrected fixture passes with the large-camera-cut guard preserved.
+- Fresh desktop above/interior/tower fixtures: median 16.7 ms, p95 16.8 ms, no
+  runtime errors. Vsync-limited synthetic checks, not a full-theater benchmark.
+  Outputs in ignored `extracted/cloud-review/motion-lighting-verified/`,
+  `sunshine-gpu/`, and `sunshine-gpu-0eafc38/`.
+
+The imported F14/Salt Lake flight smoke also passed aircraft/cloud composition,
+pause freeze and resume with no runtime errors; artifacts in ignored
+`extracted/cloud-review/flight/`. This is integration evidence, not visual proof
+that the moving tunnel is gone.
+
+Remaining: representative-depth reprojection, adaptive ray spacing and animated
+jitter remain approximations. This is one further attempt; the user's actual
+moving-camera flight remains the acceptance gate before deciding to revert.

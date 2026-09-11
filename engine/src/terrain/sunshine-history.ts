@@ -24,7 +24,9 @@ void main() {
   historyData = data;
   vec4 view = inverseProjection * vec4(vUv * 2.0 - 1.0, -1.0, 1.0);
   vec3 dir = normalize((cameraWorld * vec4(normalize(view.xyz / view.w),0.0)).xyz);
-  vec3 position = worldCamera + dir * data.g * 1000.0;
+  // Track the opacity-weighted cloud position, not the last march step.
+  // The stop step jumps discretely as the camera crosses density shells.
+  vec3 position = worldCamera + dir * data.b * 1000.0;
   position.xz -= previousOrigin;
   vec4 clip = previousViewProjection * vec4(position,1.0);
   vec2 uv = clip.xy / max(0.0001,clip.w) * 0.5 + 0.5;

@@ -7,6 +7,25 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-11
 
+## 2026-09-11: Correct cloud lighting discontinuities during camera motion
+
+User acceptance correction: `bb791a8` made cloud fringes dance and did not remove
+the closing-tunnel effect during movement. Static views were already good;
+the stationary variance reduction was insufficient acceptance evidence. Restore
+animated jitter, retaining the independent clip-plane history fix. Primary light
+and opacity now use identical partial-first and opacity-clamped final weights;
+ambient occlusion uses those same weights. History tracks opacity-weighted cloud
+depth instead of the discrete stopping step.
+
+A uniform-cloud GPU fixture confirms a real integration defect: changing density
+and jitter moved full-opacity radiance through a .310903 range in `0eafc38`,
+versus zero after this correction. Interior/upper-edge sequences moving at 480 m/s
+show lower mean RGB variation than `0eafc38`, but these metrics do not establish
+that the user's exact motion artifact is resolved. Density/light sampling
+functions retain upstream parity. See phase 3 baseline for evidence and limits.
+Next: restart and repeat the user's moving-camera approach; this is one further
+attempt before reverting if the actual flight view is still worse.
+
 ## 2026-09-11: Reduce near-cloud bubbling and temporal flicker
 
 Sunshine now uses a fixed spatial dither slice for primary ray starts instead of

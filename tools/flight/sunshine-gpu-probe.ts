@@ -42,20 +42,21 @@ async function sunshineProbe(encoded:Record<string,string>, reference:string) {
  (pass as unknown as {historyValid:boolean}).historyValid=false;
  const rebased=render(50000,28000,50000);
  let maxRebase=0;for(let i=0;i<first.length;i++)maxRebase=Math.max(maxRebase,Math.abs(first[i]!-rebased[i]!));
- // Near/inside-cloud temporal variation, including a slow approach (120 m/s).
+ // Interior and upper-edge temporal variation during a 480 m/s approach.
  state.origin={x:0,z:0};
  const flicker=[];
- for(const moving of [false,true]){
+ for(const [moving,altitude] of [[false,10000],[true,10000],[true,26000]] as const){
   let previous:Uint8Array|undefined;let delta=0;let count=0;
   for(let frame=0;frame<48;frame++){
    state.evolutionSeconds=frame/60;
-   const pixels=render(50000,10000,50000-(moving?frame*2:0));
+   const pixels=render(50000,altitude,50000-(moving?frame*8:0));
    if(previous&&frame>=16)for(let i=0;i<pixels.length;i++)if(i%4!==3){delta+=Math.abs(pixels[i]!-previous[i]!);count++;}
    previous=pixels;
   }
   flicker.push(delta/count);
  }
  // The terrain viewer adjusts far clip while flying; this must retain history.
+ render(50000,10000,49906);
  camera.far=350000;camera.updateProjectionMatrix();render(50000,10000,49906);
  const farClipHistory=(pass as unknown as {historyMaterial:ShaderMaterial}).historyMaterial.uniforms.validHistory!.value;
  camera.fov=55;camera.updateProjectionMatrix();render(50000,10000,49906);
@@ -104,8 +105,33 @@ async function sunshineProbe(encoded:Record<string,string>, reference:string) {
  const depthInvariant=Array.from(depthValues);
  depthMaterial.dispose();middleTerrain.texture.dispose();
  distantTerrain.texture.dispose();
+ // Uniform illuminated cloud: crossing an opacity cutoff must not change
+ // radiance as the number of primary steps or partial first interval changes.
+ const constantBody=(shader:string,name:string,body:string)=>{
+  const start=shader.indexOf('{',shader.indexOf('float '+name+'('));
+  let end=start+1,depth=1;
+  while(depth){const ch=shader[end++];if(ch==='{')depth++;if(ch==='}')depth--;}
+  return shader.slice(0,start+1)+body+shader.slice(end-1);
+ };
+ state.terrain=terrain;state.layer={type:'cumulus',baseM:1500,topM:25000,coverage:.874,density:1};
+ state.sunshine=undefined;state.ambientIntensity=0;state.fogNear=1e9;state.fogFar=2e9;pass.update(state);
+ let constantPrefix=constantBody(prefix,'sampleScene','return fixtureDensity;');
+ constantPrefix=constantBody(constantPrefix,'sampleLighting','return 0.0;');
+ const constantMaterial=new ShaderMaterial({defines:{LIGHT_STEPS:6},uniforms:{...uniforms,fixtureDensity:{value:.1}},
+ vertexShader:'varying vec2 vUv; void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}',
+ fragmentShader:'uniform float fixtureDensity;\n'+constantPrefix+'void main(){vec4 data;gl_FragColor=sunshineMarch(vec3(0,10000,0),vec3(1,0,0),180000.0,data);}',depthTest:false,depthWrite:false});
+ quad.material=constantMaterial;
+ const constantSamples=[];
+ for(let i=0;i<32;i++){
+  constantMaterial.uniforms.fixtureDensity!.value=.03+i*.013;
+  uniforms.sunshineTime!.value=i*15.111/60;
+  renderer.setRenderTarget(target);quad.render(renderer);
+  const pixel=new Float32Array(4);renderer.readRenderTargetPixels(target,0,0,1,1,pixel);constantSamples.push(Array.from(pixel));
+ }
+ const constantLightSpread=Math.max(...constantSamples.map(p=>p[0]!))-Math.min(...constantSamples.map(p=>p[0]!));
+ constantMaterial.dispose();
  const glError=renderer.getContext().getError();
  quad.dispose();material.dispose();target.dispose();output.dispose();input.dispose();pass.dispose();terrain.texture.dispose();renderer.dispose();
- return {flicker,farClipHistory,fovHistory,samples,depthInvariant,brightnessRatios,distantMinimumTransmittance,lowLayerMinimumTransmittance,maxRebase,glError,png,nonzero:samples.filter(s=>s[0]!>.001).length};
+ return {constantLightSpread,constantSamples,flicker,farClipHistory,fovHistory,samples,depthInvariant,brightnessRatios,distantMinimumTransmittance,lowLayerMinimumTransmittance,maxRebase,glError,png,nonzero:samples.filter(s=>s[0]!>.001).length};
 }
 Object.assign(window,{sunshineProbe});

@@ -57,7 +57,7 @@ This is a port of the cloud renderer, not a pixel-identical Godot compositor.
 | World height | Main cloud bounds remain AGL using weather DEMs; unknown terrain remains unknown. |
 | Cloud sizes | Source 23.5 km layer proportions scale to selected layer thickness (minimum scale .05). Empty space is skipped before sampling, and distant intervals cover a thickness-independent 180 km range. |
 | Weather presets | Broken uses upstream coverage .874 and density .14. Scattered, overcast and storm map their coverage/density intent to Sunshine's threshold semantics. The source RGBA height profile is shared; the previous custom anvil silhouette is not preserved in this mode. |
-| Sampling stability | Primary jitter uses a fixed spatial dither slice instead of scrolling full-step ray offsets each frame. This reduces near-cloud bubbling; spatial grain and motion aliasing can remain. |
+| Sampling stability | Animated source jitter restored after the fixed spatial slice failed moving-camera acceptance. Primary opacity and lighting share partial-first and clamped-final weights; ambient occlusion and history depth use opacity weights. This corrects sample-count brightness jumps while preserving density/light sample functions. |
 | Wind | Existing weather drives horizontal drift and curl direction; source relative layer speeds and upward detail evolution are retained. |
 | Lighting | Existing sun/moon, sky, exposure and distant haze remain. Linear sun color avoids a second gamma conversion; neutral ambient occlusion replaces the source test scene's red AO tint. |
 | Cirrus | Existing translucent high clouds remain. Mixed visible cirrus/cloud pixels bypass single-depth history to avoid incorrect parallax. |

@@ -268,17 +268,13 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
   if (ro.y < weatherRange.x + cloudBaseM && raydirection.y > 0.00001)
     entry = (weatherRange.x + cloudBaseM - ro.y) / raydirection.y;
   float marchRange = max(0.0, maxDistance - entry);
-  // Keep spatial dithering, but do not scroll through a new full-step offset
-  // every frame. Near/inside clouds that moved opacity and lighting between
-  // neighboring lobes faster than temporal history could resolve them.
-  // Density still evolves through smallPos and the wind-driven offsets above.
-  float traveled = entry + maxstep * texture(dither_small, vec3(vUv * 40.037, 0.0)).r;
+  // Animated spatial jitter avoids locking the noise pattern to the screen.
+  float traveled = entry + maxstep * texture(dither_small, vec3(vUv * 40.037, sunshineTime)).r;
   float initial = maxDistance;
-  float highest = 0.0;
-  float highestDistance = maxDistance;
+  float weightedDistance = 0.0;
   float density = 0.0;
   float ambient = 0.0;
-  float lightingSamples = 0.0;
+  float lightingWeight = 0.0;
   vec3 light = vec3(0.0);
   bool depthBreak = false;
   float sunUp = smoothstep(-0.03, 0.07, cloudSunDirection.y);
@@ -295,10 +291,18 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
       d = pow(sampleScene(largePos, mediumPos, smallPos, p, cloudTopM, cloudBaseM,
         maskSample.a, largeScale, mediumScale, smallScale, coverage, 1.075, curlPower, lod, false)
         * densityMultiplier, sharpness);
+      nextStep = mix(mix(maxstep, minstep, pow(d, 0.1)), maxstep, float(i) / float(sunshineSteps));
+      // The first partial interval and the final opacity-saturating interval
+      // must contribute the SAME weight to opacity and light. Counting the
+      // entire final sample made illumination jump as rays gained/lost a step,
+      // which can appear as nested shells when moving through dense cloud.
+      if (i == 0) d *= 1.0 - (traveled - entry) / maxstep;
+      d = min(d, max(0.0, 1.0 - density));
       if (d > 0.0) {
         initial = min(initial, traveled);
-        lightingSamples += 1.0;
-        float powder = pow(d, 1.0);
+        lightingWeight += d;
+        weightedDistance += traveled * d;
+        float powder = d;
         float sampled = sampleLighting(sunshineLightSteps, p, extraPos, largePos, mediumPos,
           smallPos, cloudSunDirection, densityMultiplier * lightDensity, sunUp, lightDistance,
           cloudTopM, cloudBaseM, extraScale, largeScale, mediumScale, smallScale,
@@ -309,11 +313,8 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
         light += cloudSunColor * pow(cloudSunStrength * weight, 2.2) * powder;
         ambient += sampleScene(largePos, mediumPos, smallPos, p + vec3(0,minstep,0),
           cloudTopM, cloudBaseM, maskSample.a, largeScale, mediumScale, smallScale,
-          coverage, 1.075, curlPower, lod, true) * densityMultiplier * lightDensity;
-        nextStep = mix(mix(maxstep, minstep, pow(d, 0.1)), maxstep, float(i) / float(sunshineSteps));
-        if (d > highest) { highest = d; highestDistance = traveled; }
+          coverage, 1.075, curlPower, lod, true) * densityMultiplier * lightDensity * d;
       }
-      if (i == 0) d = mix(d, 0.0, (traveled - entry) / maxstep);
       density += d;
       if (density >= 1.0) break;
     }
@@ -328,14 +329,16 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
     if (p.y < weatherRange.x + cloudBaseM && raydirection.y < 0.0) break;
   }
   density *= 1.0 - smoothstep(150000.0, maxDistance, initial);
-  ambient = clamp(ambient / max(1.0, lightingSamples), 0.0, 1.0);
+  ambient = clamp(ambient / max(0.0001, lightingWeight), 0.0, 1.0);
   // Source's neutral sky tint with occlusion. Scene-specific red test AO is
   // adapted to this environment's sheltered gray/blue cloud bases.
   vec3 fill = vec3(0.761,0.784,0.824) * vec3(0.133,0.2,0.243) * cloudAmbientStrength;
   light += mix(fill, fill * vec3(0.3,0.38,0.5), ambient);
   light *= cloudWeatherBrightness;
   light = mix(light, cloudFogColor, fogAmount(traveled));
-  rayData = vec4(initial, min(traveled, sceneDistance), min(traveled, highestDistance), float(depthBreak));
+  float representativeDistance = lightingWeight > 0.0
+    ? weightedDistance / lightingWeight : min(traveled, sceneDistance);
+  rayData = vec4(initial, min(traveled, sceneDistance), representativeDistance, float(depthBreak));
   return vec4(light, clamp(density, 0.0, 1.0));
 }
 `;
