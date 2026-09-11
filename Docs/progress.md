@@ -7,6 +7,23 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-10
 
+**Selectable guns:** retail-derived projectile dynamics and original imported yellow
+geometry now coexist with remake bullets. Both modes share the trailing pipper,
+using their programmed speed and an authored drop correction. Main-menu/helper
+selection survives reset and live switching preserves combat/ammo. See
+[baseline](baselines/retail-guns.md) and [binary evidence](formats/native-guns.md).
+This supersedes older target-leading reticle descriptions; full native gun/AI/HUD
+parity remains open. Audio work below is unchanged.
+
+## 2026-09-10: Retail-derived gun toggle and shared pipper
+
+Recovered launch/clamp, ammo debit/cadence, scalar deceleration, gravity cap and
+lifetime from local executable/JT evidence. Bounded BULLET.SH decoder imports the
+near yellow geometry at one foot per source unit, not an authored visibility scale.
+Synthetic tests cover physics, decoder rejection, mode state, real combat hits and
+target-independent shared pipper behavior. Next: native execution comparison,
+hardpoint/AI service details and full renderer LOD, not fabricated parity.
+
 **Audio gap follow-up:** checkpoint `6d941027333d43ee73f6854c90d1a2da89a09f42`
 is committed/pushed on main. Strict media audit recovered a separately labeled48s
 partial S35_S soundtrack, not seven complete movies. RPN0 pitch range, sustain,

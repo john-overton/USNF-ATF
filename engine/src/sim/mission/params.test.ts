@@ -14,6 +14,12 @@ const parse = (search: string) => parseMissionQuery(search);
 const roundTrip = (mission: MissionParams) =>
   parseMissionQuery(`?${missionQuery(mission).toString()}`);
 
+test('gun mode is explicit and survives URL round trips', () => {
+  expect(parse('?gunMode=retail').gunMode).toBe('retail');
+  expect(roundTrip({ ...DEFAULT_MISSION, gunMode: 'retail' }).gunMode).toBe('retail');
+  expect(parse('?gunMode=invalid').gunMode).toBe('remake');
+});
+
 test('an empty query is the default mission, and the defaults serialize to nothing', () => {
   expect(parse('')).toEqual(DEFAULT_MISSION);
   expect(parse('?')).toEqual(DEFAULT_MISSION);
@@ -151,6 +157,7 @@ test('validateMission reports problems in words a player can act on', () => {
 
 test('a fully specified mission survives the URL round trip', () => {
   const mission: MissionParams = {
+    gunMode: 'retail',
     mode: 'quick-fight',
     theater: 'ukraine',
     root: 'assets',

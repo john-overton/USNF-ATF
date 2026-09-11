@@ -1,5 +1,20 @@
 # Development handoff — 2026-09-10
 
+## Latest: selectable retail-derived guns and shared trailing pipper
+
+Implemented against main `1805187300a067bfc2130e0a7c48f0c7034693d8`.
+Main menu and flight helper select remake or retail-derived bullets. Both use the
+same aircraft-history pipper, accounting for programmed velocity; target velocity
+does not steer it. Native launch speed, cadence/ammo debit, scalar deceleration,
+gravity cap and lifetime are adapted to the fixed-step simulation. Original local
+BULLET.SH yellow geometry is imported with source/palette hashes and native scale.
+Mode changes preserve combat/ammo, clear shots and safe guns; reset retains mode.
+Old imports fall back explicitly. Music was deferred; unrelated Docs/synths.md is
+not part of this work. See [native evidence](formats/native-guns.md) and
+[verification](baselines/retail-guns.md). Native AI, collision, integer timing and
+full bullet LOD/HUD parity are not claimed. User subsequently authorized commit and
+push of this follow-up; confirmed Git results are reported after execution.
+
 ## Latest: remaining audio gaps follow-up
 
 Checkpoint **`6d941027333d43ee73f6854c90d1a2da89a09f42`** is committed/pushed on

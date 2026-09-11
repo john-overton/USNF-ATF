@@ -152,13 +152,15 @@ exteriors and the separate experimental per-aircraft flight-data mode. [F-14 set
   F-14/A-4E mirrors show live rear views. **Shift + arrows**
   look around or orbit externally; **Shift + /** centers the view.
 - Hold **Tab** to fire; **Shift + Tab** toggles safety (starts safe). Guns use
-  matching imported samples and individual rounds with aircraft velocity plus
-  muzzle speed. Bright tracers appear every fifth round. See
-  [cockpit and gun setup](Docs/phase-4-cockpit-guns.md). The gun reticle uses nearer
-  terrain or a 1,000 m base range, including aircraft velocity and gravity. Its thick
-  lower arc appears below 1,000 m and fills from left through bottom (500 m) to
-  right (zero) as range closes. The base-range fallback shows no bar. The reticle
-  appears only with the gun armed and ammunition available.
+  matching imported samples. **Bullet mechanics** in the main menu and flight helper
+  selects remake individual rounds/tracers (default) or retail-derived representative
+  rounds with imported yellow diamond geometry. Switching clears shots and safes the
+  gun without resetting ammunition or combat. Both modes use the same trailing
+  aircraft-attitude pipper, adjusted for their projectile velocity and drop—not an
+  enemy-velocity lead marker. Visual targets supply range; without one the cue uses
+  a quarter-second delay. The reticle appears only armed with ammunition available.
+  Older imports need re-exporting for native parameters/art; missing data safely
+  falls back to remake behavior. See [evidence and boundaries](Docs/formats/native-guns.md).
 - **F2** locks chase view to aircraft attitude; **F3** keeps the camera upright.
   Both external views hide the flight HUD and gun reticle.
 - **ArrowDown** pulls up, **ArrowUp** pushes down; left/right arrows bank.

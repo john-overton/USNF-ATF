@@ -8,6 +8,11 @@ import {
   Points,
   PointsMaterial,
   RGBAFormat,
+  InstancedMesh,
+  MeshBasicMaterial,
+  Matrix4,
+  Quaternion,
+  Vector3,
 } from 'three';
 import type { Platform } from '../platform/Platform';
 import { parseRetailGun, type RetailGun, type GunDefinition } from '../data/retail-gun';
@@ -25,6 +30,7 @@ export class FlightGun {
   private glowPositions = new Float32Array(MAX_GUN_ROUNDS * 3);
   private glowTexture: DataTexture;
   private glow: Points;
+  private diamonds?: InstancedMesh;
   private context?: AudioContext;
   private source?: AudioBufferSourceNode;
   private gain?: GainNode;
@@ -96,6 +102,21 @@ export class FlightGun {
     );
     this.glow.frustumCulled = false;
     this.lines.add(this.glow);
+    if (data?.bulletGeometry) {
+      const source = data.bulletGeometry;
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(new Float32Array(source.vertices), 3));
+      geometry.setAttribute('color', new BufferAttribute(new Float32Array(source.colors), 3));
+      geometry.setIndex(source.indices);
+      this.diamonds = new InstancedMesh(
+        geometry,
+        new MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
+        MAX_GUN_ROUNDS,
+      );
+      this.diamonds.count = 0;
+      this.diamonds.frustumCulled = false;
+      this.lines.add(this.diamonds);
+    }
     if (audio && data && 'clip' in data && typeof AudioContext !== 'undefined') {
       const clip = (data as RetailGun).clip;
       this.context = new AudioContext();
@@ -148,15 +169,33 @@ export class FlightGun {
     this.firing = false;
   }
   reset(): void {
-    Object.assign(this.state, createGunState(this.data));
+    Object.assign(this.state, createGunState(this.data, this.state.mode));
     this.firing = false;
     this.lastFired = 0;
     this.audioUpdate();
   }
   render(origin: { x: number; z: number }): void {
     let n = 0;
+    const retail = this.state.mode === 'retail' && !!this.data?.native;
+    const diamonds = retail ? this.diamonds : undefined;
+    if (this.diamonds) this.diamonds.count = 0;
+    const matrix = new Matrix4();
+    const rotation = new Quaternion();
+    const direction = new Vector3();
     for (const r of this.state.rounds) {
       if (!r.tracer) continue;
+      if (diamonds) {
+        const facing = r.nativeMotion?.direction ?? r.velocity;
+        direction.set(facing.x, facing.y, facing.z).normalize();
+        rotation.setFromUnitVectors(new Vector3(0, 0, -1), direction);
+        matrix.compose(
+          new Vector3(r.position.x - origin.x, r.position.y, r.position.z - origin.z),
+          rotation,
+          new Vector3(1, 1, 1),
+        );
+        diamonds.setMatrixAt(n++, matrix);
+        continue;
+      }
       const length = 0.008;
       this.positions.set(
         [
@@ -175,23 +214,40 @@ export class FlightGun {
       );
       n++;
     }
-    this.geometry.setDrawRange(0, n * 2);
+    if (diamonds) {
+      diamonds.count = n;
+      diamonds.instanceMatrix.needsUpdate = true;
+    }
+    this.geometry.setDrawRange(0, diamonds ? 0 : n * 2);
     this.geometry.getAttribute('position').needsUpdate = true;
-    this.glowGeometry.setDrawRange(0, n);
+    this.glowGeometry.setDrawRange(0, diamonds ? 0 : n);
     this.glowGeometry.getAttribute('position').needsUpdate = true;
   }
   diagnostics(safe: boolean) {
+    const native = this.state.mode === 'retail' ? this.data?.native : undefined;
     return {
       available: !!this.data,
+      mode: this.state.mode,
+      effectiveMode: this.state.mode === 'retail' && this.data?.native ? 'retail' : 'remake',
+      modeNote:
+        this.state.mode === 'retail' && !this.data?.native
+          ? 'Retail gun data missing; using remake mechanics. Re-import aircraft guns.'
+          : 'Native-derived parameters; authored 120Hz integration, collisions and AI.',
+      bulletArtwork:
+        this.state.mode === 'retail' && this.data?.native && this.diamonds
+          ? 'retail-geometry'
+          : 'remake-tracers',
+      renderedDiamonds: this.diamonds?.count ?? 0,
       name: this.data?.name ?? 'Gun not installed',
       safe,
       remaining: this.state.remaining,
       fired: this.state.fired,
       activeRounds: this.state.rounds.length,
       tracers: this.state.rounds.filter((r) => r.tracer).length,
-      muzzleSpeedMps: this.data?.muzzleSpeedMps ?? 0,
-      roundsPerSecond: this.data?.roundsPerSecond ?? 0,
-      tracerColor: this.data?.tracerColor ?? 'red',
+      muzzleSpeedMps: native ? native.initialSpeedFps * 0.3048 : (this.data?.muzzleSpeedMps ?? 0),
+      roundsPerSecond: native ? 1 / native.intervalSeconds : (this.data?.roundsPerSecond ?? 0),
+      ammunitionPerProjectile: native?.actualRoundsPerProjectile ?? 1,
+      tracerColor: native && this.diamonds ? 'retail-yellow' : (this.data?.tracerColor ?? 'red'),
       audioLoaded: !!this.source,
       contextState: this.context?.state ?? 'unavailable',
     };
@@ -206,6 +262,8 @@ export class FlightGun {
     this.geometry.dispose();
     this.glowGeometry.dispose();
     this.glowTexture.dispose();
+    this.diamonds?.geometry.dispose();
+    (this.diamonds?.material as MeshBasicMaterial | undefined)?.dispose();
     (this.glow.material as PointsMaterial).dispose();
     (this.lines.material as LineBasicMaterial).dispose();
   }

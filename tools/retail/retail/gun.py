@@ -7,6 +7,7 @@ from pathlib import Path
 from .pt import load_pt
 from .jt import load_jt
 from .audio import decode_pcm
+from .bullet import export_geometry
 
 
 def export(pt_path: Path, output: Path, tracer_color: str | None = None) -> dict:
@@ -36,7 +37,23 @@ def export(pt_path: Path, output: Path, tracer_color: str | None = None) -> dict
         'mounts': [[-0.6, -0.7, -2.5], [0.6, -0.7, -2.5]] if not m61 else ([[0, -0.5, -4]] if pt_path.name.upper() == 'F31.PT' else [[-0.5, 0, -6]]),
         'mountNote': 'Authored body-space metres, forward -Z; retail hardpoint units unverified.',
         'clip': decode_pcm(sound.read_bytes(), sound.name),
+        'native': {
+            'source': jt_path.name, 'sha256': hashlib.sha256(jt_path.read_bytes()).hexdigest(),
+            'initialSpeedFps': jt.initial_speed, 'finalSpeedFps': jt.final_speed,
+            'minSpeedFps': int(jt.obj['_minSpeed']), 'maxSpeedFps': int(jt.obj['_maxSpeed']),
+            'decelerationFps2': int(jt.obj['_dacc']),
+            'launchRetardPercent': int(jt.proj['launchRetard']) & 255,
+            'actualRoundsPerProjectile': int(jt.proj['actualRoundsPerGame']) & 255,
+            'intervalSeconds': (int(jt.proj['gameBurstT']) & 255) / 4,
+            'lifetimeSeconds': jt.remove_t / 4,
+            'maxRangeM': jt.zones[1].max_range * 0.3048,
+            'gravityFps2': 32, 'terminalFallSpeedFps': 80,
+        },
     }
+    bullet = files.get((jt.shape or '').upper())
+    palette = files.get('PALETTE.PAL')
+    if bullet is not None and bullet.name.upper() == 'BULLET.SH' and palette is not None:
+        result['bulletGeometry'] = export_geometry(bullet, palette)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, separators=(',', ':')) + '\n')
     return result

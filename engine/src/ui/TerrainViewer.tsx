@@ -8,6 +8,8 @@ import type { FsRoot } from '../platform/Platform';
 import { startTerrainViewer, type TerrainDiagnostics } from '../terrain/viewer';
 import { ExplorerNavigationOverlay } from './ExplorerNavigationOverlay';
 import type { MissionParams } from '../sim/mission/params';
+import type { GunMode } from '../data/retail-gun';
+import { GunModeSelect } from './GunModeSelect';
 import type { MapWaypoint } from '../terrain/navigation-map';
 import {
   CLOUD_QUALITIES,
@@ -23,11 +25,13 @@ export function TerrainViewer({
   mission,
   parseError = '',
   paused = false,
+  onGunMode,
 }: {
   mission: MissionParams;
   /** A query the shell could not read; shown here because this is where errors live. */
   parseError?: string;
   paused?: boolean;
+  onGunMode?: (mode: GunMode) => void;
 }) {
   const flightMode = mission.mode !== 'explorer';
   const [root, setRoot] = useState<FsRoot>(mission.root);
@@ -39,6 +43,12 @@ export function TerrainViewer({
   const [rootPath, setRootPath] = useState('');
   const canvas = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<ReturnType<typeof startTerrainViewer> | null>(null);
+  // Gun selection is a live setting; changing it must not recreate the world.
+  const sceneKey = JSON.stringify({ ...mission, gunMode: undefined });
+  const missionRef = useRef(mission);
+  useEffect(() => {
+    missionRef.current = mission;
+  }, [mission]);
   const cockpitMirrors = useCallback((layout: CockpitMirrorLayout) => {
     viewerRef.current?.setCockpitMirrors(layout);
   }, []);
@@ -71,7 +81,7 @@ export function TerrainViewer({
         request.root,
         request.path,
         setStats,
-        { ...mission, root: request.root, manifestPath: request.path },
+        { ...missionRef.current, root: request.root, manifestPath: request.path },
       );
       viewerRef.current = viewer;
     } catch (err) {
@@ -85,10 +95,13 @@ export function TerrainViewer({
       viewer?.dispose();
       if (viewerRef.current === viewer) viewerRef.current = null;
     };
-  }, [request, mission, parseError]);
+  }, [request, sceneKey, parseError]);
+  useEffect(() => {
+    viewerRef.current?.setGunMode(mission.gunMode);
+  }, [mission.gunMode, request, sceneKey, parseError]);
   useEffect(() => {
     viewerRef.current?.setPaused(paused);
-  }, [paused, request, mission, parseError]);
+  }, [paused, request, sceneKey, parseError]);
   return (
     <div className="probe-root">
       {stats?.imageryAttribution && (
@@ -155,6 +168,12 @@ export function TerrainViewer({
           )}
         </div>
         <div id="flight-helper-content" hidden={flightMode && panelMinimized}>
+          <GunModeSelect value={mission.gunMode} {...(onGunMode ? { onChange: onGunMode } : {})} />
+          <small>
+            Shared trailing pipper. Changing mode clears airborne rounds and safes guns; ammunition
+            and combat are retained.
+          </small>
+          {stats?.flight?.gun.mode === 'retail' && <small>{stats.flight.gun.modeNote}</small>}
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -574,19 +593,19 @@ export function TerrainViewer({
           )}
           <p>
             <a
-              href={`?mode=flight&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
+              href={`?mode=flight&gunMode=${mission.gunMode}&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
             >
               Practice runway
             </a>
             {' · '}
             <a
-              href={`?mode=flight&flightStart=approach&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
+              href={`?mode=flight&gunMode=${mission.gunMode}&flightStart=approach&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
             >
               Final approach
             </a>
             {' · '}
             <a
-              href={`?mode=flight&flightStart=airborne&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
+              href={`?mode=flight&gunMode=${mission.gunMode}&flightStart=airborne&aircraft=${stats?.flight?.aircraftId ?? 'f14'}&flightModel=${stats?.flight?.flightModelId ?? 'retail-envelope'}`}
             >
               Airborne practice
             </a>

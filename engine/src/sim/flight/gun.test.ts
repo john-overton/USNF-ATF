@@ -3,6 +3,7 @@ import { createFlightState } from './index';
 import { createGunState, stepGun } from './gun';
 import type { RetailGun } from '../../data/retail-gun';
 import { parseRetailGun } from '../../data/retail-gun';
+import { syntheticNativeGun } from './gun-fixture';
 const gun: RetailGun = {
   schemaVersion: 1,
   aircraftSource: 'F14.PT',
@@ -18,6 +19,39 @@ const gun: RetailGun = {
   clip: { source: 'synthetic.11k', sha256: 'b'.repeat(64), sampleRate: 11025, pcm: [128, 127] },
 };
 describe('actual-round gun simulation', () => {
+  test('native metadata and retail geometry validate bounds without changing legacy imports', () => {
+    const manifest = {
+      ...gun,
+      native: syntheticNativeGun.native,
+      clip: { ...gun.clip, encoding: 'unsigned8-mono' },
+      bulletGeometry: {
+        source: 'fixture.SH',
+        sha256: 'a'.repeat(64),
+        paletteSource: 'fixture.PAL',
+        paletteSha256: 'b'.repeat(64),
+        scaleNote: 'Synthetic triangle',
+        vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+        colors: [1, 1, 0, 1, 1, 0, 1, 1, 0],
+        indices: [0, 1, 2],
+      },
+    };
+    expect(parseRetailGun(manifest).native).toEqual(syntheticNativeGun.native);
+    expect(() =>
+      parseRetailGun({ ...manifest, native: { ...manifest.native, intervalSeconds: 0 } }),
+    ).toThrow();
+    expect(() =>
+      parseRetailGun({ ...manifest, native: { ...manifest.native, gravityFps2: NaN } }),
+    ).toThrow();
+    expect(() =>
+      parseRetailGun({
+        ...manifest,
+        bulletGeometry: { ...manifest.bulletGeometry, indices: [0, 1, 99] },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseRetailGun({ ...manifest, bulletGeometry: { ...manifest.bulletGeometry, colors: [] } }),
+    ).toThrow();
+  });
   test('120 Hz cadence consumes actual rounds and every fifth is a tracer', () => {
     const state = createGunState(gun),
       aircraft = createFlightState({ position: { x: 0, y: 3000, z: 0 }, airspeed: 150 });

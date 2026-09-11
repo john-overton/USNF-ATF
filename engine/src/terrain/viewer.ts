@@ -158,6 +158,7 @@ export function startTerrainViewer(
 ): {
   dispose(): void;
   setPaused(paused: boolean): void;
+  setGunMode(mode: MissionParams['gunMode']): void;
   setMusicEnabled(enabled: boolean): void;
   setMusicVolume(volume: number): void;
   setCockpitMirrors(layout: CockpitMirrorLayout): void;
@@ -175,6 +176,7 @@ export function startTerrainViewer(
   // through the viewer's explicit error path without leaking a context.
   const query = mission.environment;
   let flight: FlightLayer | undefined;
+  let gunMode = mission.gunMode;
   const renderer = new WebGLRenderer({
     canvas,
     antialias: false,
@@ -533,6 +535,7 @@ export function startTerrainViewer(
         return;
       }
       flight = layer;
+      flight.setGunMode(gunMode);
       flight.setPaused(paused);
       flight.environmentModel = environment;
       flight.activate();
@@ -888,6 +891,10 @@ export function startTerrainViewer(
   return {
     setMusicEnabled(enabled: boolean): void {
       flight?.setMusicEnabled(enabled);
+    },
+    setGunMode(mode: MissionParams['gunMode']): void {
+      gunMode = mode;
+      flight?.setGunMode(mode);
     },
     setMusicVolume(volume: number): void {
       flight?.setMusicVolume(volume);

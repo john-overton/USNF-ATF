@@ -62,6 +62,8 @@ test('the main menu keeps the whole retail item list, disabled where we cannot d
     MAIN_MENU_ITEMS.filter((item) => !item.enabled).length,
   );
   expect(markup).toContain('Create Quick Mission');
+  expect(markup).toContain('aria-label="Bullet mechanics"');
+  expect(markup).toContain('OG — retail-derived / yellow diamonds');
   expect(markup).toContain('Missions are phase 8');
   // Nothing retail is needed to draw it.
   expect(markup).not.toContain('<img');

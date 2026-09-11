@@ -1,5 +1,11 @@
 # Build Plan
 
+**2026-09-10 gun follow-up:** selectable retail-derived projectile behavior and
+original local yellow bullet geometry; shared aircraft-history pipper in both
+modes, with programmed velocity and authored drop correction. See
+[verification](baselines/retail-guns.md). This does not complete native AI,
+collision, integer-clock or HUD/LOD parity; music remains deferred by the user.
+
 **2026-09-10 audio gap follow-up:** added strict media/replacement audit and partial
 S35_S audio recovery, RPN0/sustain/releases, finite XMIDI loops, offline user-bank
 audition and explicit capability diagnostics. Missing complete ATF media, original

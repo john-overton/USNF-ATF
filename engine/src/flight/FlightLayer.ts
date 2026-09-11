@@ -1,4 +1,6 @@
-import { gunSight, type GunSightTarget } from './gun-sight';
+import type { gunSight, GunSightTarget } from './gun-sight';
+import { LagGunSight } from './lag-gun-sight';
+import type { GunMode } from '../data/retail-gun';
 import { AircraftDamage } from './AircraftDamage';
 import { AircraftBreakup } from './AircraftBreakup';
 import { CombatAudio } from './CombatAudio';
@@ -310,6 +312,8 @@ export class FlightLayer {
     this.previous = this.state;
     // Spawns are deterministic from the mission seed and where the player started.
     this.combat = new CombatWorld(mission, this.state, combatDefinitions, this.gun.state);
+    this.combat.setGunMode(mission.gunMode);
+    this.lagSight.record(this.state);
     this.combatEffects = new CombatEffects(scene);
     this.breakup = new AircraftBreakup(scene);
     this.opponents?.bind(this.combat);
@@ -537,11 +541,14 @@ export class FlightLayer {
     }
   }
   private resetCombat(): void {
+    this.lagSight.reset();
+    this.lagSight.record(this.state);
     this.breakup.reset();
     this.combatEffects.reset();
     this.combatAudio.reset();
     this.music.reset();
     this.combat = new CombatWorld(this.mission, this.state, this.combatDefinitions, this.gun.state);
+    this.combat.setGunMode(this.gun.state.mode);
     this.opponents?.bind(this.combat);
     delete this.environment.damage;
   }
@@ -552,6 +559,13 @@ export class FlightLayer {
     this.gun.setPaused(value);
     this.combatAudio.setPaused(value);
     this.music.setPaused(value);
+  }
+  setGunMode(mode: GunMode): void {
+    if (this.gun.state.mode === mode) return;
+    this.combat.setGunMode(mode);
+    this.lagSight.reset();
+    this.lagSight.record(this.state);
+    this.input.gunSafe = true;
   }
   setMusicEnabled(value: boolean): void {
     this.music.setEnabled(value);
@@ -734,6 +748,7 @@ export class FlightLayer {
               : 'day',
       );
       this.state = this.combat.player.state;
+      this.lagSight.record(this.state);
       const target = this.combat.target;
       const tracking = this.combat.player.contacts.some(
         (c) => c.id === target?.id && c.level === 'track',
@@ -885,6 +900,7 @@ export class FlightLayer {
     );
   }
   private gunTarget: GunSightTarget | undefined;
+  private readonly lagSight = new LagGunSight();
   /** World coordinates in metres / m/s. Call each sensor update; clear on lock loss. */
   setGunTarget(target: GunSightTarget | undefined): void {
     this.gunTarget = target && {
@@ -961,15 +977,10 @@ export class FlightLayer {
       viewYawRad: this.input.cameraYaw,
       viewPitchRad: this.input.cameraPitch,
       gun: this.gun.diagnostics(this.input.gunSafe),
-      gunSight: gunSight(
+      gunSight: this.lagSight.solution(
         this.state,
         this.gun.data,
-        (x, z) => {
-          const surface = this.ground.sample(x, z);
-          if (!surface && this.ground.sourceAt(x, z))
-            void this.ground.ensure(x, z, false).catch(() => undefined);
-          return surface;
-        },
+        this.gun.state.mode,
         this.gunTarget,
       ),
       autopilot: this.input.autopilot,

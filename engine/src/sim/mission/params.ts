@@ -24,6 +24,7 @@ import type { Loadout } from '../../data/retail-loadout';
 import type { FsRoot } from '../../platform/Platform';
 import { parseContrastQuery } from '../../terrain/light-contrast';
 import { parseEnvironmentQuery, type EnvironmentQuery } from '../environment';
+import type { GunMode } from '../../data/retail-gun';
 
 export type GameMode = 'explorer' | 'free-flight' | 'quick-fight';
 export type FlightStart = 'runway' | 'approach' | 'airborne';
@@ -86,6 +87,7 @@ export interface MissionParams {
   manifestPath: string;
   aircraft: AircraftId;
   flightModel: FlightModelId;
+  gunMode: GunMode;
   start: FlightStart;
   loadout: MissionLoadout;
   environment: EnvironmentParams;
@@ -115,6 +117,7 @@ export const DEFAULT_MISSION: MissionParams = {
   manifestPath: DEFAULT_MANIFEST_PATH,
   aircraft: 'f14',
   flightModel: 'retail-envelope',
+  gunMode: 'remake',
   start: 'runway',
   loadout: { stations: {}, internalFuelFraction: 1, payloadMassKg: 0 },
   environment: {},
@@ -178,6 +181,7 @@ export function parseMissionQuery(search: string): MissionParams {
     root: params.get('root') === 'assets' ? 'assets' : 'appData',
     manifestPath: params.get('manifest') ?? DEFAULT_MANIFEST_PATH,
     aircraft: aircraftId(params.get('aircraft')),
+    gunMode: params.get('gunMode') === 'retail' ? 'retail' : 'remake',
     flightModel:
       flightModel === 'assisted'
         ? 'assisted'
@@ -241,6 +245,7 @@ export function missionQuery(mission: MissionParams): URLSearchParams {
   set('manifest', mission.manifestPath, DEFAULT_MANIFEST_PATH);
   set('aircraft', mission.aircraft, 'f14');
   set('flightModel', mission.flightModel, 'retail-envelope');
+  set('gunMode', mission.gunMode, 'remake');
   set('flightStart', mission.start, mission.mode === 'quick-fight' ? 'airborne' : 'runway');
   set('distance', mission.encounter.distanceM, DEFAULT_ENCOUNTER.distanceM);
   set('orientation', mission.encounter.orientation, DEFAULT_ENCOUNTER.orientation);

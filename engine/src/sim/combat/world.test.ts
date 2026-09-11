@@ -5,6 +5,8 @@ import { createFlightState, stepFlight, PLACEHOLDER_AIRCRAFT, type FlightState }
 import { applyDamage, createDamageState, damageEffects } from './damage';
 import { FixedStepClock } from '../FixedStepClock';
 import { capsuleHit, closestApproach } from './hits';
+import { syntheticNativeGun } from '../flight/gun-fixture';
+import { createGunState } from '../flight/gun';
 
 const ground = () => ({ height: 0, normal: { x: 0, y: 1, z: 0 }, kind: 'land' as const });
 const player = () => createFlightState({ position: { x: 0, y: 1000, z: 0 }, airspeed: 0 });
@@ -50,6 +52,25 @@ const step = (w: CombatWorld) =>
     1 / 120,
     ground,
   );
+
+test('both gun modes produce real swept hits and preserve combat across live switches', () => {
+  for (const mode of ['retail', 'remake'] as const) {
+    const w = world(1, 10);
+    w.player.definition = { ...ORIGINAL_COMBAT, gun: syntheticNativeGun };
+    w.player.gun = createGunState(syntheticNativeGun, mode);
+    for (let tick = 0; tick < 120 && w.outcome !== 'victory'; tick++)
+      w.step({ ...w.player.state, timeSeconds: (tick + 1) / 120 }, true, false, 1 / 120, ground);
+    expect(w.player.hits).toBeGreaterThan(0);
+    expect(w.player.kills).toBe(1);
+    expect(w.outcome).toBe('victory');
+    const ammo = w.player.gun.remaining;
+    w.setGunMode(mode === 'retail' ? 'remake' : 'retail');
+    expect(w.player.gun.remaining).toBe(ammo);
+    expect(w.player.kills).toBe(1);
+    expect(w.entities.every((e) => e.gun.rounds.length === 0)).toBe(true);
+    expect(w.outcome).toBe('victory');
+  }
+});
 
 test('runway departure protection holds enemies until a sustained safe climb and resets', () => {
   const mission = {

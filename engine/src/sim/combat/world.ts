@@ -9,7 +9,14 @@ import {
   type Vec3,
   type Quaternion,
 } from '../flight';
-import { createGunState, stepGun, type GunState } from '../flight/gun';
+import {
+  createGunState,
+  stepGun,
+  setGunMode,
+  nativeLaunchSpeed,
+  type GunState,
+} from '../flight/gun';
+import type { GunMode } from '../../data/retail-gun';
 import type { GunDefinition } from '../../data/retail-gun';
 import { AIRCRAFT, type AircraftId } from '../../flight/aircraft-catalog';
 import type { MissionParams } from '../mission/params';
@@ -138,7 +145,7 @@ export class CombatWorld {
         previous: state,
         damage: createDamageState(definition.hitPoints),
         definition,
-        gun: createGunState(definition.gun),
+        gun: createGunState(definition.gun, mission.gunMode),
         targetId: null,
         contacts: [],
         activity: 'search',
@@ -171,6 +178,9 @@ export class CombatWorld {
   }
   get player(): Combatant {
     return this.entities[0]!;
+  }
+  setGunMode(mode: GunMode): void {
+    for (const entity of this.entities) setGunMode(entity.gun, mode);
   }
   get target(): Combatant | undefined {
     return this.entities.find((e) => e.id === this.player.targetId && !e.damage.destroyed);
@@ -325,15 +335,20 @@ export class CombatWorld {
       if (target) {
         const offset = delta(target.state.position, e.state.position);
         const range = magnitude(offset);
-        const relativeVelocity = delta(target.state.velocity, e.state.velocity);
+        const native = e.gun.mode === 'retail' ? e.definition.gun.native : undefined;
+        const relativeVelocity = native
+          ? target.state.velocity
+          : delta(target.state.velocity, e.state.velocity);
+        const shotSpeed = native
+          ? nativeLaunchSpeed(native, e.state)
+          : e.definition.gun.muzzleSpeedMps;
         const aimAt = (time: number) => ({
           x: offset.x + relativeVelocity.x * time,
           y: offset.y + relativeVelocity.y * time + 4.903325 * time ** 2,
           z: offset.z + relativeVelocity.z * time,
         });
-        let leadTime = range / e.definition.gun.muzzleSpeedMps;
-        for (let i = 0; i < 8; i++)
-          leadTime = magnitude(aimAt(leadTime)) / e.definition.gun.muzzleSpeedMps;
+        let leadTime = range / shotSpeed;
+        for (let i = 0; i < 8; i++) leadTime = magnitude(aimAt(leadTime)) / shotSpeed;
         const aim = aimAt(leadTime);
         const yawError = angle(Math.atan2(-aim.x, -aim.z) - yaw);
         const pitchError = Math.atan2(aim.y, Math.hypot(aim.x, aim.z)) - pitch;

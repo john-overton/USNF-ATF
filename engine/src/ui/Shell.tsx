@@ -169,7 +169,14 @@ export function Shell({ search }: { search: string }) {
     return (
       <div className="mission-session">
         <div className="mission-view" inert={paused} aria-hidden={paused}>
-          <TerrainViewer mission={state.mission} parseError={parsed.parseError} paused={paused} />
+          <TerrainViewer
+            mission={state.mission}
+            onGunMode={(gunMode) =>
+              setState((previous) => ({ ...previous, mission: { ...previous.mission, gunMode } }))
+            }
+            parseError={parsed.parseError}
+            paused={paused}
+          />
         </div>
         {paused && (
           <MissionBrief
@@ -186,7 +193,14 @@ export function Shell({ search }: { search: string }) {
   }
   if (state.screen === 'explorer')
     return (
-      <TerrainViewer key={state.screen} mission={state.mission} parseError={parsed.parseError} />
+      <TerrainViewer
+        key={state.screen}
+        mission={state.mission}
+        onGunMode={(gunMode) =>
+          setState((previous) => ({ ...previous, mission: { ...previous.mission, gunMode } }))
+        }
+        parseError={parsed.parseError}
+      />
     );
   if (state.screen === 'quick-fight')
     return (
@@ -225,5 +239,14 @@ export function Shell({ search }: { search: string }) {
         onCommand={act}
       />
     );
-  return <MainMenu mission={state.mission} {...(assets ? { assets } : {})} onCommand={act} />;
+  return (
+    <MainMenu
+      mission={state.mission}
+      onGunMode={(gunMode) =>
+        setState((previous) => ({ ...previous, mission: { ...previous.mission, gunMode } }))
+      }
+      {...(assets ? { assets } : {})}
+      onCommand={act}
+    />
+  );
 }
