@@ -268,7 +268,11 @@ vec4 sunshineMarch(vec3 ro, vec3 raydirection, float sceneDistance,
   if (ro.y < weatherRange.x + cloudBaseM && raydirection.y > 0.00001)
     entry = (weatherRange.x + cloudBaseM - ro.y) / raydirection.y;
   float marchRange = max(0.0, maxDistance - entry);
-  float traveled = entry + maxstep * texture(dither_small, vec3(vUv * 40.037, sunshineTime)).r;
+  // Keep spatial dithering, but do not scroll through a new full-step offset
+  // every frame. Near/inside clouds that moved opacity and lighting between
+  // neighboring lobes faster than temporal history could resolve them.
+  // Density still evolves through smallPos and the wind-driven offsets above.
+  float traveled = entry + maxstep * texture(dither_small, vec3(vUv * 40.037, 0.0)).r;
   float initial = maxDistance;
   float highest = 0.0;
   float highestDistance = maxDistance;

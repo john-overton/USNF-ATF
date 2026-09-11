@@ -1278,3 +1278,48 @@ coarser and may miss small isolated features; camera-motion quality at long rang
 remains a visual follow-up. Synthetic performance does not establish full-theater
 performance. Next: reproduce the user's long-range chase view and compare the
 Overcast/Thunderstorm towers presets; Fog remains enabled only by its preset.
+
+## 2026-09-11: Near-cloud sampling stability
+
+Source: working tree based on `0eafc38`, with the fixed dither slice and clip-plane
+history changes recorded in the accompanying implementation commit. Linux
+Omarchy, RTX 4070 / NVIDIA 610.57.04, ANGLE OpenGL ES 3.2, Bun 1.4.2, Node 26.8.1.
+
+```sh
+bun run check
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/sunshine-gpu-smoke.ts
+bun tools/flight/cloud-smoke.ts flicker-verified inside,tower-side
+bun tools/flight/cloud-smoke.ts flicker-exterior above
+git diff --check
+```
+
+The GPU probe measures mean absolute adjacent-frame RGB byte differences in the
+192×108 composited output. Each sequence runs 48 frames at simulated 60 Hz,
+measuring frames 16–47 after history warms up. The camera is at (50000,10000,50000)
+inside the source-height storm layer; the moving sequence approaches along -Z at
+2 m/frame (120 m/s). Density evolution remains enabled. Same fixture on the parent
+shader: stationary .13537598, moving .13285269; with this change: stationary
+.00327028, moving .03851444 (97.6% and 71.0% reductions). Camera motion itself
+contributes to the moving metric; it is not an isolated perceptual flicker score.
+The probe now asserts stationary <.02 and moving <.08, preserving a margin.
+
+Far-clip retuning now keeps `validHistory=1`; FOV changes still produce 0.
+All 128 upstream density/lighting comparisons pass, 53 positions have density;
+floating-origin maximum byte difference 0, depth-invariant difference 0,
+brightness ratios .75002159/.5, and clouds remain visible on terrain beginning
+80 km away and from 20 km altitude. GL error 0; no renderer console errors.
+
+`bun run check`: 476 pass, 3 existing imported-mount skips (F14/A4E/X31), 0 fail;
+types, lint and formatting pass. No Python changes; Python tests not rerun.
+Fresh 2560×1440 desktop inside/tower-side captures run at median 16.7 ms,
+p95 16.8 ms with no runtime errors. Tower-side is fully enveloped at this fixture;
+it is an interior render check, not evidence of exterior contour quality.
+Artifacts: ignored `extracted/cloud-review/flicker-verified/`,
+`flicker-exterior/`, and `sunshine-gpu/`.
+
+Limits: fixed screen-space spatial jitter trades temporal noise for persistent
+spatial grain; camera movement, coarse distant sampling and approximate history
+reprojection can still shimmer. No claim of zero flicker or Godot image parity.
+Next reproducible acceptance: restart the app and fly into Broken and Thunderstorm
+towers, comparing cloud boundaries and interiors during the user's approach.

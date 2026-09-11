@@ -1072,7 +1072,13 @@ export class CloudPass extends Pass {
       position.x += origin.x;
       position.z += origin.y;
       const movedTooFar = position.distanceTo(this.previousPosition) > 2000;
-      const projectionChanged = !this.previousProjection.equals(this.camera.projectionMatrix);
+      // Clip-plane retuning changes depth encoding, not the viewing rays.
+      // Reprojection already uses the previous frame's complete matrix; retain
+      // history across those updates, but still reset for FOV/aspect/lens changes.
+      const projectionChanged = this.previousProjection.elements.some(
+        (value, index) =>
+          index !== 10 && index !== 14 && value !== this.camera.projectionMatrix.elements[index],
+      );
       h.currentColor!.value = this.target.textures[0];
       h.currentData!.value = this.target.textures[1];
       const previous = this.historyTargets[1 - this.historyIndex]!;

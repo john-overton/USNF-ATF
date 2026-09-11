@@ -7,6 +7,22 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-11
 
+## 2026-09-11: Reduce near-cloud bubbling and temporal flicker
+
+Sunshine now uses a fixed spatial dither slice for primary ray starts instead of
+rapidly scrolling full-step offsets through the noise volume. Wind and density
+animation remain active. Temporal history survives routine far-clip retuning;
+FOV/aspect/lens changes, settings changes and camera cuts still invalidate it.
+
+Actual GPU 48-frame comparisons on this Linux machine reduce mean adjacent-frame
+RGB differences from .13538 to .00327 byte levels for a stationary interior and
+.13285 to .03851 during a 120 m/s approach. These are synthetic sequence metrics,
+not a claim that every cloud-entry artifact is gone. Regression checks retain
+upstream density/lighting parity, far-cloud visibility, brightness and floating
+origin behavior. See the phase 3 baseline for exact commands and limits. Next:
+restart and repeat the user's approach into clouds, checking remaining movement
+shimmer and static spatial grain.
+
 ## 2026-09-11: Extend cloud range and darken heavy weather
 
 Implementation `caa22ba` removes Sunshine's layer-thickness-dependent viewing

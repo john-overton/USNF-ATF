@@ -29,7 +29,8 @@ No reference executables or retail-derived assets are committed.
   This deliberately differs from the previous Beer-integrated renderer.
 - Ping-pong temporal accumulation (70% history) with previous-camera reprojection,
   bounds checks, neighborhood clamping and depth rejection. History resets for
-  settings, atlas/projection changes, resizing and large camera movement. Floating
+  settings, atlas/lens changes, resizing and large camera movement. Routine
+  near/far clip changes preserve history. Floating
   origin is carried explicitly through both frames.
 - Source bicubic reconstruction and a four-direction blur, retaining our stronger
   foreground-depth protection around aircraft and terrain silhouettes.
@@ -56,6 +57,7 @@ This is a port of the cloud renderer, not a pixel-identical Godot compositor.
 | World height | Main cloud bounds remain AGL using weather DEMs; unknown terrain remains unknown. |
 | Cloud sizes | Source 23.5 km layer proportions scale to selected layer thickness (minimum scale .05). Empty space is skipped before sampling, and distant intervals cover a thickness-independent 180 km range. |
 | Weather presets | Broken uses upstream coverage .874 and density .14. Scattered, overcast and storm map their coverage/density intent to Sunshine's threshold semantics. The source RGBA height profile is shared; the previous custom anvil silhouette is not preserved in this mode. |
+| Sampling stability | Primary jitter uses a fixed spatial dither slice instead of scrolling full-step ray offsets each frame. This reduces near-cloud bubbling; spatial grain and motion aliasing can remain. |
 | Wind | Existing weather drives horizontal drift and curl direction; source relative layer speeds and upward detail evolution are retained. |
 | Lighting | Existing sun/moon, sky, exposure and distant haze remain. Linear sun color avoids a second gamma conversion; neutral ambient occlusion replaces the source test scene's red AO tint. |
 | Cirrus | Existing translucent high clouds remain. Mixed visible cirrus/cloud pixels bypass single-depth history to avoid incorrect parallax. |

@@ -42,6 +42,25 @@ async function sunshineProbe(encoded:Record<string,string>, reference:string) {
  (pass as unknown as {historyValid:boolean}).historyValid=false;
  const rebased=render(50000,28000,50000);
  let maxRebase=0;for(let i=0;i<first.length;i++)maxRebase=Math.max(maxRebase,Math.abs(first[i]!-rebased[i]!));
+ // Near/inside-cloud temporal variation, including a slow approach (120 m/s).
+ state.origin={x:0,z:0};
+ const flicker=[];
+ for(const moving of [false,true]){
+  let previous:Uint8Array|undefined;let delta=0;let count=0;
+  for(let frame=0;frame<48;frame++){
+   state.evolutionSeconds=frame/60;
+   const pixels=render(50000,10000,50000-(moving?frame*2:0));
+   if(previous&&frame>=16)for(let i=0;i<pixels.length;i++)if(i%4!==3){delta+=Math.abs(pixels[i]!-previous[i]!);count++;}
+   previous=pixels;
+  }
+  flicker.push(delta/count);
+ }
+ // The terrain viewer adjusts far clip while flying; this must retain history.
+ camera.far=350000;camera.updateProjectionMatrix();render(50000,10000,49906);
+ const farClipHistory=(pass as unknown as {historyMaterial:ShaderMaterial}).historyMaterial.uniforms.validHistory!.value;
+ camera.fov=55;camera.updateProjectionMatrix();render(50000,10000,49906);
+ const fovHistory=(pass as unknown as {historyMaterial:ShaderMaterial}).historyMaterial.uniforms.validHistory!.value;
+ camera.fov=60;camera.far=400000;camera.updateProjectionMatrix();state.evolutionSeconds=0;
  const brightnessSums:number[]=[];
  state.fogNear=1e9;state.fogFar=2e9;
  for(const type of ['cumulus','stratus','cumulonimbus'] as const){
@@ -87,6 +106,6 @@ async function sunshineProbe(encoded:Record<string,string>, reference:string) {
  distantTerrain.texture.dispose();
  const glError=renderer.getContext().getError();
  quad.dispose();material.dispose();target.dispose();output.dispose();input.dispose();pass.dispose();terrain.texture.dispose();renderer.dispose();
- return {samples,depthInvariant,brightnessRatios,distantMinimumTransmittance,lowLayerMinimumTransmittance,maxRebase,glError,png,nonzero:samples.filter(s=>s[0]!>.001).length};
+ return {flicker,farClipHistory,fovHistory,samples,depthInvariant,brightnessRatios,distantMinimumTransmittance,lowLayerMinimumTransmittance,maxRebase,glError,png,nonzero:samples.filter(s=>s[0]!>.001).length};
 }
 Object.assign(window,{sunshineProbe});
