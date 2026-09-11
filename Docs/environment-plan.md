@@ -1,5 +1,19 @@
 # Environment plan: day/night, wind, shadows and volumetric clouds
 
+
+**2026-09-11 cloud update:** broad 3D billows and weak edge erosion now use
+separate volumes. The lighting pass integrates six coarse samples toward the
+light-facing layer exit and two upward samples for sky sheltering; its source
+radiance is independent of camera step count. The camera march uses quadratic
+segment spacing and fades unresolved erosion. Cumulus has flat bases/rounded
+tops, stratus retains a slab, and storm now selects 0.7–10.5 km cumulonimbus
+with towers/anvils. Cirrus is a stretched, curled, patch-masked analytic sheet
+at 9 km (11.5 km above storms), with independent altitude-wind advection.
+Rolling deformation uses unpaused elapsed time and a continuous periodic phase.
+These authored profiles supersede the original morphology/lighting description
+below; they are not convection simulation. See [phase 3 evidence](baselines/phase-3.md)
+and [design review](cloud-rendering-review.md).
+
 Written 2026-09-09 before implementation. This is a design and sequencing
 document, not a status claim. Status and evidence go in [progress.md](progress.md)
 and the phase baselines once work lands. Facts about the current code below were

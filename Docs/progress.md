@@ -7,6 +7,20 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-10
 
+## 2026-09-11: Cloud billows, optical-depth lighting and distinct cloud types
+
+Implemented the approved [cloud review](cloud-rendering-review.md): separate broad
+3D shape and weak edge erosion, progressive view/light integration, sky occlusion
+and camera-step-independent source lighting. Broad rolling motion is periodic,
+world anchored and paused with the viewer. Cumulus has rounded tops/flatter bases;
+stratus keeps its layer; storm now uses 0.7–10.5 km cumulonimbus towers/anvils.
+High cirrus uses thin elongated curled patches and separate upper-level wind.
+CPU visibility queries and ground shadows remain coarse coverage approximations.
+This is authored atmospheric appearance, not fluid convection/native-game parity.
+See [phase 3 baseline](baselines/phase-3.md) for checks, GPU invariants, captures,
+initial failed checks and remaining limits. Restart the rebuilt desktop app and
+compare Scattered cumulus, Broken cumulus, Overcast and Thunderstorm towers.
+
 ## 2026-09-11: CS2 smoke reference and cloud rendering review
 
 Committed/pushed the accumulated implementation as `576db2b`, then reviewed

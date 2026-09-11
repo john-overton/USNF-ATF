@@ -61,6 +61,8 @@ See [guns-only evidence and limitations](Docs/baselines/phase-6.md).
 
 The desktop app also has a terrain explorer with streamed elevation, floating origin,
 blended LOD, water, imagery and seasonal color maps, shorelines, sky, wind and clouds.
+Clouds now separate high cirrus streaks, rounded low cumulus, overcast stratus and
+tall cumulonimbus towers, with slowly evolving billows and sheltered darker bases.
 Historical packaged Mac terrain measurements are about 60 fps at 1440p;
 [GPU profiling](Docs/gpu-trace-notes.md) and phase baselines describe their scope.
 Current development and guns-only checks run on Linux; full cross-platform acceptance

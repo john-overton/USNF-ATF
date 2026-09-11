@@ -1,6 +1,13 @@
 # Cloud rendering review — 2026-09-11
 
-Scope: source review and implementation proposal, not an implemented appearance
+
+**Implementation follow-up, 2026-09-11:** the approved approach is now implemented,
+including separate cirrus/cumulus/stratus/cumulonimbus profiles. Current behavior
+and verification are in [environment plan](environment-plan.md) and
+[phase 3 baseline](baselines/phase-3.md). The analysis below describes the pre-change
+renderer and is retained as the design rationale.
+
+Historical review scope: source review and implementation proposal, not an implemented appearance
 change or visual/performance acceptance. Local source: `576db2b`. Reference cloned
 to `/tmp/usnf-cs2-smoke-reference` at `17f55793eaf26c18cb5dd53d95d37e2b1c1ed010`.
 

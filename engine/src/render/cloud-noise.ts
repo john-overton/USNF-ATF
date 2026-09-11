@@ -388,3 +388,23 @@ export function sampleCoverage(
     255
   );
 }
+
+/**
+ * Broad convex billows, independent of the equalized erosion field. Preserve the
+ * smooth density distribution: histogram stretching turns shallow valleys into
+ * deep holes. Two low Worley frequencies plus gentle Perlin variation tile in 3D.
+ */
+export function buildCloudShape(options?: NoiseOptions): NoiseTexture3D {
+  const size = options?.size ?? 64;
+  const seed = options?.seed ?? 1337;
+  const raw = new Float32Array(size * size * size);
+  addWorleyOctave(raw, size, 2, worleyPoints(2, seed + 433), 0.85);
+  addWorleyOctave(raw, size, 4, worleyPoints(4, seed + 1543), 0.15);
+  addPerlinOctave3(raw, size, 2, seed + 7919, 0.12);
+  const data = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) {
+    const v = Math.max(0, Math.min(1, raw[i]!));
+    data[i] = Math.round(v * v * (3 - 2 * v) * 255);
+  }
+  return { size, data };
+}

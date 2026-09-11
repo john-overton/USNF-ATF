@@ -1,12 +1,12 @@
 /**
  * Authored cloud layers per weather preset. The renderer marches the same
- * coverage field these presets describe, and `cloudDensityAt` evaluates it on
- * the CPU so later AI, radar and fly-through fog rules agree with the picture.
+ * coverage field these presets describe. `cloudDensityAt` evaluates only its
+ * coarse envelope; render-only morphology is not an AI/radar visibility model.
  */
 import type { Vec3 } from '../flight';
 
 export type WeatherId = 'clear' | 'scattered' | 'broken' | 'overcast' | 'storm';
-export type CloudType = 'cumulus' | 'stratus' | 'cirrus';
+export type CloudType = 'cumulus' | 'cumulonimbus' | 'stratus' | 'cirrus';
 export interface CloudLayer {
   type: CloudType;
   baseM: number;
@@ -54,10 +54,10 @@ export const WEATHER_PRESETS: Readonly<Record<WeatherId, WeatherPreset>> = Objec
   },
   storm: {
     id: 'storm',
-    label: 'Storm',
+    label: 'Thunderstorm towers',
     layers: [
-      { type: 'cumulus', baseM: 700, topM: 4500, coverage: 0.85, density: 1.4 },
-      { type: 'cirrus', baseM: 9000, topM: 9200, coverage: 0.6, density: 0.2 },
+      { type: 'cumulonimbus', baseM: 700, topM: 10500, coverage: 0.85, density: 1.4 },
+      { type: 'cirrus', baseM: 11500, topM: 11700, coverage: 0.6, density: 0.12 },
     ],
   },
 });
@@ -76,8 +76,8 @@ export function marchedLayer(preset: WeatherPreset): CloudLayer | undefined {
 }
 
 /**
- * Height gradient shared with the shader: cumulus round off at both ends,
- * stratus fill their slab. Returns 0 outside the layer.
+ * Coarse envelope for CPU queries; the shader reuses the stratus profile but
+ * shapes cumulus/tower tops separately. Returns 0 outside the layer.
  */
 export function layerHeightGradient(layer: CloudLayer, altitudeM: number): number {
   const h = (altitudeM - layer.baseM) / Math.max(1, layer.topM - layer.baseM);
@@ -87,8 +87,9 @@ export function layerHeightGradient(layer: CloudLayer, altitudeM: number): numbe
 }
 
 /**
- * Cloud extinction at a world position, matching the renderer's density before
- * erosion detail. `sample` is the same tiling coverage field the GPU samples.
+ * Cloud extinction at a world position, matching the large-scale coverage envelope before
+ * renderer-only billows, towers, anvils and erosion. This is an approximation,
+ * not density parity with the final rendered volume. `sample` is the same tiling coverage field the GPU samples.
  */
 export function cloudDensityAt(
   preset: WeatherPreset,

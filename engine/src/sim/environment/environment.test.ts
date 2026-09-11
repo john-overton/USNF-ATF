@@ -153,7 +153,9 @@ test('cloud presets keep a cirrus sheet and one marched layer below it', () => {
     if (marched) {
       expect(marched.topM).toBeGreaterThan(marched.baseM);
       expect(marched.coverage).toBeGreaterThan(0);
-      expect(marched.topM).toBeLessThan(9000);
+      expect(marched.topM).toBeLessThan(
+        preset.layers.find((layer) => layer.type === 'cirrus')!.baseM,
+      );
     }
   }
   expect(marchedLayer(WEATHER_PRESETS.clear)).toBeUndefined();

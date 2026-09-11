@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import {
   buildCloudVolume,
+  buildCloudShape,
   buildCoverageTexture,
   sampleCoverage,
   type NoiseTexture2D,
@@ -185,4 +186,36 @@ test('startup textures build well inside the frame budget', () => {
   buildCoverageTexture({ seed: 7 });
   buildCloudVolume({ seed: 7 });
   expect(performance.now() - start).toBeLessThan(2000);
+});
+
+describe('broad cloud shape', () => {
+  test('is reproducible, smooth and less contrasty than erosion', () => {
+    const shape = buildCloudShape();
+    expect(shape.size).toBe(64);
+    expect(shape.data.length).toBe(64 ** 3);
+    expect(shape.data).toEqual(buildCloudShape().data);
+    expect(shape.data).not.toEqual(buildCloudShape({ seed: 99 }).data);
+    const roughness = (data: Uint8Array, size: number): number => {
+      let sum = 0;
+      for (let i = 0; i < data.length; i++)
+        if (i % size < size - 1) sum += Math.abs(data[i]! - data[i + 1]!);
+      return sum / ((data.length / size) * (size - 1));
+    };
+    expect(roughness(shape.data, shape.size)).toBeLessThan(
+      roughness(volume.data, volume.size) * 0.5,
+    );
+    expect(fractionAbove(shape.data, 0.9)).toBeLessThan(0.03);
+    // Check every wrapped edge against the strongest interior step on that axis.
+    for (const stride of [1, shape.size, shape.size ** 2]) {
+      let seam = 0,
+        interior = 0;
+      for (let i = 0; i < shape.data.length; i++) {
+        const c = Math.floor(i / stride) % shape.size;
+        if (c === shape.size - 1)
+          seam = Math.max(seam, Math.abs(shape.data[i]! - shape.data[i - c * stride]!));
+        else interior = Math.max(interior, Math.abs(shape.data[i]! - shape.data[i + stride]!));
+      }
+      expect(seam).toBeLessThanOrEqual(interior + 1);
+    }
+  });
 });

@@ -26,18 +26,22 @@ import {
   type WebGLRenderer,
 } from 'three';
 import { FullScreenQuad, Pass } from 'three/addons/postprocessing/Pass.js';
-import { buildCloudVolume, buildCoverageTexture } from '../render/cloud-noise';
+import { buildCloudShape, buildCloudVolume, buildCoverageTexture } from '../render/cloud-noise';
 import { COVERAGE_TILE_METERS, type CloudLayer } from '../sim/environment/clouds';
 import type { CloudQuality } from '../sim/environment';
 
 /** Metres of world spanned by one tile of the 64³ erosion volume. */
 const DETAIL_TILE_METERS = 3000;
 /** Light steps toward the sun per march sample; the plan's four-to-six band. */
-const LIGHT_STEPS = 5;
+const LIGHT_STEPS = 6;
 
 export interface CloudUniformState {
   /** World-space offset of the coverage texture, metres; shared with cloud shadows. */
   offset: { x: number; z: number };
+  /** Elapsed unpaused simulation seconds; independent of the solar clock. */
+  evolutionSeconds: number;
+  /** Independent high-altitude wind advection for the cirrus sheet. */
+  cirrusOffset: { x: number; z: number };
   layer: CloudLayer | undefined;
   cirrus: CloudLayer | undefined;
   /** Unit, world space, pointing at the sun. */
@@ -82,6 +86,7 @@ export function cloudLightingFactors(
 
 let coverageSingleton: DataTexture | undefined;
 let volumeSingleton: Data3DTexture | undefined;
+let shapeSingleton: Data3DTexture | undefined;
 /** Lazily built so `import`ing this module stays free for headless tests. */
 function coverageTexture(): DataTexture {
   if (!coverageSingleton) {
@@ -100,18 +105,20 @@ function coverageTexture(): DataTexture {
   }
   return coverageSingleton;
 }
-function volumeTexture(): Data3DTexture {
-  if (!volumeSingleton) {
-    const noise = buildCloudVolume();
-    const texture = new Data3DTexture(noise.data, noise.size, noise.size, noise.size);
+function volumeTexture(shape = false): Data3DTexture {
+  let texture = shape ? shapeSingleton : volumeSingleton;
+  if (!texture) {
+    const noise = shape ? buildCloudShape() : buildCloudVolume();
+    texture = new Data3DTexture(noise.data, noise.size, noise.size, noise.size);
     texture.format = RedFormat;
     texture.type = UnsignedByteType;
     texture.wrapS = texture.wrapT = texture.wrapR = RepeatWrapping;
     texture.minFilter = texture.magFilter = LinearFilter;
     texture.needsUpdate = true;
-    volumeSingleton = texture;
+    if (shape) shapeSingleton = texture;
+    else volumeSingleton = texture;
   }
-  return volumeSingleton;
+  return texture;
 }
 
 /**
@@ -211,6 +218,8 @@ varying vec2 vUv;
 
 uniform sampler2D tDepth;
 uniform sampler3D cloudVolume;
+uniform sampler3D cloudShape;
+uniform float cloudEvolution;
 uniform float cloudHasDepth;
 uniform float cameraFar;
 uniform mat4 inverseProjection;
@@ -221,6 +230,8 @@ uniform float cloudJitter;
 uniform float cloudTopM;
 uniform float cloudDensity;
 uniform float cloudStratus;
+uniform float cloudTower;
+uniform vec2 cirrusOffset;
 uniform float cloudMarch;
 uniform float cloudDetailMeters;
 uniform float cirrusBaseM;
@@ -258,26 +269,75 @@ float heightGradient(float altitude) {
   if (cloudStratus > 0.5) return min(1.0, min(h, 1.0 - h) / 0.15);
   return min(1.0, h / 0.2) * min(1.0, (1.0 - h) / 0.35);
 }
-float densityAt(vec3 p) {
-  float gradient = heightGradient(p.y);
-  if (gradient <= 0.0) return 0.0;
+// Broad shape is shared by the camera and light rays. Fine erosion does not
+// punch tiny shadow cavities into the body. All coordinates remain world anchored.
+vec3 cloudCoordinates(vec3 p) {
+  vec3 uvw = (p + vec3(cloudOffset.x, 0.0, cloudOffset.y)) / cloudDetailMeters;
+  // Smooth, bounded domain deformation; no texture regeneration or frame clock.
+  vec3 wave = sin(uvw.yzx * 6.2831853 + vec3(0.0, 2.1, 4.2) + cloudEvolution);
+  return uvw + wave * mix(0.055, 0.015, cloudStratus);
+}
+float bodyDensity(vec3 p, vec3 uvw) {
+  float h = (p.y - cloudBaseM) / max(1.0, cloudTopM - cloudBaseM);
+  if (h <= 0.0 || h >= 1.0) return 0.0;
   float shaped = cloudShaped(cloudCoverageAt(p.xz), cloudCoverageAmount);
   if (shaped <= 0.0) return 0.0;
-  vec3 uvw = (p + vec3(cloudOffset.x, 0.0, cloudOffset.y)) / cloudDetailMeters;
-  float detail = texture(cloudVolume, uvw).r;
-  // Erosion carves the wispy edges away and leaves the core solid.
-  float d = clamp((shaped * gradient - (1.0 - detail) * 0.4) / 0.6, 0.0, 1.0);
-  return d * cloudDensity;
-}
-float lightTransmittance(vec3 p) {
-  float stepM = max(60.0, (cloudTopM - cloudBaseM) * 0.6 / float(LIGHT_STEPS));
-  float tau = 0.0;
-  vec3 q = p;
-  for (int i = 0; i < LIGHT_STEPS; i++) {
-    q += cloudSunDirection * stepM;
-    tau += densityAt(q) * stepM;
+  float billow = texture(cloudShape, uvw).r;
+  // Rounded variable tops over a flatter condensation base. Stratus retains its
+  // filled slab instead of inheriting the cumulus towers.
+  float cap = mix(0.62, 1.0, smoothstep(0.12, 0.72, billow));
+  float cumulus = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(cap - 0.24, cap, h));
+  if (cloudTower > 0.5) {
+    // Wide columns set coherent tower heights, independent of the small 3D lobes.
+    float column = texture(cloudShape, vec3(uvw.x * 0.45, 0.37, uvw.z * 0.45)).r;
+    float towerCap = mix(0.48, 1.0, smoothstep(0.12, 0.65, column));
+    float crown = 1.0 - smoothstep(towerCap - 0.16, towerCap, h);
+    float tower = smoothstep(0.0, 0.025, h) * crown;
+    // The upper outflow spreads within the weather envelope, with a flat cap.
+    float anvil = smoothstep(0.66, 0.81, h) * (1.0 - smoothstep(0.9, 1.0, h));
+    cumulus = max(tower, anvil * smoothstep(0.18, 0.55, column));
+    shaped = mix(shaped, sqrt(shaped), anvil * 0.65);
   }
-  return exp(-tau * EXTINCTION);
+  float profile = mix(cumulus, heightGradient(p.y), cloudStratus);
+  return shaped * profile * mix(0.75 + billow * 0.85, 0.92 + billow * 0.16, cloudStratus);
+}
+float coarseDensity(vec3 p) {
+  if (p.y <= cloudBaseM || p.y >= cloudTopM) return 0.0;
+  return bodyDensity(p, cloudCoordinates(p)) * cloudDensity;
+}
+float densityAt(vec3 p, float footprint) {
+  if (p.y <= cloudBaseM || p.y >= cloudTopM) return 0.0;
+  vec3 uvw = cloudCoordinates(p);
+  float body = bodyDensity(p, uvw);
+  if (body <= 0.0) return 0.0;
+  // Dense cores stay intact. Fade unresolved erosion instead of aliasing it into
+  // dimples on long horizon rays. Broad shape is still sampled by both marches.
+  float edge = 1.0 - smoothstep(0.12, 0.45, body);
+  float resolved = 1.0 - smoothstep(100.0, 450.0, footprint);
+  float detail = texture(cloudVolume, uvw * 1.7 + vec3(0.0, sin(cloudEvolution) * 0.025, 0.0)).r;
+  float erosion = (1.0 - detail) * 0.07 * edge * resolved;
+  return max(0.0, body - erosion) * cloudDensity;
+}
+float lightOpticalDepth(vec3 p) {
+  // Follow the actual light-facing slab exit, with a bounded grazing-ray range.
+  float dy = cloudSunDirection.y;
+  float exitDistance = dy >= 0.0 ? cloudTopM - p.y : p.y - cloudBaseM;
+  float span = min(12000.0, exitDistance / max(0.001, abs(dy)));
+  float tau = 0.0;
+  float previous = 0.0;
+  for (int i = 0; i < LIGHT_STEPS; i++) {
+    float f = float(i + 1) / float(LIGHT_STEPS);
+    float end = span * f * f;
+    float width = end - previous;
+    tau += coarseDensity(p + cloudSunDirection * (previous + width * 0.5)) * width;
+    previous = end;
+  }
+  return tau * EXTINCTION;
+}
+float skyOpticalDepth(vec3 p) {
+  float span = max(0.0, cloudTopM - p.y);
+  return (coarseDensity(p + vec3(0.0, span * 0.25, 0.0)) +
+          coarseDensity(p + vec3(0.0, span * 0.75, 0.0))) * span * 0.5 * EXTINCTION;
 }
 float fogAmount(float distanceM) {
   return clamp((distanceM - cloudFogNear) / max(1.0, cloudFogFar - cloudFogNear), 0.0, 1.0);
@@ -313,10 +373,18 @@ void main() {
   if (cirrusCoverage > 0.0 && abs(dir.y) > 1e-3) {
     float t = (cirrusBaseM - ro.y) / dir.y;
     if (t > 0.0 && t < sceneDistance) {
-      float shaped = cloudShaped(cloudCoverageAt((ro.xz + dir.xz * t) * 0.25), cirrusCoverage);
+      // High ice-cloud filaments: long along the wind-independent authored axis,
+      // narrow across it, gently curled by a broad coverage field. No cumulus lobes.
+      vec2 ice = (ro.xz + dir.xz * t + cirrusOffset) / cloudTileMeters;
+      float bend = texture2D(cloudCoverage, ice * 0.7).r - 0.5;
+      vec2 streakUV = vec2(ice.x * 0.22, ice.y * 2.2 + ice.x * 0.35 + bend * 0.14);
+      float strands = texture2D(cloudCoverage, streakUV).r;
+      float wisps = texture2D(cloudCoverage, streakUV * vec2(0.7, 2.3)).r;
+      float iceEnvelope = smoothstep(0.25, 0.65, texture2D(cloudCoverage, ice * 0.55).r);
+      float shaped = cloudShaped(strands, cirrusCoverage) * smoothstep(0.12, 0.8, wisps) * iceEnvelope;
       // Grazing rays cross more of the sheet, so it thickens toward the horizon.
-      float slant = 1.0 / max(0.08, abs(dir.y));
-      float alpha = 1.0 - exp(-shaped * cirrusDensity * 6.0 * slant);
+      float slant = 1.0 / max(0.2, abs(dir.y));
+      float alpha = 1.0 - exp(-shaped * cirrusDensity * 4.0 * slant);
       vec3 lit =
         mix(cloudZenithColor * cloudAmbientStrength, cloudSunColor * cloudSunStrength, 0.65) *
         (0.7 + 0.3 * min(phase, 2.0));
@@ -347,29 +415,38 @@ void main() {
 
   if (exitM > enter) {
     float span = exitM - enter;
-    float stepM = span / float(cloudSteps);
-    float jitter = hash12(gl_FragCoord.xy) * cloudJitter;
-    float t = enter + stepM * jitter;
+    float jitter = mix(0.5, hash12(gl_FragCoord.xy), cloudJitter * 0.65);
+    // Concentrate samples near the camera/entry, where silhouette detail matters.
+    // Every segment contributes its actual width to Beer integration.
     for (int i = 0; i < cloudSteps; i++) {
+      float f0 = float(i) / float(cloudSteps);
+      float f1 = float(i + 1) / float(cloudSteps);
+      float startM = span * f0 * f0;
+      float stepM = span * f1 * f1 - startM;
+      float t = enter + startM + stepM * jitter;
       vec3 p = ro + dir * t;
-      float d = densityAt(p);
+      float d = densityAt(p, stepM);
       if (d > 0.0) {
         float sigma = d * EXTINCTION;
         float sampleT = exp(-sigma * stepM);
-        // Powder: multiple scattering darkens the lit side of a dense edge.
-        float powder = 1.0 - exp(-sigma * stepM * 2.0);
-        float hFrac = clamp((p.y - cloudBaseM) / max(1.0, cloudTopM - cloudBaseM), 0.0, 1.0);
-        vec3 ambient = mix(cloudGroundColor, cloudZenithColor, hFrac) * cloudAmbientStrength;
-        vec3 lum =
-          cloudSunColor * cloudSunStrength * lightTransmittance(p) * phase * powder + ambient;
+        // Source radiance must not depend on camera step length/quality. Optical
+        // depths describe sheltering; a weak broad lobe approximates scattered fill.
+        float sunTau = lightOpticalDepth(p);
+        float skyTau = skyOpticalDepth(p);
+        float direct = exp(-sunTau);
+        float multiple = 0.12 * exp(-sunTau * 0.25);
+        float skyVisibility = exp(-skyTau * 0.65);
+        vec3 ambient = (cloudZenithColor * (0.12 + 0.38 * skyVisibility) +
+                        cloudGroundColor * 0.1) * cloudAmbientStrength;
+        vec3 lum = cloudSunColor * cloudSunStrength *
+                   (direct * (0.24 + phase * 0.7) + multiple) + ambient;
         // Distant clouds sit in the same haze as the terrain behind them.
         lum = mix(lum, cloudFogColor, fogAmount(t));
         scatter += transmittance * (1.0 - sampleT) * lum;
         transmittance *= sampleT;
         if (transmittance < 0.01) break;
       }
-      t += stepM;
-      if (t > exitM) break;
+
     }
   }
 
@@ -462,6 +539,8 @@ export class CloudPass extends Pass {
         ...this.shadowUniforms,
         tDepth: { value: null },
         cloudVolume: { value: null },
+        cloudShape: { value: null },
+        cloudEvolution: { value: 0 },
         cloudHasDepth: { value: 0 },
         cameraFar: { value: camera.far },
         inverseProjection: { value: camera.projectionMatrixInverse.clone() },
@@ -472,6 +551,8 @@ export class CloudPass extends Pass {
         cloudTopM: { value: 2600 },
         cloudDensity: { value: 0 },
         cloudStratus: { value: 0 },
+        cloudTower: { value: 0 },
+        cirrusOffset: { value: new Vector2() },
         cloudMarch: { value: 0 },
         cloudDetailMeters: { value: DETAIL_TILE_METERS },
         cirrusBaseM: { value: 9000 },
@@ -565,10 +646,14 @@ export class CloudPass extends Pass {
     updateCloudShadowUniforms(this.shadowUniforms, state);
     const u = this.marchMaterial.uniforms;
     const layer = state.layer;
+    // A full rolling cycle takes about ten minutes; wrapping avoids float drift.
+    u.cloudEvolution!.value = (state.evolutionSeconds * 0.01) % (Math.PI * 2);
     u.cloudMarch!.value = layer ? 1 : 0;
     u.cloudTopM!.value = layer ? layer.topM : 0;
     u.cloudDensity!.value = layer ? layer.density : 0;
     u.cloudStratus!.value = layer?.type === 'stratus' ? 1 : 0;
+    u.cloudTower!.value = layer?.type === 'cumulonimbus' ? 1 : 0;
+    (u.cirrusOffset!.value as Vector2).set(state.cirrusOffset.x, state.cirrusOffset.z);
     u.cirrusBaseM!.value = state.cirrus?.baseM ?? 0;
     u.cirrusCoverage!.value = state.cirrus?.coverage ?? 0;
     u.cirrusDensity!.value = state.cirrus?.density ?? 0;
@@ -597,6 +682,7 @@ export class CloudPass extends Pass {
     u.cameraWorld!.value = this.camera.matrixWorld;
     (u.rayOrigin!.value as Vector3).setFromMatrixPosition(this.camera.matrixWorld);
     u.cloudVolume!.value = volumeTexture();
+    u.cloudShape!.value = volumeTexture(true);
     const depth = readBuffer.depthTexture;
     u.tDepth!.value = depth ?? null;
     // Without a depth attachment the march cannot clip to the terrain, so it would paint

@@ -17,6 +17,8 @@ const pass = (): CloudPass => new CloudPass(new PerspectiveCamera(60, 1, 5, 4000
 
 const state = (): CloudUniformState => ({
   offset: { x: 1200, z: -400 },
+  evolutionSeconds: 120,
+  cirrusOffset: { x: 100, z: 200 },
   layer: marchedLayer(WEATHER_PRESETS.broken),
   cirrus: WEATHER_PRESETS.broken.layers[1]!,
   sunDirection: new Vector3(0.3, 0.9, -0.2).normalize(),
@@ -123,4 +125,31 @@ test('the composite resolves the marched clouds against scene depth at silhouett
   for (const name of ['tDiffuse', 'tClouds', 'tDepth', 'cloudTexel', 'cloudHasDepth'])
     expect(Object.keys(uniforms)).toContain(name);
   pass.dispose();
+});
+
+test('weather switches reset tower shading and retain explicit animation state', () => {
+  const p = pass();
+  const s = state();
+  const uniforms = (
+    p as unknown as { marchMaterial: { uniforms: Record<string, { value: unknown }> } }
+  ).marchMaterial.uniforms;
+  const storm = marchedLayer(WEATHER_PRESETS.storm)!;
+  expect(storm.type).toBe('cumulonimbus');
+  expect(storm.topM - storm.baseM).toBeGreaterThan(8000);
+  expect(WEATHER_PRESETS.storm.layers[1]!.baseM).toBeGreaterThan(storm.topM);
+  p.update({ ...s, layer: storm });
+  expect(uniforms.cloudTower!.value).toBe(1);
+  p.update(s);
+  expect(uniforms.cloudTower!.value).toBe(0);
+  expect(uniforms.cloudStratus!.value).toBe(0);
+  const phase = uniforms.cloudEvolution!.value;
+  p.update(s);
+  expect(uniforms.cloudEvolution!.value).toBe(phase);
+  expect(uniforms.cirrusOffset!.value).toEqual(new Vector2(100, 200));
+  p.update({ ...s, layer: marchedLayer(WEATHER_PRESETS.overcast) });
+  expect(uniforms.cloudStratus!.value).toBe(1);
+  p.update({ ...s, layer: undefined });
+  expect(uniforms.cloudMarch!.value).toBe(0);
+  expect(uniforms.cloudTower!.value).toBe(0);
+  p.dispose();
 });

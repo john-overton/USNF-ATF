@@ -268,6 +268,8 @@ export function startTerrainViewer(
   // Coverage drift, metres. Sampling is `worldXZ + cloudOffset`, so the pattern
   // travels with the wind when the offset moves against it.
   const cloudOffset = { x: 0, z: 0 };
+  let cloudEvolutionSeconds = 0;
+  const cirrusOffset = { x: 0, z: 0 };
   const cloudSun = new Vector3();
   const cloudFog = new Color();
   const environmentDiagnostics = (): EnvironmentDiagnostics => {
@@ -716,6 +718,7 @@ export function startTerrainViewer(
     }
     // The clock runs in real time; time acceleration is deferred.
     environment.advance(frameSeconds);
+    cloudEvolutionSeconds += dt;
     seasonalSatellite.update(
       environment.settings.dayOfYear + environment.settings.timeOfDayHours / 24,
       environment.settings.latitudeDeg,
@@ -847,10 +850,18 @@ export function startTerrainViewer(
       cloudOffset.x += Math.sin(bearing) * drift.speed * dt;
       cloudOffset.z -= Math.cos(bearing) * drift.speed * dt;
     }
+    if (cirrus) {
+      const drift = environment.layerWind(cirrus.baseM);
+      const bearing = ((drift.bearingDeg + 180) * Math.PI) / 180;
+      cirrusOffset.x += Math.sin(bearing) * drift.speed * dt;
+      cirrusOffset.z -= Math.cos(bearing) * drift.speed * dt;
+    }
     const key = environment.sun.elevationRad > 0 ? environment.sun : environment.moon;
     cloudSun.set(key.direction.x, key.direction.y, key.direction.z);
     antialias.clouds.update({
       offset: cloudOffset,
+      evolutionSeconds: cloudEvolutionSeconds,
+      cirrusOffset,
       layer,
       cirrus,
       sunDirection: cloudSun,
