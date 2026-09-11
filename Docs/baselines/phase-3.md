@@ -940,3 +940,131 @@ regression margin. Source LOD changes are still discrete between independently
 sampled grids; mesh patches morph within a source level. Production transition
 polish and longer flight/streaming tests remain follow-up work. No aircraft,
 collision-aware camera, flight model, or gameplay is implied by this viewer.
+
+
+## 2026-09-11: Billows, optical-depth lighting and cloud types (Linux)
+
+Source: `6d30f99` (implementation); comparison renderer: `d58e5ba`.
+Checks and captures ran on the corresponding source trees before commit creation;
+this documentation-only follow-up names the implementation commit without claiming
+it existed before testing. Machine: Linux x64, kernel 7.1.9-arch1-2, NVIDIA RTX 4070
+through ANGLE/OpenGL ES 3.2, Bun 1.4.2, Node v26.8.1, Python 3.14.7.
+The before renderer is also identical to the review's `576db2b` (intervening change
+was documentation). No installer, Mac, or Windows acceptance is claimed.
+
+### Implemented behavior
+
+- Separate 64-cubed R8 broad shape texture: two low Worley octaves and gentle
+  Perlin, preserving its smooth distribution. Added raw storage: 256 KiB.
+- Cumulus has a flat condensation base and varying rounded caps. Fine erosion
+  is weak and limited to edges; coarse light sampling ignores small cavities.
+- Stratus retains its fuller slab. Storm selects cumulonimbus, base 700 m and
+  top 10500 m MSL, coherent broader columns and upper spreading anvil density.
+  This is an authored appearance; no convection, rain or lightning simulation.
+- Cirrus stays an analytic high sheet, with stretched/curling/patch-masked
+  filaments and independent layer-wind drift. Storm cirrus is at 11500 m,
+  above the tallest modeled tower; other presets retain 9000 m cirrus.
+- Six progressive light samples integrate to the actual layer exit, capped at
+  12 km for grazing rays. Two upward samples approximate sky sheltering. Removed
+  camera-step-dependent powder; restrained broad scattering preserves daylight
+  contours rather than clipping the entire top white.
+- Quadratic camera segments concentrate samples near entry/camera; erosion
+  fades for unresolved segment lengths. Rolling domain deformation freezes
+  while paused and wraps continuously after roughly ten minutes.
+- CPU density queries and terrain/aircraft shadows remain coverage-envelope
+  approximations. They do not reproduce the detailed billows/anvils/ice streaks.
+
+### Exact verification and artifacts
+
+```sh
+bun run check
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/cloud-smoke.ts before
+bun tools/flight/cloud-smoke.ts final
+bun tools/flight/cloud-smoke.ts tower-exterior tower-side
+bun tools/flight/cloud-gpu-smoke.ts
+bun tools/flight/cloud-flight-smoke.ts
+ git diff --check
+ git diff --cached --check
+```
+
+Run `before` with the comparison source/bundle, not the updated renderer. All
+outputs stay under ignored `extracted/cloud-review/`. The matrix uses installed
+synthetic analytic terrain with fixed URLs recorded per capture: seed defaults,
+calm wind, day 170, noon, x/z 4000/4000 except the named tower exterior. The clock
+advances normally; timestamps are not bit-identical across desktop sessions.
+
+- `bun run check`: exit 0, 466 pass / 3 skip / 0 fail. Existing skips are F14,
+  A4E and X31 imported-mount integration fixtures. Typecheck/lint/format pass.
+- Fresh unpackaged desktop build: exit 0. No Python source changed, so the
+  earlier checkpoint's Python results/retail-media error remain the latest.
+- `cloud-smoke.ts before`: 12 views, no renderer errors. `final`: 14 views,
+  including below/side/above/inside, 40/96 steps, half/full/off, scattered,
+  overcast, storm, cirrus, sunset/night. Additional exterior tower capture
+  at x=4000, z=10000, y=5500 passed. The earlier `final/tower-side` used
+  x=18000; `tower-exterior/tower-side` records the updated reproducible viewpoint.
+- GPU probe: real WebGL2 renders at 192x108, zero GL/renderer errors. Repeated
+  state and origin shift (8192, -16384) produce identical pixels. 40/96-step
+  mean RGB difference is 0.002513 of full range; maximum local difference is
+  0.17255, so this is convergence evidence, not pixel-perfect equivalence.
+  A 120-second evolution changes mean RGB by 0.01721. Phase-wrap boundary
+  difference is at most one 8-bit code value.
+- The production GLSL light integrator, with constant density as its fixture,
+  yields optical depths 1.875, 3.75, 15.0 (grazing cap), and 0.125 for light
+  direction y=1, .5, .01, -1; maximum tau error < 0.000001. Beer transmission
+  and upward optical depth match their analytic values within 0.0001.
+- Real Salt Lake terrain plus locally imported F14: captured chase view with
+  clouds and terrain behind aircraft; no renderer errors. Pausing freezes
+  terrain frame count for 1.2 seconds, resume advances it again. This is a
+  live depth-composition and pause smoke check, not a quantitative flight
+  performance baseline or every possible canopy/terrain silhouette.
+
+### Frame-time comparison and visual limits
+
+180 requestAnimationFrame intervals per view after 120 additional warmup frames,
+2560x1440, one test renderer at a time. Full records are in before/final report.json.
+
+| View | Before median / p95 ms | Updated median / p95 ms |
+|---|---:|---:|
+| Below broken | 16.7 / 16.7 | 16.7 / 16.7 |
+| Above broken, half, 40 | 16.7 / 16.8 | 16.7 / 16.7 |
+| Above broken, half, 96 | 16.7 / 16.8 | 16.7 / 16.8 |
+| Above broken, full, 40 | 16.7 / 16.8 | 16.7 / 16.8 |
+| Above, clouds off | 16.8 / 17.1 | 16.7 / 16.7 |
+| Scattered | 16.9 / 17.1 | 16.7 / 16.8 |
+| Overcast | 16.9 / 17.1 | 16.7 / 16.8 |
+| Storm | 16.9 / 17.1 | 16.7 / 16.8 |
+
+Storm's updated above view moves from 5200 to 12000 m to stay above the taller
+layer, so that row is not a matched-camera cost comparison. Vsync limits these
+measurements: the slight improvements are not evidence of reduced GPU work,
+and cloud-off/on deltas cannot isolate GPU cost here. No observed frame-rate
+regression on this synthetic scene; this does not close the full terrain budget.
+
+Inspected captures show broader contours and sheltered gray bases, thin high
+streaks and tall storm walls. Remaining visible grain/banding is strongest in
+40-step storm side views and near the horizon; temporal reconstruction and
+more adaptive sampling remain future improvements. Top appearance is still
+soft. Anvils are a procedural upper-density approximation, not validated storm
+morphology; adjacent short columns can leave gaps under upper outflow. Ground
+shadows remain approximate and not a detailed optical-depth projection.
+
+### Failed attempts and corrections
+
+- Initial highlight gain washed out the new contours; reduced it after viewing
+  desktop captures. The `after`/`shaped` directories are superseded iterations.
+- Review found a nonperiodic detail offset at the evolution wrap; replaced it
+  with a sine offset and verified continuity on the GPU.
+- First GPU-tool bundle could not resolve Three from the tools directory;
+  added engine workspace dependency resolution, without adding dependencies.
+- GLSL rejected `patch` as a reserved variable name; renamed it `iceEnvelope`.
+  Both GPU probe and fresh desktop captures subsequently passed.
+- First full test run had one failure because its cirrus ordering assertion
+  hardcoded 9000 m. It now checks the actual preset cirrus base, preserving
+  the intended layer-order invariant for the taller storm profile.
+
+Next reproduction: restart the rebuilt desktop app, compare weather presets
+above and below the layer, and inspect the saved matrix for the desired artistic
+feel. To undo this experiment, revert implementation commit `6d30f99` (which
+includes its UI/docs changes); retain this dated evidence as history. No retail
+bytes or reference-project code/assets were copied into the repository.
