@@ -5,7 +5,27 @@ Newest entry first. Update the snapshot and add an entry for meaningful port wor
 keep commands, evidence, uncertainty, and a concrete next step. Baselines live in
 [baselines/](baselines/). The design brief describes the intended product.
 
-## Current snapshot — development 2026-09-10
+## Current snapshot — development 2026-09-11
+
+## 2026-09-11: Sunshine cloud port and weather-only fog
+
+Implementation `0f4f506` ports SunshineClouds2's density/light functions, actual
+Godot-exported noise/height textures, additive adaptive march, temporal history
+and bicubic reconstruction. Sunshine is the default; prior appearances remain
+selectable. Ground fog is now enabled only by the dedicated Fog weather preset;
+this supersedes the previous default-on/checkbox behavior. Terrain-relative
+heights and cirrus remain. Unrelated legacy cloud shadows are disabled in
+Sunshine. MIT notice and source/asset provenance are committed and shipped.
+
+476 tests pass, 3 existing imported-mount skips. Actual GPU density and sunlight
+comparisons match upstream at 128 sampled positions within 1e-4; floating-origin
+comparison is identical, and low clouds remain visible from 20 km altitude.
+Desktop cloud, weather-selection, Salt Lake AGL and imported-F-14 pause checks
+pass. This is not full Godot pixel parity or new cross-platform acceptance.
+[Port notes](sunshine-cloud-port.md) and [phase 3 baseline](baselines/phase-3.md)
+record scope, exact commands, failures/corrections and remaining gaps. Next:
+restart and compare Sunshine cloud exteriors/entry, especially storm shape and
+bright-top contrast; Fog selection alone should enable low-level fog.
 
 ## 2026-09-11: Terrain-relative clouds, ground fog and solid exterior
 

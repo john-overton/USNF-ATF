@@ -136,6 +136,10 @@ Goal: know exactly what we can import before writing engine code that depends on
 - Work: Three.js scene inside the Electron app, floating origin, CDLOD quadtree with geomorphing, chunk streaming from the local folder through the platform interface, free camera, flat water bodies from the manifest.
 - Deliverable: fly a free camera over the theater in the packaged app.
 - Exit criteria: 60 fps at 1440p on both the Mac and the Linux GPU box. Frame-time and GPU-bandwidth counters on screen. Both recorded as the phase 3 baseline; every later phase must not regress them by more than an agreed margin.
+- 2026-09-11 rendering decision: port SunshineClouds2's cloud core into WebGL,
+  retain prior cloud appearances for comparison, and enable ground fog only as
+  the dedicated Fog weather preset. Preserve terrain-relative placement. See
+  [port scope](sunshine-cloud-port.md); this does not close phase exit criteria.
 - This is the hardest phase. Plan for it to take as long as phases 0 to 2 combined.
 
 ### Phase 4: Flight model and sim loop

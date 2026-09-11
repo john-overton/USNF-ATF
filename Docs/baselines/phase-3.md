@@ -1145,3 +1145,86 @@ manual continuous fly-through remain user review.
 Next reproduction: restart rebuilt Electron; compare both cloud appearances in
 Thunderstorm towers, enter a cloud, and toggle fog at 100/600 ft AGL near a hill.
 Rollback implementation with `git revert 3c04820` if desired.
+
+## 2026-09-11 — Sunshine cloud port and Fog weather selection
+
+Source implementation: `0f4f506`. Shader logic and app behavior were tested before
+commit; the final cleanup only stripped trailing whitespace from copied GLSL.
+Machine: Linux/Omarchy, RTX 4070, NVIDIA 610.57.04, ANGLE OpenGL ES 3.2, Bun1.4.2,
+Node26.8.1. Godot4.4.1.stable.official.49a5bc7b6 generated the textures through its
+OpenGL compatibility renderer. Scope: Electron at 2560×1440, not new Mac/Windows
+or installer acceptance. [Port notes](../sunshine-cloud-port.md) define the
+faithfulness boundary and MIT provenance.
+
+Commands/results:
+
+```sh
+bun tools/flight/export-sunshine.ts
+bun run check
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/sunshine-gpu-smoke.ts
+bun tools/flight/cloud-gpu-smoke.ts
+bun tools/flight/weather-gpu-smoke.ts
+bun tools/flight/fog-selection-smoke.ts
+bun tools/flight/weather-smoke.ts
+bun tools/flight/cloud-smoke.ts sunshine-verified above,tower-side,cirrus
+bun tools/flight/cloud-flight-smoke.ts
+git diff 976fdef --check
+```
+
+- `check`:476 pass,3 existing skipped F-14/A-4E/X-31 imported-mount tests, zero
+  failures; types/lint/formatting pass. No Python runtime change, Python suite
+  not rerun.
+- Export: all seven regenerated uncompressed hashes match the shipped fields.
+  Assets total19,137,536 decoded bytes (~18.25MiB), ~13.2MiB compressed. Cloud
+  color/data plus two history pairs estimate42.2MiB at half1440p, in addition to
+  scene composer buffers. This is a larger memory footprint than the old march.
+- GPU port comparison:128 positions,53 with nonzero density, both density and
+  sunlight sampling match the upstream functions within1e-4 on identical inputs.
+  Reference GLSL executes alongside the port on the actual GPU; this establishes
+  sampled function agreement, not end-to-end Godot image equality. The reference
+  clone is needed for this test. GL error0; no console errors.
+- Fresh-history floating-origin comparison: maximum byte difference0. Low-layer
+  rendering from20km altitude has nonzero cloud opacity. Legacy volume/solid GPU
+  invariants and AGL fog sampling checks still pass.
+- UI weather test starts Broken with legacy `fog=ground` and verifies fog off;
+  selecting Fog enables it. Clear, Scattered, Broken, Overcast and Storm disable
+  it, and reselecting Fog restores it. Captured in `cloud-review/fog-selection/`.
+- Salt Lake valley/hillside fog100/600ft and1900m-AGL cloud captures pass; clouds
+  have fog off. Imported F-14 cloud composition, pause freeze and resume pass.
+- Final synthetic above/tower-side/cirrus: median16.7ms, p9516.8ms. Vsync limited;
+  not isolated GPU timing or proof of the full real-terrain performance target.
+  Earlier seven-view `sunshine-final` and three-view `sunshine-calibrated` captures
+  are tuning evidence; `sunshine-verified` is the final selected matrix.
+
+Ignored output: `extracted/cloud-review/sunshine-gpu/`, `sunshine-verified/`,
+`fog-selection/`, `flight/`; `extracted/cloud-agl/terrain/` and `gpu/`. Godot tool,
+reference and export work remain under ignored `extracted/`.
+
+Corrections during implementation:
+
+- Headless Godot cannot read back the needed generated3D textures; moved export
+  to a small rendering window, awaited resource generation and removed mip data.
+  The final exporter runs without the earlier not-ready texture errors.
+- Initial Electron file-URL fetch failed. Texture reads now use the existing
+  Platform assets interface; no filesystem APIs enter runtime engine code.
+- Fixed sampler-probe vertex/fragment varying mismatch, lint typing, the old
+  every-preset-has-cirrus assertion, generated-JSON formatting and trailing
+  whitespace in copied GLSL. Final checks pass.
+- Review corrected wind/curl direction, source relative drift speeds and upward
+  detail motion; skipped empty space before the scaled layer budget to prevent
+  low clouds disappearing at high altitude. Source raw coverage numbers are not
+  old coverage fractions; weather presets now map into the source's semantics.
+- Disabled unmatched legacy cloud shadows. Mixed *visible* cirrus/cloud history
+  is rejected using opacity and ordering, avoiding incorrect single-depth
+  reprojection without disabling smoothing beneath empty cirrus regions.
+
+Remaining: no literal pixel1:1 claim, no full Godot-scene image comparison, and no
+point-light/effectors/painting/reflection port. Bright tops can lose contrast;
+cloud-type silhouette differentiation still needs artistic refinement. Temporal
+history uses representative distance and additional rejection; source atmospheric
+composition is replaced by the existing sky/haze. Cloud shadows are absent in
+Sunshine, as in upstream. Hardware fallback without float-color support is
+untested. Next manual check: storm exterior/entry, camera turns around silhouettes,
+and Fog versus Clear at low AGL. Switch appearance for comparison or revert
+`0f4f506` for the prior implementation.

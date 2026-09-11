@@ -202,6 +202,13 @@ the HUD gains a small `WIND ddd/ss` readout.
 
 ### Volumetric clouds
 
+Current 2026-09-11 selection: [Sunshine cloud port](sunshine-cloud-port.md) is the
+default, with ported density/light sampling, additive adaptive march, Godot noise,
+temporal reprojection and bicubic reconstruction. The solid/volume implementation
+below remains a selectable comparison. Ground fog is now a dedicated Weather
+preset; all other weather selections disable it. The following earlier
+implementation description is corrected accordingly.
+
 - A `CloudPass` inserted in `TerrainAntialias`'s composer after the scene
   `RenderPass`, before `OutputPass` and FXAA. The composer's render targets get
   `DepthTexture`s (Three 0.185 clones the depth texture on `renderTarget.clone()`,
@@ -217,7 +224,7 @@ the HUD gains a small `WIND ddd/ss` readout.
   intervals, six sun/four sky samples (twelve sun samples for storm), Beer
   integration and phase lighting. Storm uses at least 80 view samples and a
   vertically stretched/sheared field to reduce repeated horizontal structure.
-- Default `cloudAppearance=solid` finds a density isosurface within each
+- Comparison `cloudAppearance=solid` finds a density isosurface within each
   unintegrated interval, refines it, and shades its outward gradient. Composite
   front volume, face, remaining volume in order. Exterior opacity fades within
   80–350 m and with camera immersion; `volume` retains the volumetric comparison.
@@ -228,7 +235,7 @@ the HUD gains a small `WIND ddd/ss` readout.
   Cirrus stays MSL, lifted above the highest possible main-layer top when needed.
   Ground-shadow projection samples the same DEM. Unknown terrain suppresses
   local weather rather than implying sea level.
-- Ground fog defaults on: full extinction below 60.96 m AGL, smooth taper to zero
+- Ground fog is enabled only by `weather=fog`: full extinction below 60.96 m AGL, smooth taper to zero
   at 182.88 m; underground density is zero. A moving 25.6 km weather DEM at 100 m
   spacing includes known water surfaces. Fog receives 64 intervals, merged with
   the cloud march in depth order, and fades between 6–8 km viewing distance.
@@ -242,10 +249,10 @@ the HUD gains a small `WIND ddd/ss` readout.
 ## Controls, parameters and diagnostics
 
 - URL: `time=14.5` (hours), `date=07-15` or day of year, `weather=`, `wind=`,
-  `clouds=`, `cloudSteps=`, `cloudAppearance=solid|volume`, `fog=ground|off`. Invalid values show the existing explicit error
+  `clouds=`, `cloudSteps=`, `cloudAppearance=sunshine|solid|volume`, `fog=ground|off`. Invalid values show the existing explicit error
   path rather than silently defaulting.
 - Panel: Environment section with the time slider (0–24 h, shows HH:MM and sun
-  elevation), Weather, Wind, Cloud appearance and Cloud quality selects, plus Ground fog. Controls
+  elevation), Weather, Wind, Cloud appearance and Cloud quality selects, with Fog as its own Weather selection. Controls
   restore keyboard focus to the canvas like the MFD buttons do.
 - `__terrainDiagnostics()` gains `environment`: time of day, day of year,
   season, sun/moon elevation and azimuth, weather, wind preset, wind at the
