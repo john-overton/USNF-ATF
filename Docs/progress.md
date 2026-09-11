@@ -7,6 +7,17 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-10
 
+## 2026-09-11: CS2 smoke reference and cloud rendering review
+
+Committed/pushed the accumulated implementation as `576db2b`, then reviewed
+Garrett Gunnell's Unity smoke recreation at `17f5579` against our cloud pass.
+[Cloud review](cloud-rendering-review.md) records confirmed camera-step-dependent
+lighting and truncated sunlight integration, the unconfirmed erosion/dimpling
+hypothesis, reference-code limitations, and a bounded implementation/visual
+acceptance sequence. This is source research only; cloud rendering is unchanged.
+Next step is matched baseline captures, then broad billows, weaker edge erosion
+and improved optical-depth lighting. Existing phase acceptance remains unchanged.
+
 ## 2026-09-11: Commit/push checkpoint verification
 
 User requested committing and pushing the accumulated aircraft, audio, terrain,
