@@ -1,7 +1,8 @@
 /** Browser-side real WebGL2 invariants; bundled only by cloud-gpu-smoke.ts. */
-import { Color, FloatType, PerspectiveCamera, ShaderMaterial, Vector3, WebGLRenderer, WebGLRenderTarget } from 'three';
+import { Color, FloatType, PerspectiveCamera, ShaderMaterial, Vector2, Vector3, Vector4, WebGLRenderer, WebGLRenderTarget } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { CloudPass, MARCH_FRAGMENT, type CloudUniformState } from '../../engine/src/terrain/cloud-pass';
+import { heightField } from '../../engine/src/terrain/weather-height';
 import { WEATHER_PRESETS, marchedLayer } from '../../engine/src/sim/environment/clouds';
 
 export function probe() {
@@ -16,7 +17,9 @@ export function probe() {
   const pass = new CloudPass(camera);
   pass.quality = 'full';
   pass.setSize(192, 108);
+  const flat = heightField(new Float32Array(4), 2, 2, new Vector4(-100000, -100000, 200000, 200000));
   const state: CloudUniformState = {
+    terrain: flat,
     offset: { x: 0, z: 0 }, cirrusOffset: { x: 0, z: 0 }, evolutionSeconds: 0,
     layer: marchedLayer(WEATHER_PRESETS.broken), cirrus: undefined,
     sunDirection: new Vector3(0.3, 0.9, -0.2).normalize(),
@@ -24,9 +27,10 @@ export function probe() {
     zenithColor: new Color(0.2, 0.35, 0.7), groundColor: new Color(0.3, 0.29, 0.26),
     ambientIntensity: 1.7, origin: { x: 0, z: 0 }, fogColor: new Color(0x91b1c8), fogNear: 80000, fogFar: 180000,
   };
+  let altitude = 3400;
   const draw = (steps: number) => {
     pass.steps = steps;
-    camera.position.set(4000 - state.origin.x, 3400, 4000 - state.origin.z);
+    camera.position.set(4000 - state.origin.x, altitude, 4000 - state.origin.z);
     camera.lookAt(4000 - state.origin.x, 1400, -4000 - state.origin.z);
     camera.updateMatrixWorld();
     pass.update(state);
@@ -52,6 +56,21 @@ export function probe() {
   state.evolutionSeconds = Math.PI * 200 + 0.001;
   const wrapped = difference(wrapBefore, draw(40));
 
+  state.evolutionSeconds = 0;
+  state.origin = { x: 0, z: 0 };
+  state.appearance = 'solid';
+  const solid = draw(40);
+  const solidChanged = difference(first, solid);
+  const solidRepeated = difference(solid, draw(40));
+  state.origin = { x: 8192, z: -16384 };
+  const solidRebased = difference(solid, draw(40));
+  // Dense overcast at mid-layer disables the exterior for immersed cameras.
+  state.layer = { ...marchedLayer(WEATHER_PRESETS.overcast)!, coverage: 1, density: 1 };
+  altitude = 1100;
+  const insideSolid = draw(40);
+  state.appearance = 'volume';
+  const insideDifference = difference(insideSolid, draw(40));
+
   // Execute the production light integrator with a uniform density fixture. Only
   // density is substituted; integration/range/GLSL precision are the real code.
   const prefix = MARCH_FRAGMENT.slice(0, MARCH_FRAGMENT.indexOf('void main()'))
@@ -59,7 +78,7 @@ export function probe() {
     .replace('float lightOpticalDepth(vec3 p)', 'float coarseDensity(vec3 p) { return 0.5; }\nfloat lightOpticalDepth(vec3 p)');
   const material = new ShaderMaterial({
     defines: { LIGHT_STEPS: 6 },
-    uniforms: { cloudBaseM: { value: 1200 }, cloudTopM: { value: 2800 }, cloudSunDirection: { value: new Vector3(0, 1, 0) } },
+    uniforms: { weatherRange: { value: new Vector2(0, 0) }, cloudBaseM: { value: 1200 }, cloudTopM: { value: 2800 }, cloudSunDirection: { value: new Vector3(0, 1, 0) } },
     vertexShader: 'void main(){gl_Position=vec4(position.xy,0.0,1.0);}',
     fragmentShader: prefix + '\nvoid main(){float tau=lightOpticalDepth(vec3(0.0,1300.0,0.0)); gl_FragColor=vec4(tau,exp(-tau),skyOpticalDepth(vec3(0.0,1300.0,0.0)),1.0);}',
     depthTest: false, depthWrite: false,
@@ -73,14 +92,14 @@ export function probe() {
     quad.render(renderer);
     const values = new Float32Array(4);
     renderer.readRenderTargetPixels(floatTarget, 0, 0, 1, 1, values);
-    const distance = Math.min(12000, (y > 0 ? 1500 : 100) / Math.abs(y));
+    const distance = Math.min(20000, (y > 0 ? 1500 : 100) / Math.abs(y));
     optical.push({ y, actual: Array.from(values), expectedTau: distance * .5 * .0025 });
   }
   const gl = renderer.getContext();
   const extension = gl.getExtension('WEBGL_debug_renderer_info');
   const gpu = extension ? gl.getParameter(extension.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
   const error = gl.getError();
-  quad.dispose(); material.dispose(); floatTarget.dispose(); pass.dispose(); target.dispose(); input.dispose(); renderer.dispose();
-  return { gpu, error, repeated, convergence, rebased, evolved, wrapped, optical };
+  quad.dispose(); material.dispose(); floatTarget.dispose(); pass.dispose(); target.dispose(); input.dispose(); renderer.dispose(); flat.texture.dispose();
+  return { solidChanged, solidRepeated, solidRebased, insideDifference, gpu, error, repeated, convergence, rebased, evolved, wrapped, optical };
 }
 Object.assign(window, { cloudGpuProbe: probe });

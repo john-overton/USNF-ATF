@@ -1,5 +1,7 @@
 import {
   DepthTexture,
+  HalfFloatType,
+  UnsignedByteType,
   UnsignedIntType,
   WebGLRenderTarget,
   type Vector2,
@@ -23,16 +25,20 @@ export class TerrainAntialias {
   /** The cloud march, between the scene and tone mapping; drives the quality selector. */
   readonly clouds: CloudPass;
   bytes = 0;
+  private readonly colorBytes: number;
   constructor(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera) {
     // The cloud march reads scene depth. EffectComposer clones this target for its second
     // buffer and RenderTarget.copy clones a non-null depthTexture, so both buffers end up
     // with one — which they must, since later passes swap read/write every frame.
+    const highPrecision = renderer.extensions.has('EXT_color_buffer_float');
+    this.colorBytes = highPrecision ? 8 : 4;
     const target = new WebGLRenderTarget(1, 1, {
+      type: highPrecision ? HalfFloatType : UnsignedByteType,
       depthTexture: new DepthTexture(1, 1, UnsignedIntType),
     });
     this.composer = new EffectComposer(renderer, target);
     this.scenePass = new RenderPass(scene, camera);
-    this.clouds = new CloudPass(camera);
+    this.clouds = new CloudPass(camera, highPrecision);
     this.composer.addPass(this.scenePass);
     this.composer.addPass(this.clouds);
     this.composer.addPass(this.output);
@@ -42,8 +48,8 @@ export class TerrainAntialias {
     this.composer.setSize(width, height);
     const resolution = this.fxaa.uniforms.resolution!.value as Vector2;
     resolution.set(1 / width, 1 / height);
-    // Two RGBA8 color + approximate 32-bit depth attachments (driver-dependent).
-    this.bytes = width * height * 16;
+    // Two color + approximate 32-bit depth attachments (driver-dependent).
+    this.bytes = width * height * (this.colorBytes + 4) * 2;
   }
   render(): void {
     this.composer.render();

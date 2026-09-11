@@ -50,6 +50,7 @@ import {
   reflectedWidth,
   reflectPixels,
 } from './world-orientation';
+import { WeatherTerrain, weatherHeightAt } from './weather-height';
 import { SeasonalSatellite } from './seasonal-satellite';
 import { patchCloudShadow } from './cloud-shadow';
 import { patchTerrainLightContrast, setTerrainContrast, TERRAIN_CONTRAST } from './light-contrast';
@@ -85,6 +86,13 @@ export interface EnvironmentDiagnostics {
   windSpeed: number;
   cloudQuality: CloudQuality;
   cloudSteps: number;
+  groundFog: boolean;
+  cloudAppearance: 'solid' | 'volume';
+  weatherTerrainReady: boolean;
+  fogTerrainReady: boolean;
+  weatherGroundM: number | undefined;
+  fogGroundM: number | undefined;
+  weatherTerrainError: string;
   shadow: ReturnType<SkyLayer['shadowDiagnostics']>;
 }
 export interface TerrainDiagnostics {
@@ -177,6 +185,8 @@ export function startTerrainViewer(
   setWeather(id: WeatherId): void;
   setWind(id: WindPresetId): void;
   setCloudQuality(quality: CloudQuality): void;
+  setGroundFog(enabled: boolean): void;
+  setCloudAppearance(value: 'solid' | 'volume'): void;
   setTerrainPaint(mode: string): Promise<void>;
   teleportToWaypoint(point: TeleportWaypoint): Promise<void>;
   setNavigationTarget(point: { id: number; x: number; z: number } | undefined): void;
@@ -209,6 +219,9 @@ export function startTerrainViewer(
     ...(query.wind === undefined ? {} : { wind: query.wind }),
   });
   let cloudQuality: CloudQuality = query.clouds ?? 'half';
+  let groundFog = query.fog !== 'off';
+  let cloudAppearance = query.cloudAppearance ?? 'solid';
+  let weatherTerrain: WeatherTerrain | undefined;
   // Parsed before any GPU resource exists, so a bad value surfaces through the
   // viewer's explicit error path rather than leaking a context.
   const contrast = mission.contrast ?? TERRAIN_CONTRAST;
@@ -303,7 +316,18 @@ export function startTerrainViewer(
       windBearingDeg:
         speed < 1e-6 ? 0 : ((Math.atan2(-wind.x, wind.z) * 180) / Math.PI + 540) % 360,
       cloudQuality,
-      cloudSteps,
+      cloudSteps: environment.settings.weather === 'storm' ? Math.max(80, cloudSteps) : cloudSteps,
+      groundFog,
+      cloudAppearance,
+      weatherTerrainReady: Boolean(weatherTerrain?.clouds),
+      fogTerrainReady: Boolean(weatherTerrain?.fog),
+      weatherGroundM: weatherTerrain?.clouds
+        ? weatherHeightAt(weatherTerrain.clouds, world.x, world.z)
+        : undefined,
+      fogGroundM: weatherTerrain?.fog
+        ? weatherHeightAt(weatherTerrain.fog, world.x, world.z)
+        : undefined,
+      weatherTerrainError: weatherTerrain?.error ?? '',
       shadow: sky.shadowDiagnostics(),
     };
   };
@@ -529,6 +553,13 @@ export function startTerrainViewer(
     Object.assign(world, pose.position);
     yaw = pose.yaw;
     pitch = pose.pitch;
+    weatherTerrain = new WeatherTerrain(m, async (chunk) =>
+      decodeChunk(await platform.fs.readBytes(root, folder + chunk.path), chunk),
+    );
+    void weatherTerrain
+      .initialize(Math.min(4096, renderer.capabilities.maxTextureSize))
+      .catch(fail);
+    weatherTerrain.update(world.x, world.z);
     water = new WaterLayer(scene, m.waterBodies, new WaterWorkerBuilder());
     if (m.shorelines) {
       const raw = await decodeTerrainBytes(
@@ -858,7 +889,12 @@ export function startTerrainViewer(
     }
     const key = environment.sun.elevationRad > 0 ? environment.sun : environment.moon;
     cloudSun.set(key.direction.x, key.direction.y, key.direction.z);
+    if (groundFog) weatherTerrain?.update(world.x, world.z);
     antialias.clouds.update({
+      terrain: weatherTerrain?.clouds,
+      fogTerrain: weatherTerrain?.fog,
+      appearance: cloudAppearance,
+      groundFog,
       offset: cloudOffset,
       evolutionSeconds: cloudEvolutionSeconds,
       cirrusOffset,
@@ -897,6 +933,8 @@ export function startTerrainViewer(
       antialias.bytes +
       (mirrors?.bytes ?? 0) +
       antialias.clouds.bytes +
+      (weatherTerrain?.clouds?.bytes ?? 0) +
+      (weatherTerrain?.fog?.bytes ?? 0) +
       sky.bytes +
       (shoreline?.bytes ?? 0);
     d.patches = visible.size + outgoing.size;
@@ -999,6 +1037,13 @@ export function startTerrainViewer(
       environment.setWind(id);
       update(diagnostics());
     },
+    setCloudAppearance(value: 'solid' | 'volume') {
+      cloudAppearance = value;
+    },
+    setGroundFog(enabled: boolean) {
+      groundFog = enabled;
+      update(diagnostics());
+    },
     setCloudQuality(quality: CloudQuality) {
       cloudQuality = quality;
       antialias.clouds.quality = quality;
@@ -1024,6 +1069,7 @@ export function startTerrainViewer(
       mirrors?.dispose();
       gunSightOverlay?.dispose();
       antialias.dispose();
+      weatherTerrain?.dispose();
       sky.dispose();
       renderer.dispose();
       if (window.__terrainDiagnostics === diagnostics) delete window.__terrainDiagnostics;

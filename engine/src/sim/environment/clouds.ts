@@ -9,6 +9,7 @@ export type WeatherId = 'clear' | 'scattered' | 'broken' | 'overcast' | 'storm';
 export type CloudType = 'cumulus' | 'cumulonimbus' | 'stratus' | 'cirrus';
 export interface CloudLayer {
   type: CloudType;
+  /** AGL for marched layers; MSL for the high cirrus sheet. */
   baseM: number;
   topM: number;
   /** Fraction of sky the layer covers, 0-1. */
@@ -96,10 +97,13 @@ export function cloudDensityAt(
   position: Vec3,
   sample: CoverageSampler,
   offset: { x: number; z: number } = { x: 0, z: 0 },
+  groundAt?: (x: number, z: number) => number | undefined,
 ): number {
   let total = 0;
   for (const layer of preset.layers) {
-    const gradient = layerHeightGradient(layer, position.y);
+    const ground = layer.type === 'cirrus' ? 0 : groundAt?.(position.x, position.z);
+    if (ground === undefined || !Number.isFinite(ground)) continue;
+    const gradient = layerHeightGradient(layer, position.y - ground);
     if (gradient === 0) continue;
     const noise = sample(position.x + offset.x, position.z + offset.z);
     // Coverage raises the noise floor: at 1 the whole layer is solid.
@@ -115,6 +119,7 @@ export function inCloud(
   position: Vec3,
   sample: CoverageSampler,
   offset?: { x: number; z: number },
+  groundAt?: (x: number, z: number) => number | undefined,
 ): boolean {
-  return cloudDensityAt(preset, position, sample, offset) > 0.35;
+  return cloudDensityAt(preset, position, sample, offset, groundAt) > 0.35;
 }

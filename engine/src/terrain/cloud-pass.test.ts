@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { Color, PerspectiveCamera, Vector2, Vector3 } from 'three';
+import { Color, PerspectiveCamera, Vector2, Vector3, Vector4 } from 'three';
 import {
   CloudPass,
   MARCH_FRAGMENT,
@@ -10,12 +10,20 @@ import {
   updateCloudShadowUniforms,
   type CloudUniformState,
 } from './cloud-pass';
+import { heightField } from './weather-height';
 import { COVERAGE_TILE_METERS, WEATHER_PRESETS, marchedLayer } from '../sim/environment/clouds';
 
 /** Three constructs headlessly under bun; only an actual draw needs a GL context. */
 const pass = (): CloudPass => new CloudPass(new PerspectiveCamera(60, 1, 5, 400000));
 
+const flatTerrain = heightField(
+  new Float32Array(4),
+  2,
+  2,
+  new Vector4(-100000, -100000, 200000, 200000),
+);
 const state = (): CloudUniformState => ({
+  terrain: flatTerrain,
   offset: { x: 1200, z: -400 },
   evolutionSeconds: 120,
   cirrusOffset: { x: 100, z: 200 },
@@ -62,13 +70,13 @@ test('setSize recomputes the low-resolution target and its byte estimate', () =>
   p.quality = 'half';
   p.setSize(2560, 1440);
   expect(p.resolution).toEqual({ width: 1280, height: 720 });
-  expect(p.bytes).toBe(1280 * 720 * 4);
+  expect(p.bytes).toBe(1280 * 720 * 8);
   p.quality = 'quarter';
   expect(p.resolution).toEqual({ width: 640, height: 360 });
-  expect(p.bytes).toBe(640 * 360 * 4);
+  expect(p.bytes).toBe(640 * 360 * 8);
   p.quality = 'full';
   expect(p.resolution).toEqual({ width: 2560, height: 1440 });
-  expect(p.bytes).toBe(2560 * 1440 * 4);
+  expect(p.bytes).toBe(2560 * 1440 * 8);
   p.dispose();
 });
 
@@ -109,7 +117,7 @@ test('the shadow chunk declares every uniform the shared set provides', () => {
 test('the march shader reconstructs log depth, clips to it and honours the step uniform', () => {
   expect(MARCH_FRAGMENT).toContain('pow(cameraFar + 1.0, d) - 1.0');
   expect(MARCH_FRAGMENT).toContain('uniform int cloudSteps;');
-  expect(MARCH_FRAGMENT).toContain('i < cloudSteps');
+  expect(MARCH_FRAGMENT).toContain('i < count + 68');
   expect(MARCH_FRAGMENT).toContain('sceneDistance');
   // The march must share the shadow chunk's coverage sampling, not a copy of it.
   expect(MARCH_FRAGMENT).toContain(SHADOW_CHUNK);

@@ -169,6 +169,8 @@ export interface EnvironmentQuery {
   wind?: WindPresetId;
   clouds?: CloudQuality;
   cloudSteps?: number;
+  fog?: 'off' | 'ground';
+  cloudAppearance?: 'solid' | 'volume';
 }
 /**
  * URL overrides. Invalid values throw so the viewer's existing explicit error
@@ -223,6 +225,18 @@ export function parseEnvironmentQuery(search: string): EnvironmentQuery {
         `Invalid clouds parameter “${clouds}”: expected ${CLOUD_QUALITIES.join(', ')}`,
       );
     query.clouds = clouds as CloudQuality;
+  }
+  const appearance = params.get('cloudAppearance');
+  if (appearance !== null) {
+    if (appearance !== 'solid' && appearance !== 'volume')
+      throw new Error('Invalid cloudAppearance parameter: expected solid or volume');
+    query.cloudAppearance = appearance;
+  }
+  const fog = params.get('fog');
+  if (fog !== null) {
+    if (fog !== 'off' && fog !== 'ground')
+      throw new Error('Invalid fog parameter: expected off or ground');
+    query.fog = fog;
   }
   const steps = params.get('cloudSteps');
   if (steps !== null) {

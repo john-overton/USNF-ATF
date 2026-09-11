@@ -14,12 +14,14 @@ import {
   Data3DTexture,
   DataTexture,
   LinearFilter,
+  HalfFloatType,
   RedFormat,
   RepeatWrapping,
   ShaderMaterial,
   UnsignedByteType,
   Vector2,
   Vector3,
+  Vector4,
   WebGLRenderTarget,
   type PerspectiveCamera,
   type Texture,
@@ -28,6 +30,8 @@ import {
 import { FullScreenQuad, Pass } from 'three/addons/postprocessing/Pass.js';
 import { buildCloudShape, buildCloudVolume, buildCoverageTexture } from '../render/cloud-noise';
 import { COVERAGE_TILE_METERS, type CloudLayer } from '../sim/environment/clouds';
+import { WEATHER_HEIGHT_GLSL, type WeatherHeightField } from './weather-height';
+import { FOG_FULL_AGL_M, FOG_TOP_AGL_M, FOG_EXTINCTION } from '../sim/environment/fog';
 import type { CloudQuality } from '../sim/environment';
 
 /** Metres of world spanned by one tile of the 64³ erosion volume. */
@@ -58,6 +62,10 @@ export interface CloudUniformState {
   fogColor: Color;
   fogNear: number;
   fogFar: number;
+  terrain?: WeatherHeightField | undefined;
+  fogTerrain?: WeatherHeightField | undefined;
+  groundFog?: boolean;
+  appearance?: 'solid' | 'volume';
 }
 
 export function cloudScaleFor(quality: CloudQuality): number {
@@ -126,6 +134,7 @@ function volumeTexture(shape = false): Data3DTexture {
  * scene-space position; `cloudOrigin` adds the floating origin back before sampling.
  */
 export const SHADOW_CHUNK = /* glsl */ `
+${WEATHER_HEIGHT_GLSL}
 uniform sampler2D cloudCoverage;
 uniform vec2 cloudOffset;
 uniform float cloudBaseM;
@@ -147,7 +156,15 @@ float cloudShadow(vec3 worldPosition) {
   // near zero there, so stop rather than sampling a wildly extrapolated point.
   if (cloudSunDirection.y <= 0.05) return 1.0;
   vec3 p = vec3(worldPosition.x + cloudOrigin.x, worldPosition.y, worldPosition.z + cloudOrigin.y);
-  float t = (cloudBaseM - p.y) / cloudSunDirection.y;
+  vec2 ground = cloudGroundAt(p.xz);
+  if (ground.y < 0.5) return 1.0;
+  float t = (ground.x + cloudBaseM - p.y) / cloudSunDirection.y;
+  // Two refinements follow the regional terrain-relative base along the light ray.
+  for (int i = 0; i < 2; i++) {
+    ground = cloudGroundAt(p.xz + cloudSunDirection.xz * max(0.0, t));
+    if (ground.y < 0.5) return 1.0;
+    t = (ground.x + cloudBaseM - p.y) / cloudSunDirection.y;
+  }
   if (t <= 0.0) return 1.0;
   vec2 hit = p.xz + cloudSunDirection.xz * t;
   float shaped = cloudShaped(cloudCoverageAt(hit), cloudCoverageAmount);
@@ -156,6 +173,11 @@ float cloudShadow(vec3 worldPosition) {
 `;
 
 interface CloudShadowUniforms extends Record<string, { value: unknown }> {
+  weatherHeight: { value: Texture | null };
+  weatherBounds: { value: Vector4 };
+  weatherSize: { value: Vector2 };
+  weatherRange: { value: Vector2 };
+  weatherReady: { value: number };
   cloudCoverage: { value: Texture };
   cloudOffset: { value: Vector2 };
   cloudBaseM: { value: number };
@@ -173,6 +195,11 @@ let shadowSingleton: CloudShadowUniforms | undefined;
  */
 export function createCloudShadowUniforms(): Record<string, { value: unknown }> {
   shadowSingleton ??= {
+    weatherHeight: { value: null },
+    weatherBounds: { value: new Vector4(0, 0, 1, 1) },
+    weatherSize: { value: new Vector2(2, 2) },
+    weatherRange: { value: new Vector2(0, 1) },
+    weatherReady: { value: 0 },
     cloudCoverage: { value: coverageTexture() },
     cloudOffset: { value: new Vector2() },
     cloudBaseM: { value: 1500 },
@@ -195,6 +222,13 @@ export function updateCloudShadowUniforms(
   u.cloudBaseM.value = state.layer?.baseM ?? 0;
   u.cloudCoverageAmount.value = state.layer?.coverage ?? 0;
   u.cloudTileMeters.value = COVERAGE_TILE_METERS;
+  u.weatherHeight.value = state.terrain?.texture ?? null;
+  u.weatherReady.value = state.terrain ? 1 : 0;
+  if (state.terrain) {
+    u.weatherBounds.value.copy(state.terrain.bounds);
+    u.weatherSize.value.copy(state.terrain.size);
+    u.weatherRange.value.set(state.terrain.min, state.terrain.max);
+  }
 }
 
 const VERTEX = /* glsl */ `
@@ -233,6 +267,12 @@ uniform float cloudStratus;
 uniform float cloudTower;
 uniform vec2 cirrusOffset;
 uniform float cloudMarch;
+uniform float groundFog;
+uniform float cloudSolid;
+uniform sampler2D fogHeight;
+uniform vec4 fogBounds;
+uniform vec2 fogSize;
+uniform vec2 fogRange;
 uniform float cloudDetailMeters;
 uniform float cirrusBaseM;
 uniform float cirrusCoverage;
@@ -278,19 +318,27 @@ vec3 cloudCoordinates(vec3 p) {
   return uvw + wave * mix(0.055, 0.015, cloudStratus);
 }
 float bodyDensity(vec3 p, vec3 uvw) {
-  float h = (p.y - cloudBaseM) / max(1.0, cloudTopM - cloudBaseM);
+  vec2 ground = cloudGroundAt(p.xz);
+  if (ground.y < 0.5) return 0.0;
+  float agl = p.y - ground.x;
+  float h = (agl - cloudBaseM) / max(1.0, cloudTopM - cloudBaseM);
   if (h <= 0.0 || h >= 1.0) return 0.0;
   float shaped = cloudShaped(cloudCoverageAt(p.xz), cloudCoverageAmount);
   if (shaped <= 0.0) return 0.0;
-  float billow = texture(cloudShape, uvw).r;
+  vec3 shapeUVW = uvw;
+  // Tall storms must not repeat the same noise slice every 3 km of altitude.
+  shapeUVW += cloudTower * vec3(uvw.y * 0.13, -uvw.y * 0.6, -uvw.y * 0.17);
+  float billow = texture(cloudShape, shapeUVW).r;
   // Rounded variable tops over a flatter condensation base. Stratus retains its
   // filled slab instead of inheriting the cumulus towers.
   float cap = mix(0.62, 1.0, smoothstep(0.12, 0.72, billow));
   float cumulus = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(cap - 0.24, cap, h));
   if (cloudTower > 0.5) {
     // Wide columns set coherent tower heights, independent of the small 3D lobes.
-    float column = texture(cloudShape, vec3(uvw.x * 0.45, 0.37, uvw.z * 0.45)).r;
+    vec2 columnXZ = (p.xz + cloudOffset) / cloudDetailMeters * 0.45;
+    float column = texture(cloudShape, vec3(columnXZ.x, 0.37, columnXZ.y)).r;
     float towerCap = mix(0.48, 1.0, smoothstep(0.12, 0.65, column));
+    towerCap = mix(towerCap, max(towerCap, 0.91), smoothstep(0.18, 0.55, column));
     float crown = 1.0 - smoothstep(towerCap - 0.16, towerCap, h);
     float tower = smoothstep(0.0, 0.025, h) * crown;
     // The upper outflow spreads within the weather envelope, with a flat cap.
@@ -298,15 +346,15 @@ float bodyDensity(vec3 p, vec3 uvw) {
     cumulus = max(tower, anvil * smoothstep(0.18, 0.55, column));
     shaped = mix(shaped, sqrt(shaped), anvil * 0.65);
   }
-  float profile = mix(cumulus, heightGradient(p.y), cloudStratus);
+  float profile = mix(cumulus, heightGradient(agl), cloudStratus);
   return shaped * profile * mix(0.75 + billow * 0.85, 0.92 + billow * 0.16, cloudStratus);
 }
 float coarseDensity(vec3 p) {
-  if (p.y <= cloudBaseM || p.y >= cloudTopM) return 0.0;
+  if (p.y <= weatherRange.x + cloudBaseM || p.y >= weatherRange.y + cloudTopM) return 0.0;
   return bodyDensity(p, cloudCoordinates(p)) * cloudDensity;
 }
 float densityAt(vec3 p, float footprint) {
-  if (p.y <= cloudBaseM || p.y >= cloudTopM) return 0.0;
+  if (p.y <= weatherRange.x + cloudBaseM || p.y >= weatherRange.y + cloudTopM) return 0.0;
   vec3 uvw = cloudCoordinates(p);
   float body = bodyDensity(p, uvw);
   if (body <= 0.0) return 0.0;
@@ -321,12 +369,14 @@ float densityAt(vec3 p, float footprint) {
 float lightOpticalDepth(vec3 p) {
   // Follow the actual light-facing slab exit, with a bounded grazing-ray range.
   float dy = cloudSunDirection.y;
-  float exitDistance = dy >= 0.0 ? cloudTopM - p.y : p.y - cloudBaseM;
-  float span = min(12000.0, exitDistance / max(0.001, abs(dy)));
+  float exitDistance = dy >= 0.0 ? weatherRange.y + cloudTopM - p.y : p.y - weatherRange.x - cloudBaseM;
+  float span = min(20000.0, max(0.0, exitDistance) / max(0.001, abs(dy)));
   float tau = 0.0;
   float previous = 0.0;
-  for (int i = 0; i < LIGHT_STEPS; i++) {
-    float f = float(i + 1) / float(LIGHT_STEPS);
+  int count = cloudTower > 0.5 ? 12 : LIGHT_STEPS;
+  for (int i = 0; i < 12; i++) {
+    if (i >= count) break;
+    float f = float(i + 1) / float(count);
     float end = span * f * f;
     float width = end - previous;
     tau += coarseDensity(p + cloudSunDirection * (previous + width * 0.5)) * width;
@@ -335,12 +385,61 @@ float lightOpticalDepth(vec3 p) {
   return tau * EXTINCTION;
 }
 float skyOpticalDepth(vec3 p) {
-  float span = max(0.0, cloudTopM - p.y);
-  return (coarseDensity(p + vec3(0.0, span * 0.25, 0.0)) +
-          coarseDensity(p + vec3(0.0, span * 0.75, 0.0))) * span * 0.5 * EXTINCTION;
+  vec2 ground = cloudGroundAt(p.xz);
+  float span = max(0.0, ground.x + cloudTopM - p.y);
+  float tau = 0.0;
+  for (int i = 0; i < 4; i++)
+    tau += coarseDensity(p + vec3(0.0, span * (float(i) + 0.5) / 4.0, 0.0));
+  return tau * span * 0.25 * EXTINCTION;
 }
 float fogAmount(float distanceM) {
   return clamp((distanceM - cloudFogNear) / max(1.0, cloudFogFar - cloudFogNear), 0.0, 1.0);
+}
+
+float fogSigma(vec3 p) {
+  if (groundFog < 0.5) return 0.0;
+  vec2 ground = sampleWeatherHeight(fogHeight, fogBounds, fogSize, fogRange, p.xz);
+  if (ground.y < 0.5) return 0.0;
+  float agl = p.y - ground.x;
+  if (agl < 0.0 || agl >= ${FOG_TOP_AGL_M}) return 0.0;
+  return (1.0 - smoothstep(${FOG_FULL_AGL_M}, ${FOG_TOP_AGL_M}, agl)) * ${FOG_EXTINCTION};
+}
+vec2 slabInterval(vec3 ro, vec3 dir, float base, float top, float range) {
+  if (abs(dir.y) < 1e-5) return ro.y >= base && ro.y <= top ? vec2(0.0, range) : vec2(range, range);
+  float a = (base - ro.y) / dir.y;
+  float b = (top - ro.y) / dir.y;
+  return vec2(clamp(min(a,b), 0.0, range), clamp(max(a,b), 0.0, range));
+}
+
+void integrateMedium(vec3 ro, vec3 dir, float start, float end, float jitter,
+                     vec2 cloudSpan, vec2 fogSpan, float phase,
+                     inout vec3 scatter, inout float transmittance) {
+    float stepM = end - start;
+    float t = start + stepM * jitter;
+    vec3 p = ro + dir * t;
+    float d = t >= cloudSpan.x && t < cloudSpan.y ? densityAt(p, stepM) : 0.0;
+    float fog = t >= fogSpan.x && t < fogSpan.y ? fogSigma(p) * (1.0 - smoothstep(6000.0, 8000.0, t)) : 0.0;
+    float sigma = d * EXTINCTION + fog;
+    if (sigma > 0.0 && stepM > 0.0) {
+      vec3 lum = vec3(0.0);
+      if (d > 0.0) {
+        float sunTau = lightOpticalDepth(p);
+        float skyTau = skyOpticalDepth(p);
+        float direct = exp(-sunTau);
+        float multiple = 0.12 * exp(-sunTau * 0.25);
+        float skyVisibility = exp(-skyTau * 0.65);
+        vec3 ambient = (cloudZenithColor * (0.12 + 0.38 * skyVisibility) +
+                        cloudGroundColor * 0.1) * cloudAmbientStrength;
+        lum = cloudSunColor * cloudSunStrength *
+              (direct * (0.24 + phase * 0.7) + multiple) + ambient;
+        lum = mix(lum, cloudFogColor, fogAmount(t));
+      }
+      lum = (lum * d * EXTINCTION + cloudFogColor * fog) / sigma;
+      float sampleT = exp(-sigma * stepM);
+      scatter += transmittance * (1.0 - sampleT) * lum;
+      transmittance *= sampleT;
+
+    }
 }
 
 void main() {
@@ -393,61 +492,96 @@ void main() {
     }
   }
 
-  float enter = 0.0;
-  float exitM = -1.0;
-  if (cloudMarch > 0.5) {
-    if (abs(dir.y) < 1e-4) {
-      // Level flight inside the slab: march ahead until the depth or the range stops us.
-      if (ro.y > cloudBaseM && ro.y < cloudTopM) exitM = min(sceneDistance, MAX_MARCH_M);
-    } else {
-      float t0 = (cloudBaseM - ro.y) / dir.y;
-      float t1 = (cloudTopM - ro.y) / dir.y;
-      enter = max(0.0, min(t0, t1));
-      exitM = min(min(max(t0, t1), sceneDistance), MAX_MARCH_M);
-    }
-  }
-
-  bool cirrusFirst = cirrusT >= 0.0 && (exitM <= enter || cirrusT <= enter);
+  float limit = min(sceneDistance, MAX_MARCH_M);
+  vec2 cloudSpan = vec2(limit);
+  if (cloudMarch > 0.5)
+    cloudSpan = slabInterval(ro, dir, weatherRange.x + cloudBaseM, weatherRange.y + cloudTopM, limit);
+  vec2 fogSpan = vec2(limit);
+  if (groundFog > 0.5)
+    fogSpan = slabInterval(ro, dir, fogRange.x, fogRange.y + ${FOG_TOP_AGL_M}, min(limit, 8000.0));
+  float enter = min(cloudSpan.x, fogSpan.x);
+  bool cirrusFirst = cirrusT >= 0.0 && cirrusT <= enter;
   if (cirrusFirst) {
     scatter += transmittance * cirrus.a * cirrus.rgb;
     transmittance *= 1.0 - cirrus.a;
   }
 
-  if (exitM > enter) {
-    float span = exitM - enter;
-    float jitter = mix(0.5, hash12(gl_FragCoord.xy), cloudJitter * 0.65);
-    // Concentrate samples near the camera/entry, where silhouette detail matters.
-    // Every segment contributes its actual width to Beer integration.
-    for (int i = 0; i < cloudSteps; i++) {
-      float f0 = float(i) / float(cloudSteps);
-      float f1 = float(i + 1) / float(cloudSteps);
-      float startM = span * f0 * f0;
-      float stepM = span * f1 * f1 - startM;
-      float t = enter + startM + stepM * jitter;
-      vec3 p = ro + dir * t;
-      float d = densityAt(p, stepM);
-      if (d > 0.0) {
-        float sigma = d * EXTINCTION;
-        float sampleT = exp(-sigma * stepM);
-        // Source radiance must not depend on camera step length/quality. Optical
-        // depths describe sheltering; a weak broad lobe approximates scattered fill.
-        float sunTau = lightOpticalDepth(p);
-        float skyTau = skyOpticalDepth(p);
-        float direct = exp(-sunTau);
-        float multiple = 0.12 * exp(-sunTau * 0.25);
-        float skyVisibility = exp(-skyTau * 0.65);
-        vec3 ambient = (cloudZenithColor * (0.12 + 0.38 * skyVisibility) +
-                        cloudGroundColor * 0.1) * cloudAmbientStrength;
-        vec3 lum = cloudSunColor * cloudSunStrength *
-                   (direct * (0.24 + phase * 0.7) + multiple) + ambient;
-        // Distant clouds sit in the same haze as the terrain behind them.
-        lum = mix(lum, cloudFogColor, fogAmount(t));
-        scatter += transmittance * (1.0 - sampleT) * lum;
-        transmittance *= sampleT;
-        if (transmittance < 0.01) break;
-      }
+  // Merge the cloud and thin-fog sample intervals in ray order. Fog behind a
+  // nearby cloud must never be painted on top; thin fog gets its own 64 segments.
+  int count = cloudTower > 0.5 ? max(cloudSteps, 80) : cloudSteps;
+  int ci = 0;
+  int fi = 0;
+  float start = enter;
+  // A density isosurface supplies the exterior, using the same world field as
+  // the interior. Fade it out near entry and whenever the camera is immersed.
+  float exterior = cloudSolid * (1.0 - smoothstep(0.015, 0.10, coarseDensity(ro)));
+  bool surfaceSeen = false;
 
+  for (int i = 0; i < count + 68; i++) {
+    float cloudEnd = limit;
+    float fogEnd = limit;
+    if (cloudSpan.y > cloudSpan.x && ci < count) {
+      float f = float(ci + 1) / float(count);
+      cloudEnd = start < cloudSpan.x ? cloudSpan.x : mix(cloudSpan.x, cloudSpan.y, f * f);
     }
+    if (fogSpan.y > fogSpan.x && fi < 64) {
+      float f = float(fi + 1) / 64.0;
+      fogEnd = start < fogSpan.x ? fogSpan.x : mix(fogSpan.x, fogSpan.y, f * f);
+    }
+    float end = min(cloudEnd, fogEnd);
+    float jitter = mix(0.5, hash12(gl_FragCoord.xy + float(i) * vec2(17.0, 31.0)), cloudJitter * 0.65);
+    float hitT = end;
+    float surfaceAlpha = 0.0;
+    if (!surfaceSeen && exterior > 0.0 && end > cloudSpan.x && start < cloudSpan.y) {
+      // Bracket within the unintegrated cell, never in a cell already composited.
+      float lo = max(start, cloudSpan.x);
+      float hi = min(end, cloudSpan.y);
+      float mid = (lo + hi) * 0.5;
+      bool atStart = coarseDensity(ro + dir * lo) >= 0.10;
+      bool atMid = coarseDensity(ro + dir * mid) >= 0.10;
+      bool atEnd = coarseDensity(ro + dir * hi) >= 0.10;
+      if (atStart || atMid || atEnd) {
+        surfaceSeen = true;
+        if (atStart) hi = lo;
+        else {
+          if (atMid) hi = mid;
+          else lo = mid;
+          for (int refine = 0; refine < 7; refine++) {
+            float probe = (lo + hi) * 0.5;
+            if (coarseDensity(ro + dir * probe) >= 0.10) hi = probe;
+            else lo = probe;
+          }
+        }
+        hitT = hi;
+        surfaceAlpha = exterior * smoothstep(80.0, 350.0, hitT);
+      }
+    }
+    vec3 surfacePoint = ro + dir * hitT;
+    integrateMedium(ro, dir, start, hitT, jitter, cloudSpan, fogSpan, phase, scatter, transmittance);
+    if (surfaceAlpha > 0.0) {
+      const float e = 60.0;
+      vec3 gradient = vec3(
+        coarseDensity(surfacePoint + vec3(e,0,0)) - coarseDensity(surfacePoint - vec3(e,0,0)),
+        coarseDensity(surfacePoint + vec3(0,e,0)) - coarseDensity(surfacePoint - vec3(0,e,0)),
+        coarseDensity(surfacePoint + vec3(0,0,e)) - coarseDensity(surfacePoint - vec3(0,0,e)));
+      vec3 normal = length(gradient) > 0.00001 ? -normalize(gradient) : -dir;
+      float sun = max(0.0, dot(normal, cloudSunDirection));
+      float sky = smoothstep(-0.6, 0.8, normal.y);
+      vec3 face = cloudSunColor * cloudSunStrength *
+        (0.15 + 0.85 * sun) * exp(-lightOpticalDepth(surfacePoint) * 0.35)
+        + (cloudZenithColor * mix(0.12, 0.5, sky) + cloudGroundColor * 0.1) * cloudAmbientStrength;
+      face = mix(face, cloudFogColor, fogAmount(length(surfacePoint - ro)));
+      scatter += transmittance * surfaceAlpha * face;
+      transmittance *= 1.0 - surfaceAlpha;
+      if (transmittance < 0.01) break;
+    }
+    if (hitT < end)
+      integrateMedium(ro, dir, hitT, end, jitter, cloudSpan, fogSpan, phase, scatter, transmittance);
+    if (transmittance < 0.01) break;
+    if (end > cloudSpan.x && end == cloudEnd) ci++;
+    if (end > fogSpan.x && end == fogEnd) fi++;
+    start = end;
+    if (start >= max(cloudSpan.y, fogSpan.y)) break;
   }
 
   if (cirrusT >= 0.0 && !cirrusFirst) {
@@ -530,7 +664,10 @@ export class CloudPass extends Pass {
   private currentQuality: CloudQuality = 'half';
   private currentSteps = 40;
 
-  constructor(camera: PerspectiveCamera) {
+  constructor(
+    camera: PerspectiveCamera,
+    private readonly highPrecision = true,
+  ) {
     super();
     this.camera = camera;
     this.marchMaterial = new ShaderMaterial({
@@ -554,6 +691,12 @@ export class CloudPass extends Pass {
         cloudTower: { value: 0 },
         cirrusOffset: { value: new Vector2() },
         cloudMarch: { value: 0 },
+        groundFog: { value: 0 },
+        cloudSolid: { value: 0 },
+        fogHeight: { value: null },
+        fogBounds: { value: new Vector4(0, 0, 1, 1) },
+        fogSize: { value: new Vector2(2, 2) },
+        fogRange: { value: new Vector2(0, 1) },
         cloudDetailMeters: { value: DETAIL_TILE_METERS },
         cirrusBaseM: { value: 9000 },
         cirrusCoverage: { value: 0 },
@@ -586,6 +729,7 @@ export class CloudPass extends Pass {
       depthWrite: false,
     });
     this.target = new WebGLRenderTarget(1, 1, {
+      type: highPrecision ? HalfFloatType : UnsignedByteType,
       depthBuffer: false,
       stencilBuffer: false,
       minFilter: LinearFilter,
@@ -599,7 +743,7 @@ export class CloudPass extends Pass {
   }
   set quality(value: CloudQuality) {
     this.currentQuality = value;
-    this.enabled = value !== 'off';
+    this.enabled = value !== 'off' || this.marchMaterial.uniforms.groundFog!.value === 1;
     this.resizeTarget();
   }
   get steps(): number {
@@ -620,7 +764,10 @@ export class CloudPass extends Pass {
     return this.byteEstimate;
   }
   get scale(): number {
-    return cloudScaleFor(this.currentQuality);
+    return (
+      cloudScaleFor(this.currentQuality) ||
+      (this.marchMaterial.uniforms.groundFog!.value === 1 ? 0.5 : 0)
+    );
   }
   /** Marched resolution, for the diagnostics panel. */
   get resolution(): { width: number; height: number } {
@@ -634,12 +781,13 @@ export class CloudPass extends Pass {
   }
 
   private resizeTarget(): void {
-    const scale = cloudScaleFor(this.currentQuality);
+    const scale = this.scale;
     this.lowWidth = Math.max(1, Math.ceil(this.width * scale));
     this.lowHeight = Math.max(1, Math.ceil(this.height * scale));
     this.target.setSize(this.lowWidth, this.lowHeight);
-    // One RGBA8 colour attachment; the pass adds no depth buffer of its own.
-    this.byteEstimate = scale > 0 ? this.lowWidth * this.lowHeight * 4 : 0;
+    // Half-float accumulation avoids quantized bands in smooth storm/fog gradients.
+    this.byteEstimate =
+      scale > 0 ? this.lowWidth * this.lowHeight * (this.highPrecision ? 8 : 4) : 0;
   }
 
   update(state: CloudUniformState): void {
@@ -648,14 +796,30 @@ export class CloudPass extends Pass {
     const layer = state.layer;
     // A full rolling cycle takes about ten minutes; wrapping avoids float drift.
     u.cloudEvolution!.value = (state.evolutionSeconds * 0.01) % (Math.PI * 2);
-    u.cloudMarch!.value = layer ? 1 : 0;
+    u.cloudSolid!.value = Number(state.appearance === 'solid');
+    const fogActive = Boolean(state.groundFog && state.fogTerrain);
+    if (u.groundFog!.value !== Number(fogActive)) {
+      u.groundFog!.value = Number(fogActive);
+      this.enabled = this.currentQuality !== 'off' || fogActive;
+      this.resizeTarget();
+    }
+    u.fogHeight!.value = state.fogTerrain?.texture ?? null;
+    if (state.fogTerrain) {
+      (u.fogBounds!.value as Vector4).copy(state.fogTerrain.bounds);
+      (u.fogSize!.value as Vector2).copy(state.fogTerrain.size);
+      (u.fogRange!.value as Vector2).set(state.fogTerrain.min, state.fogTerrain.max);
+    }
+    u.cloudMarch!.value = layer && state.terrain && this.currentQuality !== 'off' ? 1 : 0;
     u.cloudTopM!.value = layer ? layer.topM : 0;
     u.cloudDensity!.value = layer ? layer.density : 0;
     u.cloudStratus!.value = layer?.type === 'stratus' ? 1 : 0;
     u.cloudTower!.value = layer?.type === 'cumulonimbus' ? 1 : 0;
     (u.cirrusOffset!.value as Vector2).set(state.cirrusOffset.x, state.cirrusOffset.z);
-    u.cirrusBaseM!.value = state.cirrus?.baseM ?? 0;
-    u.cirrusCoverage!.value = state.cirrus?.coverage ?? 0;
+    u.cirrusBaseM!.value = Math.max(
+      state.cirrus?.baseM ?? 0,
+      layer && state.terrain ? state.terrain.max + layer.topM + 500 : 0,
+    );
+    u.cirrusCoverage!.value = this.currentQuality === 'off' ? 0 : (state.cirrus?.coverage ?? 0);
     u.cirrusDensity!.value = state.cirrus?.density ?? 0;
     (u.cloudSunColor!.value as Color).copy(state.sunColor);
     (u.cloudZenithColor!.value as Color).copy(state.zenithColor);

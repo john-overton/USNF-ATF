@@ -170,14 +170,38 @@ test('layer height gradient is zero outside the slab and peaks inside', () => {
 
 test('cloud density rises with coverage and is zero above and below the layers', () => {
   const solid = () => 1;
-  const scattered = cloudDensityAt(WEATHER_PRESETS.scattered, { x: 0, y: 2000, z: 0 }, solid);
-  const overcast = cloudDensityAt(WEATHER_PRESETS.overcast, { x: 0, y: 1100, z: 0 }, solid);
+  const scattered = cloudDensityAt(
+    WEATHER_PRESETS.scattered,
+    { x: 0, y: 2000, z: 0 },
+    solid,
+    undefined,
+    () => 0,
+  );
+  const overcast = cloudDensityAt(
+    WEATHER_PRESETS.overcast,
+    { x: 0, y: 1100, z: 0 },
+    solid,
+    undefined,
+    () => 0,
+  );
   expect(scattered).toBeGreaterThan(0);
   expect(overcast).toBeGreaterThan(scattered);
-  expect(cloudDensityAt(WEATHER_PRESETS.scattered, { x: 0, y: 500, z: 0 }, solid)).toBe(0);
-  expect(cloudDensityAt(WEATHER_PRESETS.scattered, { x: 0, y: 6000, z: 0 }, solid)).toBe(0);
+  expect(
+    cloudDensityAt(WEATHER_PRESETS.scattered, { x: 0, y: 500, z: 0 }, solid, undefined, () => 0),
+  ).toBe(0);
+  expect(
+    cloudDensityAt(WEATHER_PRESETS.scattered, { x: 0, y: 6000, z: 0 }, solid, undefined, () => 0),
+  ).toBe(0);
   // Clear noise below the coverage threshold leaves a hole in the layer.
-  expect(cloudDensityAt(WEATHER_PRESETS.scattered, { x: 0, y: 2000, z: 0 }, () => 0.1)).toBe(0);
+  expect(
+    cloudDensityAt(
+      WEATHER_PRESETS.scattered,
+      { x: 0, y: 2000, z: 0 },
+      () => 0.1,
+      undefined,
+      () => 0,
+    ),
+  ).toBe(0);
   expect(COVERAGE_TILE_METERS).toBeGreaterThan(1000);
 });
 

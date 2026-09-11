@@ -11,6 +11,10 @@ try {
   await Bun.write(`${s.out}/report.json`, JSON.stringify(report, null, 2));
   assert.equal(s.errors.length, 0);
   assert.equal(report.error, 0);
+  assert(report.solidChanged.mean > 0.001, 'solid exterior must visibly change the exterior');
+  assert.equal(report.solidRepeated.max, 0);
+  assert(report.solidRebased.max <= 2/255);
+  assert.equal(report.insideDifference.max, 0, 'immersed camera must retain volume rendering');
   assert.equal(report.repeated.max, 0, 'same state must render identically');
   assert(report.rebased.max <= 2/255, 'floating origin must not move cloud density');
   assert(report.evolved.mean > 0.0001, 'rolling must evolve visible density');

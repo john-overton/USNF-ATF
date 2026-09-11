@@ -268,6 +268,8 @@ export function missionQuery(mission: MissionParams): URLSearchParams {
   set('wind', environment.wind, '');
   set('clouds', environment.clouds, '');
   set('cloudSteps', environment.cloudSteps, Number.NaN);
+  set('fog', environment.fog, '');
+  set('cloudAppearance', environment.cloudAppearance, '');
   set('paint', mission.paint, '');
   set('contrast', mission.contrast, Number.NaN);
   for (const key of ['x', 'z', 'y', 'yaw', 'pitch'] as const)
