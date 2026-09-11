@@ -7,6 +7,24 @@ keep commands, evidence, uncertainty, and a concrete next step. Baselines live i
 
 ## Current snapshot — development 2026-09-11
 
+## 2026-09-11: Extend cloud range and darken heavy weather
+
+Implementation `caa22ba` removes Sunshine's layer-thickness-dependent viewing
+cutoff (about 7.5–10 km for low cloud presets). Exponentially increasing minimum
+step widths cover the 180 km viewing range with the existing primary budget;
+clouds fade from 150–180 km based on first density. Step spacing is independent
+of scene depth, which only clips the ray. Unknown terrain still suppresses
+terrain-relative clouds. Overcast cloud radiance is multiplied by .75 and
+cumulonimbus by .5 before haze/tone mapping, in all three cloud appearances.
+
+476 tests pass, 3 existing imported-mount skips. Actual GPU regression renders
+opaque clouds where terrain only begins 80 km away; geometry-depth changes behind
+an opaque cloud produce identical output. Rendered brightness ratios are .75002
+and .5. Fresh desktop above/overcast/tower captures pass with median frame times
+16.7–16.9 ms on this Linux GPU. See [phase 3 baseline](baselines/phase-3.md) for
+commands and limits. Next: restart and revisit the long-distance flight view;
+check distant small-cloud stability while moving. Fog remains Weather → Fog only.
+
 ## 2026-09-11: Sunshine cloud port and weather-only fog
 
 Implementation `0f4f506` ports SunshineClouds2's density/light functions, actual

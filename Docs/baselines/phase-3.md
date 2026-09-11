@@ -1228,3 +1228,53 @@ Sunshine, as in upstream. Hardware fallback without float-color support is
 untested. Next manual check: storm exterior/entry, camera turns around silhouettes,
 and Fog versus Clear at low AGL. Switch appearance for comparison or revert
 `0f4f506` for the prior implementation.
+
+## 2026-09-11 — cloud distance and heavy-weather lighting
+
+Source `caa22ba`, exact implementation tested before commit. Linux/Omarchy,
+RTX 4070/ANGLE OpenGL ES 3.2, Bun1.4.2, Node26.8.1. Electron2560×1440 half-resolution
+clouds. No new platform acceptance or installer testing.
+
+Confirmed source cause: scaled max step × 300 iterations limited low clouds to
+roughly7.5–10km, despite an outer180km clipping distance. The updated schedule
+retains adaptive near spacing and uses exponential minimum widths summing to the
+remaining180km range; no extra primary iterations. Fade is150–180km, measured to
+first cloud density. A review caught dependence on scene depth in the initial
+schedule; the final schedule is depth-independent until clipping.
+
+Cloud radiance multipliers: overcast.75, cumulonimbus.5, other cloud types1.
+Applied to volume, solid-face and Sunshine lighting before haze/tone mapping.
+Displayed pixel brightness need not change by the same percentage after exposure,
+tone mapping and haze. Cloud opacity and terrain/sun illumination are not scaled.
+
+Successful verification commands:
+
+```sh
+bun run check
+bun -e 'import { buildUnpackaged } from "./shell/scripts/build.ts"; await buildUnpackaged();'
+bun tools/flight/sunshine-gpu-smoke.ts
+bun tools/flight/cloud-smoke.ts distance-verified above,overcast,tower-side
+git diff --cached --check
+```
+
+- Check:476 pass,3 existing imported-mount skips, zero failures; types/lint/format
+  pass. No Python changes, Python tests not rerun.
+- GPU far fixture: terrain is known only80–180km away; cloud transmittance reaches
+  zero. This cannot be satisfied by the old7.5km schedule.
+- GPU depth invariant: same ray becomes opaque at22593.0566m with scene-depth
+  limits60000m and180000m; maximum output difference0.
+- Actual linear render sums with haze disabled: overcast/reference.750021588,
+  cumulonimbus/reference.5 (half-float rounding). Density/light function parity
+  still passes128 positions, low clouds render from20km, rebase difference0,
+  GL error0 and no console errors.
+- Desktop median/p95ms: above16.7/16.7, overcast16.7/16.8,
+  tower-side16.9/17.1. Vsync limited, not isolated GPU cost. Final captures in
+  ignored `extracted/cloud-review/distance-verified/`; GPU report in
+  `extracted/cloud-review/sunshine-gpu/`. Earlier `distance-darkening` captures
+  precede the depth-independent scheduling correction.
+
+Limits: clouds still require known terrain within the theater. Far intervals are
+coarser and may miss small isolated features; camera-motion quality at long range
+remains a visual follow-up. Synthetic performance does not establish full-theater
+performance. Next: reproduce the user's long-range chase view and compare the
+Overcast/Thunderstorm towers presets; Fog remains enabled only by its preset.

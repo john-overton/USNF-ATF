@@ -206,7 +206,10 @@ Current 2026-09-11 selection: [Sunshine cloud port](sunshine-cloud-port.md) is t
 default, with ported density/light sampling, additive adaptive march, Godot noise,
 temporal reprojection and bicubic reconstruction. The solid/volume implementation
 below remains a selectable comparison. Ground fog is now a dedicated Weather
-preset; all other weather selections disable it. The following earlier
+preset; all other weather selections disable it. Sunshine now samples out to
+180 km independently of layer thickness, fading over 150–180 km. Overcast and
+cumulonimbus cloud lighting receive .75/.5 multipliers before distance haze.
+The following earlier
 implementation description is corrected accordingly.
 
 - A `CloudPass` inserted in `TerrainAntialias`'s composer after the scene

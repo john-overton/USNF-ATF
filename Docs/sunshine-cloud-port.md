@@ -34,6 +34,13 @@ No reference executables or retail-derived assets are committed.
 - Source bicubic reconstruction and a four-direction blur, retaining our stronger
   foreground-depth protection around aircraft and terrain silhouettes.
 
+Update `caa22ba`: the viewing range is now 180 km regardless of cloud-layer
+thickness. Near adaptive spacing is preserved, with exponentially increasing
+minimum widths farther away and a 150–180 km fade based on first cloud density.
+Scene depth clips the ray without changing its sample schedule. Overcast and
+cumulonimbus cloud radiance are multiplied by .75 and .5 before haze and tone
+mapping; this is a lighting adjustment, not additional opacity or terrain shading.
+
 Sunshine is the default Cloud appearance. Solid exterior and Volumetric remain
 selectable and their URL values keep parsing. In Sunshine, the legacy default
 `cloudSteps=40` maps to 300 primary/32 light samples; explicit step overrides scale
@@ -47,7 +54,7 @@ This is a port of the cloud renderer, not a pixel-identical Godot compositor.
 | --- | --- |
 | Host renderer | Vulkan compute/image writes become WebGL2 fragment passes and multiple render targets. |
 | World height | Main cloud bounds remain AGL using weather DEMs; unknown terrain remains unknown. |
-| Cloud sizes | Source 23.5 km layer proportions scale to selected layer thickness (minimum scale .05). Empty space is skipped before the near-cloud sampling budget, so low clouds remain visible from high aircraft. |
+| Cloud sizes | Source 23.5 km layer proportions scale to selected layer thickness (minimum scale .05). Empty space is skipped before sampling, and distant intervals cover a thickness-independent 180 km range. |
 | Weather presets | Broken uses upstream coverage .874 and density .14. Scattered, overcast and storm map their coverage/density intent to Sunshine's threshold semantics. The source RGBA height profile is shared; the previous custom anvil silhouette is not preserved in this mode. |
 | Wind | Existing weather drives horizontal drift and curl direction; source relative layer speeds and upward detail evolution are retained. |
 | Lighting | Existing sun/moon, sky, exposure and distant haze remain. Linear sun color avoids a second gamma conversion; neutral ambient occlusion replaces the source test scene's red AO tint. |
