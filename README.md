@@ -106,6 +106,7 @@ bun run dev:electron
 | `bun run dev:electron` | Vite dev server plus Electron pointed at it. Renderer hot-reloads; edits under `shell/src` rebundle and restart Electron. |
 | `bun run build`        | Production Vite build, bundle main/preload, electron-builder for the current platform only, into `build/<platform>/`.     |
 | `bun run probe`        | Runs the packaged app (or the unpackaged bundle, building it if needed) with `--probe` and prints the WebGL2 report.      |
+| `bun run devkit`       | Builds and installs everything from your own retail media in one command. See [dev kit](Docs/devkit.md).                  |
 
 The browser target (`bun run dev`) is for development. Its writes use memory/localStorage; Electron owns persistent app data.
 
@@ -262,6 +263,12 @@ build/        packaged apps, per platform (ignored)
 The engine talks to its host only through `engine/src/platform/Platform.ts`. `browser.ts` implements it against the dev server; `electron.ts` implements it over the preload bridge. Nothing else in the engine knows which shell it runs in.
 
 ## Retail media
+
+**Start here:** `bun run devkit` builds and installs everything derived from your
+own discs — extraction, aircraft, audio, music and menus — plus a terrain dataset,
+in one command. It reuses whatever is already built, so repeat runs cost seconds.
+`bun run devkit --list` describes the stages; [dev kit](Docs/devkit.md) documents
+the options. The per-asset guides below remain the detailed references.
 
 Retail discs, ISOs, installs, and anything extracted or converted from them stay in repo-relative `gameassets/` and `extracted/`, which are git-ignored. Nothing derived from retail assets is ever committed, packaged, or published; the planned in-app importer will write only to the user's app data directory. See `Docs/build-plan.md` section 1.
 

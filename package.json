@@ -20,7 +20,8 @@
     "dev:electron": "bun run --cwd shell dev",
     "build": "bun run --cwd shell build",
     "probe": "bun run --cwd shell probe",
-    "harness": "bun tools/harness/index.ts"
+    "harness": "bun tools/harness/index.ts",
+    "devkit": "bun tools/devkit/build.ts"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

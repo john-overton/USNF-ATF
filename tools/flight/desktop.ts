@@ -4,6 +4,21 @@ import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+/**
+ * Callers name the Linux `dist/electron` path; macOS ships the same build inside
+ * `dist/Electron.app`. Resolve the platform executable instead of failing to spawn.
+ */
+export async function electronBinary(binary: string): Promise<string> {
+  const resolved = path.resolve(binary);
+  if (await Bun.file(resolved).exists()) return resolved;
+  const bundle = path.join(
+    path.dirname(resolved),
+    'Electron.app/Contents/MacOS/Electron',
+  );
+  if (await Bun.file(bundle).exists()) return bundle;
+  throw new Error(`Electron executable not found: ${resolved}`);
+}
+
 export interface DesktopOptions {
   binary: string;
   app?: string;
@@ -85,7 +100,7 @@ export async function openDesktop(options: DesktopOptions) {
     await mkdir(path.join(profile, `data/${directory}`), { recursive: true });
     await cp(path.resolve(source), path.join(profile, `data/${directory}/${filename}`));
   }
-  const command = [path.resolve(options.binary)];
+  const command = [await electronBinary(options.binary)];
   if (options.app) command.push(path.resolve(options.app));
   command.push(
     `--user-data-dir=${profile}`,
